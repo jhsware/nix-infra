@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/usr/bin/env nix-shell
+#!nix-shell -i /bin/bash
 SCRIPT_DIR=$(dirname $0)
 WORK_DIR="../HA_CLUSTER_TEST"
 NIX_INFRA="dart run --verbosity=error bin/nix_infra.dart"

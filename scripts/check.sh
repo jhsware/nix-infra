@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 appendWithLineBreak() {
   if [ -z "$1" ]; then
     printf "$2"

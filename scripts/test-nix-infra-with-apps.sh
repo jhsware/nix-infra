@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/usr/bin/env nix-shell
+#!nix-shell -i /bin/bash
 SCRIPT_DIR=$(dirname $0)
 WORK_DIR="../TEST_INFRA"
 NIX_INFRA="dart run --verbosity=error bin/nix_infra.dart"
@@ -35,6 +36,11 @@ for i in "$@"; do
 done
 
 source $ENV
+
+if [ -z "$HCLOUD_TOKEN" ]; then
+  echo "Missing env-var HCLOUD_TOKEN. Load through .env-file that is specified through --env."
+  exit 1
+fi
 
 testCluster() {
   source $SCRIPT_DIR/check.sh

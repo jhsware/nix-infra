@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/usr/bin/env nix-shell
+#!nix-shell -i /bin/bash
 WORK_DIR="../TEST_INFRA"
 NIX_INFRA="dart run --verbosity=error bin/nix_infra.dart"
 NIXOS_VERSION="24.05"

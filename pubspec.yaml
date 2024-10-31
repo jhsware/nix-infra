@@ -1,0 +1,24 @@
+name: nix_infra
+description: Create a private PaaS on Hetzner Cloud in minutes.
+version: 0.8.0
+# repository: https://github.com/my_org/my_repo
+
+environment:
+  sdk: ^3.1.0-edge.d5415d624e2fe836cbaf4b8f77b7857b2990cb2a
+
+# Add regular dependencies here.
+dependencies:
+  args: ^2.5.0
+  dartssh2: ^2.8.2
+  dotenv: ^4.2.0
+  http: ^1.1.0
+  path: ^1.9.0
+  posix: ^6.0.1
+  process_run: ^0.14.2
+  cli_script: ^1.0.0
+  ansi_escapes: ^1.1.0
+  # path: ^1.8.0
+
+dev_dependencies:
+  lints: ^2.0.0
+  test: ^1.21.0

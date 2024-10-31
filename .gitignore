@@ -1,4 +1,5 @@
 # https://dart.dev/guides/libraries/private-files
 # Created by `dart pub`
+bin/nix-infra
 .dart_tool/
 .env

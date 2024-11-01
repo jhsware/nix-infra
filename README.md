@@ -1,19 +1,19 @@
 # nix-infra
 
-I believe there is a future for private PaaS-solutions in a world where privacy and cost-control are primary concerns. We just needs to build it on the right foundation.
+There is a future for private PaaS-solutions in a world where privacy and cost-control are primary concerns. We just needs to build it on the right foundation.
 
-Create a private PaaS on Hetzner Cloud in minutes using nix-infra. Leverage NixOS and Nix Packages to build a reproducable and auditable private cloud platform for your projects.
+Create a private PaaS on Hetzner Cloud in minutes using nix-infra. Leverage **NixOS** and **Nix Packages** to build a reproducable and auditable private cloud for your projects.
 
 Why did I build this? I wanted to test the limits of NixOS when it comes to maintainability and real world use.
 
 - low and predictable cost -- runs on Hetzner Cloud
 - reproducable and auditable -- 100% configuration in code
-- guaranteed privacy -- all data within your walled garden
+- guaranteed privacy -- all data within your private walled garden
 - easy to debug -- zero blackbox services
 - extendable -- install anything than runs on NixOS or as an OCI-container
 - customise in any way you like
 
-You can easily share and extend modules to build the perfect private PaaS while using your favourite OS and package repository.
+You can easily share and extend modules to build the perfect private PaaS.
 
 Low system requirements for each cluster node makes virtual machine isolation per service/application cost effective.
 
@@ -40,21 +40,85 @@ Room for improvement:
 Apple discusses privacy in a post about [Private Cloud Compute](https://security.apple.com/blog/private-cloud-compute/).
 
 ## Getting Started
+1. Clone the repo
 ```sh
-$ git clone git@github.com:jhsware/nix-infra-test.git
-# Read the instructions in the cloned README.md
-$ nix-infra init -d ./nix-infra-test
+$ git clone git@github.com:jhsware/nix-infra.git
 ```
 
-## Configure With Nix
-Configure your cluster using the **Nix** language.
+2. Download the binary and make it available in your path
+- https://github.com/jhsware/nix-infra/releases/tag/v0.8.0-alpha
 
-Add remote actions written in **Bash** that can be run on cluster nodes. If you prefer you
-could use any scripting language that is available on your cluster nodes.
+3. Obtain a Hetzner Cloud token
+- https://www.hetzner.com/cloud/
 
-If you want to extend, customise or contribute to the provisioning and orchestration CLI
-you need write **Dart**. I chose because it is cross-platform, supports running interpreted
-or as a compiled application which greatly enhances the development experience.
+4. Create a .env file with your token in the root of the cloned repo
+```dotenv
+HCLOUD_TOKEN="..."
+```
+
+5. Update the script `scripts/text-nix-infra-with-apps.sh`
+- NIX_INFRA=[path/to/nix-infra]
+- TEMPLATE_REPO="git@github.com:jhsware/nix-infra-test.git"
+
+6. Run the test-script
+```sh
+$ scripts/text-nix-infra-with-apps.sh
+```
+
+After seven minutes you should have built and destroyed a cluster successfully.
+
+To build without tearing down the cluster:
+
+```sh
+$ scripts/text-nix-infra-with-apps.sh --no-teardown
+```
+
+To read data from etcd:
+
+```sh
+$ scripts/text-nix-infra-with-apps.sh etcd "/cluster"
+```
+
+To run a command on a node:
+
+```sh
+$ scripts/text-nix-infra-with-apps.sh cmd --target=ingress001 "uptime"
+```
+
+To access a node via ssh:
+
+```sh
+$ scripts/text-nix-infra-with-apps.sh ssh ingress001
+```
+
+To tear down the cluster:
+
+```sh
+$ scripts/text-nix-infra-with-apps.sh teardown
+```
+
+## Build `nix-infra` From Source
+1. Install nix to build nix-infra (choose one)
+- https://nixos.org/download/
+- https://github.com/DeterminateSystems/nix-installer (supports uninstall)
+
+2. Clone the repo
+```sh
+$ git clone git@github.com:jhsware/nix-infra.git
+```
+
+3. Build nix-infra using the build script
+```sh
+$ cd nix-infra; ./build.sh
+# ouput: bin/nix-infra
+```
+
+4. Make the binary available in your path
+
+## Creating a Cluster
+Configuration of your cluster using the **Nix** language.
+
+Add remote actions written in **Bash** that can be run on cluster nodes.
 
 ```mermaid
 stateDiagram
@@ -96,8 +160,50 @@ Repo.5 --> Cluster.3 : Update Cluster
 ```
 
 ### Cluster Configuration
+The configuration files are related according to the diagram below. These are the files you would normally configure
+once you cluster is up and running:
 
-Provisioning of nodes, deployment of configurations and container images is done through the nix_infra CLI. The overlay network and service mesh is configured via the etcd-database of the control plane (ctrl).
+- `nodes/[node_name].nix` -- install and configure apps on each node
+- `app_modules/[module_name].nix` -- configure apps available on the cluster
+
+When you add new files to app_modules you need to import them in `app_modules/default.nix`.
+
+```mermaid
+stateDiagram-v2
+direction LR
+
+flake: flake.nix
+configuration: configuration.nix
+hardwareConfiguration: hardware-configuration.nix
+networking: networking.nix
+nodeType: node_types/[node_type].nix
+nodeConfig: nodes/[node_name].nix
+modules: modules/[module_name].nix
+appModules: app_modules/[module_name].nix
+
+NixPkgs --> flake
+Secrix --> flake
+
+flake --> configuration : modules
+
+configuration --> generated
+configuration --> nodeType
+configuration --> nodeConfig
+configuration --> modules
+configuration --> appModules
+
+state generated {
+  direction LR
+  hardwareConfiguration
+  networking
+}
+
+
+```
+
+### Cluster Provisioning
+
+Provisioning of nodes, deployment of configurations and container images is done through the nix-infra CLI. The overlay network and service mesh is configured via the etcd-database of the control plane (ctrl).
 
 ```mermaid
 stateDiagram-v2
@@ -282,8 +388,8 @@ Secrets are created either:
 - by explicitly storing a provided secret (i.e. an external API-key)
 
 ```sh
-nix_infra.dart [...] action [...] --store-as-secret="[secret-name]"
-nix_infra.dart [...] store-secret [...] --secret="[your-secret]" --store-as-secret="[secret-name]"
+nix-infra [...] action [...] --store-as-secret="[secret-name]"
+nix-infra [...] store-secret [...] --secret="[your-secret]" --store-as-secret="[secret-name]"
 ```
 
 ```mermaid

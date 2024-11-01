@@ -46,7 +46,7 @@ $ git clone git@github.com:jhsware/nix-infra.git
 ```
 
 2. Download the binary and make it available in your path
-- https://github.com/jhsware/nix-infra/releases/tag/v0.8.0-alpha
+- https://github.com/jhsware/nix-infra/releases
 
 3. Obtain a Hetzner Cloud token
 - https://www.hetzner.com/cloud/
@@ -56,45 +56,38 @@ $ git clone git@github.com:jhsware/nix-infra.git
 HCLOUD_TOKEN="..."
 ```
 
-5. Update the script `scripts/text-nix-infra-with-apps.sh`
+5. Update the script `nix-infra/scripts/test-nix-infra-with-apps.sh`
 - NIX_INFRA=[path/to/nix-infra]
 - TEMPLATE_REPO="git@github.com:jhsware/nix-infra-test.git"
 
 6. Run the test-script
 ```sh
-$ scripts/text-nix-infra-with-apps.sh
+$ cd nix-infra
+$ scripts/test-nix-infra-with-apps.sh
 ```
 
-After seven minutes you should have built and destroyed a cluster successfully.
+After seven minutes you will have built, tested and destroyed a cluster successfully.
 
-To build without tearing down the cluster:
+### Test Script Options
+
+To build without immediately tearing down the cluster:
 
 ```sh
-$ scripts/text-nix-infra-with-apps.sh --no-teardown
+$ scripts/test-nix-infra-with-apps.sh --no-teardown
 ```
 
-To read data from etcd:
+Useful commands to explore the running test cluster (check the bash script for more):
 
 ```sh
-$ scripts/text-nix-infra-with-apps.sh etcd "/cluster"
-```
-
-To run a command on a node:
-
-```sh
-$ scripts/text-nix-infra-with-apps.sh cmd --target=ingress001 "uptime"
-```
-
-To access a node via ssh:
-
-```sh
-$ scripts/text-nix-infra-with-apps.sh ssh ingress001
+$ scripts/test-nix-infra-with-apps.sh etcd "/cluster"
+$ scripts/test-nix-infra-with-apps.sh cmd --target=ingress001 "uptime"
+$ scripts/test-nix-infra-with-apps.sh ssh ingress001
 ```
 
 To tear down the cluster:
 
 ```sh
-$ scripts/text-nix-infra-with-apps.sh teardown
+$ scripts/test-nix-infra-with-apps.sh teardown
 ```
 
 ## Build `nix-infra` From Source
@@ -112,8 +105,6 @@ $ git clone git@github.com:jhsware/nix-infra.git
 $ cd nix-infra; ./build.sh
 # ouput: bin/nix-infra
 ```
-
-4. Make the binary available in your path
 
 ## Creating a Cluster
 Configuration of your cluster using the **Nix** language.

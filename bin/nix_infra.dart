@@ -152,9 +152,9 @@ void main(List<String> arguments) async {
           readPassword(ReadPasswordEnum.caIntermediate, batch);
       final certEmail =
           env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
-      final certCountryCode = env['certCountryCode'] ?? 'SE';
-      final certStateProvince = env['certStateProvince'] ?? 'unknown';
-      final certCompany = env['certCompany'] ?? 'unknown';
+      final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
+      final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
+      final certCompany = env['CERT_COMPANY'] ?? 'unknown';
 
       final sshEmail = env['SSH_EMAIL'] ?? readInput('ssh e-mail', batch);
 

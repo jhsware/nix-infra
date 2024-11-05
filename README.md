@@ -282,27 +282,6 @@ scripts/end-to-end-tests/test-nix-infra-ha-cluster.sh --env=./.env
 scripts/end-to-end-tests/test-nix-infra-test.sh --env=./.env
 ```
 
-- should deployAppsOnNode really "Send modules to the node"?
-- should deployAppsOnNode perform cleanup of removed files?
-
-A sample command-line application with an entrypoint in `bin/`, library code
-in `lib/`, and example unit test in `test/`.
-
-```sh
-provision () { nix-infra provision -d ../TEST -c ../TEST/cluster.cfg --node-names="$@" }
-init-ctrl() { nix-infra init-ctrl -d ../TEST -c ../TEST/cluster.cfg }
-init-node() { nix-infra init-node -d ../TEST -c ../TEST/cluster.cfg --target="$@" }
-init-ingress() { nix-infra init-ingress -d ../TEST -c ../TEST/cluster.cfg --target=$1 }
-destroy () { nix-infra destroy -d ../TEST -c ../TEST/cluster.cfg --target="$@" }
-cluster-ssh () { nix-infra ssh -d ../TEST -c ../TEST/cluster.cfg --target="$1" }
-cluster-cmd () { local target="$1"; shift 1; nix-infra cmd -d ../TEST -c ../TEST/cluster.cfg --target="$target" "$@" }
-
-cluster-cmd () { local target="$1"; shift 1; echo "$@"; ./cluster.sh --cluster=./cluster.cfg --working-dir=`pwd` cmd --target=$target "$@" }
-cluster-ssh () { ./cluster.sh --cluster=./cluster.cfg --working-dir=`pwd` ssh --target="$1" }
-
-```
-
-
 ## etcd data model
 
 ```JavaScript

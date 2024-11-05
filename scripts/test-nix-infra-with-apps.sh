@@ -1,12 +1,23 @@
-#!/usr/bin/env nix-shell
-#!nix-shell -i /bin/bash
+#!/usr/bin/env bash
 SCRIPT_DIR=$(dirname $0)
 WORK_DIR="../TEST_INFRA"
-NIX_INFRA="dart run --verbosity=error bin/nix_infra.dart"
+# NIX_INFRA="dart run --verbosity=error bin/nix_infra.dart"
+NIX_INFRA="bin/nix-infra"
 NIXOS_VERSION="24.05"
 # TEMPLATE_REPO="git@github.com:jhsware/nix-infra-test.git"
 TEMPLATE_REPO="../nix-infra-test"
 SSH_KEY="nixinfra"
+SSH_EMAIL=${SSH_EMAIL:-your-email@example.com}
+
+CERT_MAIL=${CERT_MAIL:-your-email@example.com}
+CERT_COUNTRY_CODE=${CERT_COUNTRY_CODE:-SE}
+CERT_STATE_PROVINCE=${CERT_STATE_PROVINCE:-Sweden}
+CERT_COMPANY=${CERT_COMPANY:-Your COmpany Inc}
+
+CA_PASS=${CA_PASS:-my_ca_password}
+INTERMEDIATE_CA_PASS=${INTERMEDIATE_CA_PASS:-my_ca_inter_password}
+SECRETS_PWD=${SECRETS_PWD:-my_secrets_password}
+
 CTRL="etcd001 etcd002 etcd003"
 CLUSTER_NODES="registry001 service001 worker001 ingress001"
 
@@ -150,17 +161,26 @@ env=$(cat <<EOF
 # NOTE: The following secrets are required for various operations
 # by the nix-infra CLI. Make sure they are encrypted when not in use
 SSH_KEY=$(echo $SSH_KEY)
+SSH_EMAIL=$(echo $SSH_EMAIL)
+
 # The following token is needed to perform provisioning and discovery
 HCLOUD_TOKEN=$(echo $HCLOUD_TOKEN)
+
+# Certificate Authority
+CERT_EMAIL=$(echo $CERT_MAIL)
+CERT_COUNTRY_CODE=$(echo $CERT_COUNTRY_CODE)
+CERT_STATE_PROVINCE=$(echo $CERT_STATE_PROVINCE)
+CERT_COMPANY=$(echo $CERT_COMPANY)
 # Root password for the created certificate authority and CA intermediate.
 # This needs to be kept secret and should not be stored here in a real deployment!
-CA_PASS=my_ca_password
+CA_PASS=$(echo $CA_PASS)
 # The intermediate can be revoked so while it needs to be kept secret, it is less
 # of a risk than the root password
-INTERMEDIATE_CA_PASS=my_ca_inter_password
+INTERMEDIATE_CA_PASS=$(echo $INTERMEDIATE_CA_PASS)
+
 # Password for the secrets that are stored in this repo
 # These need to be kept secret.
-SECRETS_PWD=my_secrets_password
+SECRETS_PWD=$(echo $SECRETS_PWD)
 EOF
 )
 echo "$env" > $WORK_DIR/.env

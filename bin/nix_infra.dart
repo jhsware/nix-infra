@@ -147,21 +147,33 @@ void main(List<String> arguments) async {
       // if you omit it, you need to provide a password
 
       final pwdCa =
-          env['CA_PASS'] ?? readPassword(readPasswordEnum.caRoot, batch);
+          env['CA_PASS'] ?? readPassword(ReadPasswordEnum.caRoot, batch);
       final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
-          readPassword(readPasswordEnum.caIntermediate, batch);
+          readPassword(ReadPasswordEnum.caIntermediate, batch);
+      final certEmail =
+          env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
+      final certCountryCode = env['certCountryCode'] ?? 'SE';
+      final certStateProvince = env['certStateProvince'] ?? 'unknown';
+      final certCompany = env['certCompany'] ?? 'unknown';
+
+      final sshEmail = env['SSH_EMAIL'] ?? readInput('ssh e-mail', batch);
 
       // await copyConfigurationTemplates(workingDir);
       await createCertificateAuthority(
         workingDir,
         pwdCa,
         pwdCaInt,
+        certEmail: certEmail,
+        certCountryCode: certCountryCode,
+        certStateProvince: certStateProvince,
+        certCompany: certCompany,
+        batch: batch,
         debug: debug,
       );
 
       await createSshKeyPair(
         workingDir,
-        'sebastian@urbantalk.se',
+        sshEmail,
         sshKeyName,
         debug: debug,
         batch: batch,
@@ -243,10 +255,26 @@ void main(List<String> arguments) async {
       final ctrlNodes = await hcloud.getServers(only: tmp);
 
       final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
-          readPassword(readPasswordEnum.caIntermediate, batch);
+          readPassword(ReadPasswordEnum.caIntermediate, batch);
 
-      await generateCerts(workingDir, ctrlNodes, [CertType.tls, CertType.peer],
-          passwordIntermediateCa: pwdCaInt, debug: debug);
+      final certEmail =
+          env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
+      final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
+      final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
+      final certCompany = env['CERT_COMPANY'] ?? 'unknown';
+
+      await generateCerts(
+        workingDir,
+        ctrlNodes,
+        [CertType.tls, CertType.peer],
+        passwordIntermediateCa: pwdCaInt,
+        certEmail: certEmail,
+        certCountryCode: certCountryCode,
+        certStateProvince: certStateProvince,
+        certCompany: certCompany,
+        batch: batch,
+        debug: debug,
+      );
 
       await deployEtcdCertsOnClusterNode(
           workingDir, ctrlNodes, [CertType.tls, CertType.peer],
@@ -284,16 +312,32 @@ void main(List<String> arguments) async {
       areYouSure('Are you sure you want to init the nodes?', batch);
 
       final secretsPwd =
-          env['SECRETS_PWD'] ?? readPassword(readPasswordEnum.secrets, batch);
+          env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
       final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
-          readPassword(readPasswordEnum.caIntermediate, batch);
+          readPassword(ReadPasswordEnum.caIntermediate, batch);
+
+      final certEmail =
+          env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
+      final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
+      final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
+      final certCompany = env['CERT_COMPANY'] ?? 'unknown';
 
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
       final nodes = await hcloud.getServers(only: nodeNames);
 
-      await generateCerts(workingDir, nodes, [CertType.tls],
-          passwordIntermediateCa: pwdCaInt, debug: debug);
+      await generateCerts(
+        workingDir,
+        nodes,
+        [CertType.tls],
+        passwordIntermediateCa: pwdCaInt,
+        certEmail: certEmail,
+        certCountryCode: certCountryCode,
+        certStateProvince: certStateProvince,
+        certCompany: certCompany,
+        batch: batch,
+        debug: debug,
+      );
 
       await deployEtcdCertsOnClusterNode(workingDir, nodes, [CertType.tls],
           debug: debug);
@@ -326,7 +370,7 @@ void main(List<String> arguments) async {
       areYouSure('Are you sure you want to update the nodes?', batch);
 
       final secretsPwd =
-          env['SECRETS_PWD'] ?? readPassword(readPasswordEnum.secrets, batch);
+          env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
@@ -370,7 +414,7 @@ void main(List<String> arguments) async {
       areYouSure('Are you sure you want to deploy apps?', batch);
 
       final secretsPwd =
-          env['SECRETS_PWD'] ?? readPassword(readPasswordEnum.secrets, batch);
+          env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
@@ -450,7 +494,7 @@ void main(List<String> arguments) async {
         exit(2);
       }
       final cmd = argResults.command?.rest.join(' ') ?? 'ls /';
-      
+
       final node = ctrlNodes.first;
       final cmdScript = [
         'export ETCDCTL_DIAL_TIMEOUT=3s',
@@ -478,7 +522,7 @@ void main(List<String> arguments) async {
       final secretNamespace = argResults.command?['save-as-secret'];
       final envVars = argResults.command?['env-vars'];
       final secretsPwd =
-          env['SECRETS_PWD'] ?? readPassword(readPasswordEnum.secrets, batch);
+          env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
       if (secretNamespace == null) {
         final res = await Future.wait(nodes.map((node) async {
@@ -505,7 +549,7 @@ void main(List<String> arguments) async {
       final secret = argResults.command?['secret'];
       final secretNamespace = argResults.command?['save-as-secret'];
       final secretsPwd =
-          env['SECRETS_PWD'] ?? readPassword(readPasswordEnum.secrets, batch);
+          env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
       await saveSecret(workingDir, secretsPwd, secretNamespace, secret);
       echo('Secret saved as $secretNamespace');
@@ -523,15 +567,32 @@ void main(List<String> arguments) async {
   // echo(paths);
 }
 
-enum readPasswordEnum { caRoot, caIntermediate, secrets }
+String readInput(String label, bool batch) {
+  // TODO: Consider using (interact)[https://github.com/frencojobs/interact] for input
+  String? inp;
+  if (!batch) {
+    stdout.write('Enter $label: ');
+    // TODO: Hide input
+    inp = stdin.readLineSync();
+  }
+
+  if (inp == null || inp == '') {
+    echo('ERROR! You may not leave $label null or empty');
+    exit(2);
+  }
+
+  return inp;
+}
+
+enum ReadPasswordEnum { caRoot, caIntermediate, secrets }
 
 final caPasswordLabel = {
-  readPasswordEnum.caRoot: 'CA root',
-  readPasswordEnum.caIntermediate: 'CA Intermediate',
-  readPasswordEnum.secrets: 'secrets',
+  ReadPasswordEnum.caRoot: 'CA root',
+  ReadPasswordEnum.caIntermediate: 'CA Intermediate',
+  ReadPasswordEnum.secrets: 'secrets',
 };
 
-String readPassword(readPasswordEnum type, bool batch) {
+String readPassword(ReadPasswordEnum type, bool batch) {
   // TODO: Consider using (interact)[https://github.com/frencojobs/interact] for input
   String? pwd;
   if (!batch) {

@@ -16,10 +16,11 @@ Future<void> createCertificateAuthority(
   Directory workingDir,
   String passwordCa,
   String passwordIntermediateCa, {
-  String certEmail = "sebastian@urbantalk.se",
-  String certCountryCode = "SE",
-  String certStateProvince = "Sweden",
-  String certCompany = "Urbantalk",
+  required String certEmail,
+  required String certCountryCode,
+  required String certStateProvince,
+  required String certCompany,
+  required bool batch,
   bool debug = false,
 }) async {
   // Followed this guide:
@@ -89,13 +90,18 @@ Future<void> createCertificateAuthority(
     final cmd = [
       'openssl req -config ${caDir.path}/openssl.cnf',
       '-key ${caKeyFile.path}',
-      '-subj "/C=SE/ST=Sweden/O=Urbantalk/CN=Urbantalk Root CA/emailAddress=sebastian@urbantalk.se"',
+      '-subj "/C=$certCountryCode/ST=$certStateProvince/O=$certCompany/CN=$certCompany Root CA/emailAddress=$certEmail"',
       '-new -x509 -days 7300 -sha256 -extensions v3_ca',
       '-out ${caCertFile.path}',
       '-passin env:CA_PASS',
-      (debug ? "" : " -batch"),
+      (batch ? "-batch" : ""),
     ];
-    await shell.run(cmd.join(' '));
+    try {
+      await shell.run(cmd.join(' '));
+    } catch (err) {
+      echoDebug(err.toString());
+      rethrow;
+    }
     await shell.run('chmod 444 ${caCertFile.path}');
   }
 
@@ -143,10 +149,10 @@ Future<void> createCertificateAuthority(
       'openssl req -config ${intermediateCaDir.path}/openssl.cnf',
       '-new -sha256',
       '-key ${intermediateCaKeyFile.path}',
-      '-subj "/C=SE/ST=Sweden/O=Urbantalk/CN=Urbantalk Intermediate CA/emailAddress=sebastian@urbantalk.se"',
+      '-subj "/C=$certCountryCode/ST=$certStateProvince/O=$certCompany/CN=$certCompany Intermediate CA/emailAddress=$certEmail"',
       '-out ${intermediateCaCsrFile.path}',
       '-passin env:INTERMEDIATE_CA_PASS',
-      (debug ? "" : " -batch"),
+      (batch ? "-batch" : ""),
     ];
     await shell.run(cmd.join(' '));
   }
@@ -166,7 +172,7 @@ Future<void> createCertificateAuthority(
         '-in ${intermediateCaCsrFile.path}',
         '-out ${intermediateCaCertFile.path}',
         '-passin env:CA_PASS',
-        (debug ? "" : " -batch"),
+        (batch ? "-batch" : ""),
       ];
       await shell.run(cmd.join(' '));
       await shell.run('chmod 444 ${intermediateCaCertFile.path}');
@@ -179,8 +185,17 @@ Future<void> createCertificateAuthority(
 }
 
 Future<void> generateCerts(
-    Directory workingDir, Iterable<ClusterNode> nodes, Iterable<CertType> certs,
-    {required String passwordIntermediateCa, bool debug = false}) async {
+  Directory workingDir,
+  Iterable<ClusterNode> nodes,
+  Iterable<CertType> certs, {
+  required String passwordIntermediateCa,
+  required String certEmail,
+  required String certCountryCode,
+  required String certStateProvince,
+  required String certCompany,
+  required bool batch,
+  bool debug = false,
+}) async {
   final controller = StreamController<List<int>>();
   controller.stream.listen((inp) {
     final str = utf8.decode(inp);
@@ -263,16 +278,15 @@ Future<void> generateCerts(
         final cmd = [
           'openssl req -config ${__CONF__.path}',
           '-key ${__KEY__.path}',
-          '-subj "/C=SE/ST=Sweden/O=Urbantalk/CN=${node.name} $certType tls/emailAddress=sebastian@urbantalk.se"',
+          '-subj "/C=$certCountryCode/ST=$certStateProvince/O=$certCompany/CN=${node.name} $certType tls/emailAddress=$certEmail"',
           // Consider checking how to use the field added to openSslConfContent above
           '-addext "subjectAltName = IP:${node.ipAddr}, IP:127.0.0.1"',
           '-new -sha256',
           '-out ${__CSR__.path}',
           '-passin env:INTERMEDIATE_CA_PASS',
-          (debug ? "" : " -batch"),
+          (batch ? "-batch" : ""),
         ];
         await shell.run(cmd.join(' '));
-        // """openssl req -config ${__CONF__.path} -key ${__KEY__.path} -subj "/C=SE/ST=Sweden/O=Urbantalk/CN=${node.name} $certType tls/emailAddress=sebastian@urbantalk.se" -addext "subjectAltName = IP:${node.ipAddr}, IP:127.0.0.1" -new -sha256 -out ${__CSR__.path} -passin env:INTERMEDIATE_CA_PASS -batc""");
       } else {
         echo('...client tls CSR already exists for ${node.name}');
       }

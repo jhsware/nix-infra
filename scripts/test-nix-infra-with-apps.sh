@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 SCRIPT_DIR=$(dirname $0)
-WORK_DIR="../TEST_INFRA"
+# WORK_DIR="../TEST_INFRA"
+WORK_DIR="./TEST_INFRA"
 # NIX_INFRA="dart run --verbosity=error bin/nix_infra.dart"
-NIX_INFRA="bin/nix-infra"
+# NIX_INFRA="bin/nix-infra"
+NIX_INFRA="nix-infra"
 NIXOS_VERSION="24.05"
-# TEMPLATE_REPO="git@github.com:jhsware/nix-infra-test.git"
-TEMPLATE_REPO="../nix-infra-test"
+TEMPLATE_REPO="git@github.com:jhsware/nix-infra-test.git"
+# TEMPLATE_REPO="../nix-infra-test"
 SSH_KEY="nixinfra"
 SSH_EMAIL=${SSH_EMAIL:-your-email@example.com}
 

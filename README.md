@@ -40,33 +40,11 @@ Room for improvement:
 Apple discusses privacy in a post about [Private Cloud Compute](https://security.apple.com/blog/private-cloud-compute/).
 
 ## Getting Started
-1. Clone the repo
-```sh
-$ git clone git@github.com:jhsware/nix-infra.git
-```
 
-2. Download the binary and make it available in your path
-- https://github.com/jhsware/nix-infra/releases
+1. [Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary
 
-3. Obtain a Hetzner Cloud token
-- https://www.hetzner.com/cloud/
+2. Try the [nix-infra-test](https://github.com/jhsware/nix-infra-test) cluster template
 
-4. Create a .env file with your token in the root of the cloned repo
-```dotenv
-HCLOUD_TOKEN="..."
-```
-
-5. Update the script `nix-infra/scripts/test-nix-infra-with-apps.sh`
-- NIX_INFRA=[path/to/nix-infra]
-- TEMPLATE_REPO="git@github.com:jhsware/nix-infra-test.git"
-
-6. Run the test-script
-```sh
-$ cd nix-infra
-$ scripts/test-nix-infra-with-apps.sh
-```
-
-After seven minutes you will have built, tested and destroyed a cluster successfully.
 
 ### Test Script Options
 

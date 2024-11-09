@@ -9,7 +9,7 @@ environment:
 # Add regular dependencies here.
 dependencies:
   args: ^2.5.0
-  dartssh2: ^2.8.2
+  dartssh2: ^2.10.0
   dotenv: ^4.2.0
   http: ^1.1.0
   path: ^1.9.0

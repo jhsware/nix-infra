@@ -22,3 +22,7 @@ jobs:
       # - name: Run tests
       #   run: dart test
 
+      - name: Compile executable
+        run: dart compile exe --verbosity error --target-os linux -o bin/nix-infra bin/nix_infra.dart
+      
+      # TODO: Export the binary, possibly creating a release

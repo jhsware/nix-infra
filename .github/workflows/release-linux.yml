@@ -1,9 +1,7 @@
 # https://github.com/dart-lang/setup-dart
 name: Dart
 
-on:
-  pull_request:
-    branches: []
+on: workflow_dispatch
 
 jobs:
   build:

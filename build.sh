@@ -1,7 +1,7 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i /bin/bash
+#!nix-shell -i bash
 
-if [[ "release list-identities create-keychain-profile" == *"$1"* ]]; then
+if [[ "build-macos build-linux release list-identities create-keychain-profile notarytool-log" == *"$1"* ]]; then
   CMD="$1"
 fi
 
@@ -11,6 +11,10 @@ for i in "$@"; do
     ENV="${i#*=}"
     shift
     source $ENV
+    ;;
+    --log-id=*)
+    LOG_ID="${i#*=}"
+    shift
     ;;
     *)
     REST="$@"
@@ -26,9 +30,17 @@ checkVar() {
 }
 
 # Main body
-if [ -z "$CMD" ]; then
+if [ "$CMD" = "build-macos" ]; then
   dart pub get --enforce-lockfile
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
+fi
+
+if [ "$CMD" = "build-linux" ]; then
+  # nix-shell -p podman qemu edk2
+  [ -d "$(pwd)/bin/linux" ] && rm -rf "$(pwd)/bin/linux"
+  mkdir -p "$(pwd)/bin/linux"
+  ./build-linux.sh "$(pwd)/bin/linux"
+  exit 0
 fi
 
 if [ "$CMD" = "release" ]; then

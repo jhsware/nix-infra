@@ -25,4 +25,14 @@ jobs:
       - name: Compile executable
         run: dart compile exe --verbosity error --target-os linux -o bin/nix-infra bin/nix_infra.dart
       
-      # TODO: Export the binary, possibly creating a release
+      # Export the binary
+      # https://github.com/marketplace/actions/upload-files-to-a-github-release
+      - name: Upload binary to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          draft: true
+          file: bin/nix-infra
+          asset_name: nix-infra
+          tag: ${{ github.ref }}
+          body: "This is my release text"

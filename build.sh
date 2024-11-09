@@ -34,41 +34,51 @@ fi
 if [ "$CMD" = "release" ]; then
   # https://scriptingosx.com/2021/07/notarize-a-command-line-tool-with-notarytool/
   checkVar $DEV_CERTIFICATE DEV_CERTIFICATE 
+  
+  PKG="bin/nix-infra-installer"
+  VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
 
   # [ -f "bin/nix-infra" ] && rm -f bin/nix-infra
   # [ -f "bin/nix-infra.zip" ] && rm -f bin/nix-infra.zip
+  [ -d "bin/nix-infra-installer" ] && rm -rf bin/nix-infra-installer
 
   # dart pub get --enforce-lockfile
   # dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
 
-  # Sign the application
-  codesign -vvvv --force --prefix=se.urbantalk. -R="notarized" --check-notarization --sign "$DEV_CERTIFICATE" bin/nix-infra
+  mkdir "$PKG"
+  cp bin/nix-infra $PKG/
 
-  # Create a ZIP archive for notarization
-  zip -r bin/nix-infra.zip bin/nix-infra
+  # Sign the application with hardened runtime
+  # https://lessons.livecode.com/m/4071/l/1122100-codesigning-and-notarizing-your-lc-standalone-for-distribution-outside-the-mac-appstore
+  codesign --deep --force --verify --verbose --timestamp --options runtime \
+    --sign "$DEV_APP_CERTIFICATE" \
+    --entitlements "bin/entitlements.plist" \
+    $PKG/nix-infra
 
-  # Submit for notarization
-  xcrun notarytool submit bin/nix-infra.zip \
-    --apple-id "$DEV_EMAIL" \
-    --password "$DEV_PASSWORD" \
-    --team-id "$DEV_TEAM_ID" \
+  # Create package
+  pkgbuild --root "$PKG" \
+         --identifier "$DEV_IDENTIFIER" \
+         --version "$VERSION" \
+         --install-location "/usr/local/bin" \
+         --sign "$DEV_CERTIFICATE" \
+         "$PKG.pkg"
+
+  # Notarize
+  xcrun notarytool submit "$PKG.pkg" \
     --keychain-profile "$DEV_CREDENTIAL_PROFILE" \
     --wait
 
   # Staple the notarization ticket
   # https://stackoverflow.com/questions/58817903/how-to-download-notarized-files-from-apple
-  xcrun stapler staple bin/nix-infra.zip
-  echo "Check if app is notarized"
-  spctl --assess ./bin/nix-infra
-
-
-  # Check notarization status
-  echo "Waiting for notarization to complete..."
-  echo "Complete by running ./build.sh finish --env=$ENV"
+  xcrun stapler staple "$PKG.pkg"
 fi
 
 if [ "$CMD" = "list-identities" ]; then
   security find-identity -p basic -v
+fi
+
+if [ "$CMD" = "notarytool-log" ]; then
+  xcrun notarytool log $LOG_ID --keychain-profile "$DEV_CREDENTIAL_PROFILE"
 fi
 
 if [ "$CMD" = "create-keychain-profile" ]; then

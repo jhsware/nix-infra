@@ -3,3 +3,5 @@
 bin/nix-infra
 .dart_tool/
 .env
+nix-infra-installer.pkg
+bin/nix-infra-installer

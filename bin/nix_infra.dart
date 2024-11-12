@@ -25,7 +25,8 @@ void main(List<String> arguments) async {
     ..addOption('ssh-key', defaultsTo: 'nixinfra')
     ..addOption('env')
     ..addFlag('batch')
-    ..addFlag('debug');
+    ..addFlag('debug')
+    ..addFlag('help');
 
   // parser.addCommand('install');
   parser.addCommand('init');
@@ -117,6 +118,11 @@ void main(List<String> arguments) async {
   final argResults = parser.parse(arguments);
   // install init provision update destroy init-ctrl init-node ssh
   final debug = argResults['debug'];
+
+  if (argResults['help']) {
+    print(parser.usage);
+    exit(0);
+  }
 
   final workingDir =
       Directory(path.normalize(path.absolute(argResults['working-dir'])));

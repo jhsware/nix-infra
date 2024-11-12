@@ -70,6 +70,7 @@ Future<String> runActionScriptOverSsh(
   for (final entry in overlayMeshIps.entries) {
     substitutions['${entry.key}.overlayIp'] = entry.value;
   }
+
   Map<String, String> nodeSubstitutions = Map.from(substitutions);
   nodeSubstitutions['localhost.ipv4'] = target.ipAddr;
   nodeSubstitutions['localhost.overlayIp'] =
@@ -166,14 +167,11 @@ Future<SSHSocket> waitAndGetSshConnection(ClusterNode node,
 
 Future<SSHClient> getSshClient(
     Directory workingDir, ClusterNode node, connection) async {
-  final nodePemFile =
-      await getSshKeyAsPem(workingDir, node.sshKeyName);
+  final nodePemFile = await getSshKeyAsPem(workingDir, node.sshKeyName);
   final sshClient = SSHClient(
     connection,
     username: 'root',
-    identities: [
-      ...SSHKeyPair.fromPem(nodePemFile)
-    ],
+    identities: [...SSHKeyPair.fromPem(nodePemFile)],
   );
   return sshClient;
 }

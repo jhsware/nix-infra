@@ -61,6 +61,7 @@ Future<String> runActionScriptOverSsh(
   required String appModule,
   required String cmd,
   required Iterable<String> envVars,
+  bool debug = false,
 }) async {
   // Create list of variable substitutions
   final substitutions = Map.fromEntries(
@@ -86,6 +87,9 @@ Future<String> runActionScriptOverSsh(
           .join(' ')
       : '';
   // final envVarsToRemote = Map.fromEntries(enviromentVariables.split('\n').map((e) => MapEntry(e.split('=')[0], e.split('=')[1])));
+  if (debug) echoDebug(jsonEncode(nodeSubstitutions));
+  // Don't print this on debug. There is a risk that user passes secrets that are left in the logs
+  // print('$envVarsToRemote bash /root/action.sh $cmd');
 
   final SSHSocket connection = await waitAndGetSshConnection(target);
   final SSHClient sshClient =

@@ -533,7 +533,7 @@ void main(List<String> arguments) async {
       if (secretNamespace == null) {
         final res = await Future.wait(nodes.map((node) async {
           final inp = await runActionScriptOverSsh(workingDir, cluster,
-              target: node, appModule: appModule, cmd: cmd, envVars: envVars);
+              target: node, appModule: appModule, cmd: cmd, envVars: envVars, debug: debug);
           final tmp = inp.split('\n');
           final outp = tmp.map((str) => '${node.name}: $str');
           return outp.join('\n');

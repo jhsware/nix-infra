@@ -369,6 +369,28 @@ systemd --> application : decrypt
 
 
 ## Internal Developer Notes
+
+### Releasing
+1. Update version in pubspec.yaml
+
+2. Build macOS binary
+
+```sh
+./build.sh build-macos --env=.env
+```
+
+3. Package and notarise macOS binary
+
+4. Run build workflow to create draft release with Linux binary
+
+5. Add macOS binary to release
+
+6. Add release notes
+
+7. Publish release
+
+### NOTES:
+
 TODO: Investigate secret rotation
   - https://partial.solutions/2024/understanding-systemd-credentials.html
 TODO: Automated builds

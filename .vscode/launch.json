@@ -19,5 +19,24 @@
         "--batch"
       ]
     }, 
+    {
+      "name": "action",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "action",
+        "-d",
+        "../TEST_INFRA",
+        "--env=./.env",
+        "--debug",
+        "--batch",
+        "--target=service001",
+        "--app-module=mongodb",
+        "--cmd=init",
+        "--env-vars=NODE_1=[%%service001.overlayIp%%],NODE_2=[%%service002.overlayIp%%],NODE_3=[%%service003.overlayIp%%]",
+      ]
+    }, 
   ]
 }

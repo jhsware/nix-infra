@@ -1,0 +1,4 @@
+{
+  "nixEnvSelector.nixFile": "${workspaceFolder}/shell.nix",
+  "dart.sdkPath": "~/fvm/versions/3.24.3/bin/cache/dart-sdk"
+}

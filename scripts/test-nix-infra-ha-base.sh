@@ -222,32 +222,32 @@ $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --target="registry001" \
     --node-module="node_types/cluster_node.nix" \
     --service-group="" \
-    --ctrl-nodes="$CTRL" #&
+    --ctrl-nodes="$CTRL" &
 
 $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --nixos-version=$NIXOS_VERSION \
     --target="worker001 worker002" \
     --node-module="node_types/cluster_node.nix" \
     --service-group="backends services" \
-    --ctrl-nodes="$CTRL" #&
+    --ctrl-nodes="$CTRL" &
 
 $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --nixos-version=$NIXOS_VERSION \
     --target="service001 service002 service003" \
     --node-module="node_types/cluster_node.nix" \
     --service-group="services" \
-    --ctrl-nodes="$CTRL" #&
+    --ctrl-nodes="$CTRL" &
 
 $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --nixos-version=$NIXOS_VERSION \
     --target="ingress001" \
     --node-module="node_types/ingress_node.nix" \
     --service-group="frontends" \
-    --ctrl-nodes="$CTRL" #&
+    --ctrl-nodes="$CTRL" &
 
 # TODO: When running multiple init-node in parallel, there can be conflicts causing the
 # certificate generation to fail. This needs to be fixed
-#wait # Wait for all backround processes to complete
+wait # Wait for all backround processes to complete
 
 $NIX_INFRA cmd -d $WORK_DIR --target="$CLUSTER_NODES" "nixos-rebuild switch --fast"
 $NIX_INFRA cmd -d $WORK_DIR --target="$CLUSTER_NODES" "systemctl restart confd"

@@ -235,6 +235,18 @@ Future<void> generateCerts(
   }
 
   for (final node in nodes) {
+    final lockFile = File('${intermediateCaDir.path}/lockfile');
+    while (lockFile.existsSync()) {
+      if (lockFile
+          .statSync()
+          .changed
+          .isBefore(DateTime.now().subtract(const Duration(seconds: 10)))) {
+        await lockFile.delete();
+      }
+      await Future.delayed(const Duration(seconds: 1));
+    }
+    lockFile.writeAsStringSync(DateTime.now().toIso8601String());
+    
     echo("Generating AUTH certs for ${node.name}");
     // ignore: no_leading_underscores_for_local_identifiers, non_constant_identifier_names
     final __CONF__ = File('${intermediateCaDir.path}/openssl-${node.name}.cnf');
@@ -305,6 +317,7 @@ Future<void> generateCerts(
     }
     // Remove the temporary config file
     __CONF__.delete();
+    await lockFile.delete();
   }
 }
 

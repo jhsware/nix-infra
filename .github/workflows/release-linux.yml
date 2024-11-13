@@ -1,5 +1,5 @@
 # https://github.com/dart-lang/setup-dart
-name: Dart
+name: Draft release
 
 on: workflow_dispatch
 

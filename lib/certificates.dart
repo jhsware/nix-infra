@@ -317,7 +317,10 @@ Future<void> generateCerts(
     }
     // Remove the temporary config file
     __CONF__.delete();
-    await lockFile.delete();
+    
+    if (lockFile.existsSync()) {
+      await lockFile.delete();
+    }
   }
 }
 

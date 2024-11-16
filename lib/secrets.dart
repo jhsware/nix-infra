@@ -34,9 +34,20 @@ Future<void> saveSecret(Directory workingDir, String secretsPassword,
     {bool debug = false}) async {
   final secretsDir = Directory('${workingDir.path}/secrets');
 
+
+  if (!secretsDir.existsSync()) {
+    echo('Create secrets dir');
+    final shell = Shell(
+      runInShell: true,
+      verbose: debug,
+    );
+    mkdir(secretsDir.path);
+    await shell.run('chmod 700 ${secretsDir.path}');
+  }
+
   final controller = StreamController<List<int>>();
 
-  final shell = Shell(
+  final shell1 = Shell(
     environment: {
       'SECRETS_PASS': secretsPassword,
     },
@@ -45,16 +56,9 @@ Future<void> saveSecret(Directory workingDir, String secretsPassword,
     stdin: controller.stream,
   );
 
-  if (!secretsDir.existsSync()) {
-    echo('Create secrets dir');
-    mkdir(secretsDir.path);
-    await shell.run('chmod 700 ${secretsDir.path}');
-  }
-
   controller.add(utf8.encode(secret));
-  controller.close(); // Should this be after shell.run? Perhaps use Script to chain stuff?
-
-  await shell.run(
+  controller.close();
+  await shell1.run(
       'openssl enc -pbkdf2 -pass env:SECRETS_PASS -a -out ${secretsDir.path}/$secretNamespace');
 
   final shell2 = Shell(

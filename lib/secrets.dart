@@ -120,12 +120,26 @@ Future<void> deploySecretOnRemote(
 
 Future<void> syncSecrets(
   Directory workingDir,
+  Iterable<ClusterNode> cluster,
   ClusterNode node,
   List<String> expectedSecrets,
   SSHClient sshClient, {
   required String secretsPwd,
   bool debug = false,
 }) async {
+    // Create list of variable substitutions
+  final substitutions = Map.fromEntries(
+      cluster.map((node) => MapEntry('${node.name}.ipv4', node.ipAddr)));
+  final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
+  for (final entry in overlayMeshIps.entries) {
+    substitutions['${entry.key}.overlayIp'] = entry.value;
+  }
+  Map<String, String> nodeSubstitutions = Map.from(substitutions);
+    nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
+    nodeSubstitutions['localhost.overlayIp'] =
+        substitutions['${node.name}.overlayIp'] ??
+            '-- overlayIp not found in etcd --';
+
   final sftp = await sshClient.sftp();
   await sftpMkDir(sftp, '/root/secrets');
 
@@ -135,10 +149,12 @@ Future<void> syncSecrets(
     // Deploy secrets to target node
     for (final secretName in expectedSecrets) {
       final secret = await readSecret(workingDir, secretsPwd, secretName);
+      final newSecret =
+        substitute(secret, substitutions, expectedSecrets: expectedSecrets);
       await deploySecretOnRemote(
         workingDir,
         secretName,
-        secret,
+        newSecret,
         node,
         sshClient: sshClient,
       );

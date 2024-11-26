@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 SCRIPT_DIR=$(dirname $0)
-WORK_DIR=${WORK_DIR:-"./TEST_INFRA"}
+WORK_DIR=${WORK_DIR:-"./TEST_INFRA_HA"}
 NIX_INFRA=${NIX_INFRA:-"nix-infra"}
 NIXOS_VERSION=${NIXOS_VERSION:-"24.05"}
 TEMPLATE_REPO=${TEMPLATE_REPO:-"git@github.com:jhsware/nix-infra-test.git"}
@@ -19,9 +19,11 @@ SECRETS_PWD=${SECRETS_PWD:-my_secrets_password}
 CTRL="etcd001 etcd002 etcd003"
 CLUSTER_NODES="registry001 service001 service002 service003 worker001 worker002 ingress001"
 
-if [[ "teardown publish update test test-apps ssh cmd etcd" == *"$1"* ]]; then
+if [[ "create teardown publish update test dev-app test-apps ssh cmd etcd" == *"$1"* ]]; then
   CMD="$1"
   shift
+else
+  CMD="create"
 fi
 
 for i in "$@"; do
@@ -61,34 +63,101 @@ testCluster() {
   checkConfd "$CLUSTER_NODES"
 }
 
+devApp() {
+  source $SCRIPT_DIR/check.sh
+
+  $NIX_INFRA store-secret -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --secret="redis://127.0.0.1:6380" \
+    --save-as-secret="keydb.connectionString"
+
+  # Update app config
+  $NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --target="$REST"
+  $NIX_INFRA cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "systemctl status podman-app-redis*"
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "systemctl status podman-app-elastic*"
+
+  # Test
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-redis-pod: ";echo -n $(systemctl is-active podman-app-redis-pod.service)'
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: ";echo -n $(systemctl is-active podman-app-redis-pod.service)'
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-redis-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11411/ping' # > pong
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11411/ping' # > pong
+  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s http://127.0.0.1:11411/ping" # > pong
+  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s 'http://127.0.0.1:11411/db?id=1&message=hello'" # > 1
+  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s http://127.0.0.1:11411/db/1" # > hello
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-redis*"
+  
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)'
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)'
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' # > pong
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' # > pong
+  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s http://127.0.0.1:11511/ping" # > pong
+  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s 'http://127.0.0.1:11511/db?id=1&message=hello'" # > 1
+  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s http://127.0.0.1:11511/db/1" # > hello
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-elastic*"
+}
+
+
 testApps() {
   source $SCRIPT_DIR/check.sh
 
   # Check that apps are running
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" "printf 'app-pod: ';        systemctl is-active podman-app-pod.service"
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" "printf 'app-mongodb-pod: ';systemctl is-active podman-app-mongodb-pod.service"
-
+  echo "Are apps active?"
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-pod: ";        echo -n $(systemctl is-active podman-app-pod.service)' &
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-pod: ";        echo -n $(systemctl is-active podman-app-pod.service)' &
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-mongodb-pod: ";echo -n $(systemctl is-active podman-app-mongodb-pod.service)' &
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-mongodb-pod: ";echo -n $(systemctl is-active podman-app-mongodb-pod.service)' &
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-redis-pod: ";echo -n $(systemctl is-active podman-app-redis-pod.service)' &
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: ";echo -n $(systemctl is-active podman-app-redis-pod.service)' &
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)' &
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)' &
+  wait # Wait for all process to complete
   # Check that apps are responding locally
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-pod: ";         curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11211/ping' # > pong
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-mongodb-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11311/ping' # > pong
-
+  echo "Do apps responds locally?"
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-pod: ";         curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11211/ping' & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-pod: ";         curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11211/ping' & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-mongodb-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11311/ping' & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-mongodb-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11311/ping' & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-redis-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11411/ping' & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11411/ping' & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' & # > pong
+  wait # Wait for all process to complete
   # Check that apps are reachable from ingress node
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl -s http://127.0.0.1:11211/ping" # > pong
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl -s http://127.0.0.1:11311/ping" # > pong
-
+  echo "Can apps be reached from ingress?"
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl -s http://127.0.0.1:11211/ping" & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl -s http://127.0.0.1:11311/ping" & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s http://127.0.0.1:11411/ping" & # > pong
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s http://127.0.0.1:11511/ping" & # > pong
+  wait # Wait for all process to complete
   # Check that app has correct functionality
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl -s http://127.0.0.1:11211/hello" # > hello world!
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl -s 'http://127.0.0.1:11311/db?id=1&message=hello'" # > 1
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl -s http://127.0.0.1:11311/db/1" # > hello
+  echo "Do apps function properly?"
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl --max-time 2 -s http://127.0.0.1:11211/hello" # > hello world!
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=1&message=hello'" # > 1
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/1" & # > hello
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=2&message=bye'" & # > 1
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/2" & # > bye
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=3&message=hello_world'" # > 1
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/3" & # > hello_world
+  wait # Wait for all process to complete
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11411/db?id=1&message=hello'" # > 1
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s http://127.0.0.1:11411/db/1" # > hello
+
+  
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11511/db?id=1&message=hello'" # > 1
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s http://127.0.0.1:11511/db/1" # > hello
+
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-redis*"
+  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-elastic*"
 }
 
 publishImageToRegistry() {
     local IMAGE_NAME=$1
     local FILE=$2
     $NIX_INFRA publish-image -d $WORK_DIR --batch \
-    --target="registry001" \
-    --image-name="$IMAGE_NAME" \
-    --file="$FILE"
+      --target="registry001" \
+      --image-name="$IMAGE_NAME" \
+      --file="$FILE"
 }
 
 tearDownCluster() {
@@ -118,13 +187,18 @@ if [ "$CMD" = "update" ]; then
     --rebuild
 
   $NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --target="$TARGET"
-  $NIX_INFRA cmd -d $WORK_DIR --target="$TARGET" "nixos-rebuild switch --fast"
+    --target="$REST"
+  $NIX_INFRA cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
   exit 0
 fi
 
 if [ "$CMD" = "test" ]; then
   testCluster
+  exit 0
+fi
+
+if [ "$CMD" = "dev-app" ]; then
+  devApp
   exit 0
 fi
 
@@ -140,7 +214,9 @@ if [ "$CMD" = "publish" ]; then
 fi
 
 if [ "$CMD" = "ssh" ]; then
-  hcloud server ssh $REST -i "$WORK_DIR/ssh/$SSH_KEY"
+  # This is the only way I get ssh to work properly right now
+  # the nix-infra ssh command won't handle control codes right now.
+  HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i $WORK_DIR/ssh/$SSH_KEY
   exit 0
 fi
 
@@ -154,10 +230,11 @@ if [ "$CMD" = "etcd" ]; then
   exit 0
 fi
 
-rm -rf $WORK_DIR;
-git clone $TEMPLATE_REPO $WORK_DIR
+if [ "$CMD" = "create" ]; then
+  rm -rf $WORK_DIR;
+  git clone $TEMPLATE_REPO $WORK_DIR
 
-env=$(cat <<EOF
+  env=$(cat <<EOF
 # NOTE: The following secrets are required for various operations
 # by the nix-infra CLI. Make sure they are encrypted when not in use
 SSH_KEY=$(echo $SSH_KEY)
@@ -183,7 +260,9 @@ INTERMEDIATE_CA_PASS=$(echo $INTERMEDIATE_CA_PASS)
 SECRETS_PWD=$(echo $SECRETS_PWD)
 EOF
 )
-echo "$env" > $WORK_DIR/.env
+  echo "$env" > $WORK_DIR/.env
+fi
+
 
 cleanupOnFail() {
   if [ $1 -ne 0 ]; then
@@ -193,121 +272,133 @@ cleanupOnFail() {
   fi
 }
 
-_start=`date +%s`
+if [ "$CMD" = "create" ]; then
+  _start=`date +%s`
 
-$NIX_INFRA init -d $WORK_DIR --batch
+  $NIX_INFRA init -d $WORK_DIR --batch
 
-# We need to add the ssh-key for it to work for some reason
-ssh-add $WORK_DIR/ssh/$SSH_KEY
+  # We need to add the ssh-key for it to work for some reason
+  ssh-add $WORK_DIR/ssh/$SSH_KEY
 
-$NIX_INFRA provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --nixos-version=$NIXOS_VERSION \
-    --ssh-key=$SSH_KEY \
-    --location=hel1 \
-    --machine-type=cpx21 \
-    --node-names="$CTRL $CLUSTER_NODES"
-cleanupOnFail $? "ERROR: Provisioning failed! Cleaning up..."
+  $NIX_INFRA provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --ssh-key=$SSH_KEY \
+      --location=hel1 \
+      --machine-type=cpx21 \
+      --node-names="$CTRL $CLUSTER_NODES"
+  cleanupOnFail $? "ERROR: Provisioning failed! Cleaning up..."
 
-_provision=`date +%s`
+  _provision=`date +%s`
 
-$NIX_INFRA init-ctrl -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --nixos-version=$NIXOS_VERSION \
-    --cluster-uuid="d6b76143-bcfa-490a-8f38-91d79be62fab" \
-    --target="$CTRL"
+  $NIX_INFRA init-ctrl -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --cluster-uuid="d6b76143-bcfa-490a-8f38-91d79be62fab" \
+      --target="$CTRL"
 
-_init_ctrl=`date +%s`
+  _init_ctrl=`date +%s`
 
-$NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --nixos-version=$NIXOS_VERSION \
-    --target="registry001" \
-    --node-module="node_types/cluster_node.nix" \
-    --service-group="" \
-    --ctrl-nodes="$CTRL" &
+  $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --target="registry001" \
+      --node-module="node_types/cluster_node.nix" \
+      --service-group="" \
+      --ctrl-nodes="$CTRL" &
 
-$NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --nixos-version=$NIXOS_VERSION \
-    --target="worker001 worker002" \
-    --node-module="node_types/cluster_node.nix" \
-    --service-group="backends services" \
-    --ctrl-nodes="$CTRL" &
+  $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --target="worker001 worker002" \
+      --node-module="node_types/cluster_node.nix" \
+      --service-group="backends services" \
+      --ctrl-nodes="$CTRL" &
 
-$NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --nixos-version=$NIXOS_VERSION \
-    --target="service001 service002 service003" \
-    --node-module="node_types/cluster_node.nix" \
-    --service-group="services" \
-    --ctrl-nodes="$CTRL" &
+  $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --target="service001 service002 service003" \
+      --node-module="node_types/cluster_node.nix" \
+      --service-group="services" \
+      --ctrl-nodes="$CTRL" &
 
-$NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --nixos-version=$NIXOS_VERSION \
-    --target="ingress001" \
-    --node-module="node_types/ingress_node.nix" \
-    --service-group="frontends" \
-    --ctrl-nodes="$CTRL" &
+  $NIX_INFRA init-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --target="ingress001" \
+      --node-module="node_types/ingress_node.nix" \
+      --service-group="frontends" \
+      --ctrl-nodes="$CTRL" &
 
-# TODO: When running multiple init-node in parallel, there can be conflicts causing the
-# certificate generation to fail. This needs to be fixed
-wait # Wait for all backround processes to complete
+  # TODO: When running multiple init-node in parallel, there can be conflicts causing the
+  # certificate generation to fail. This needs to be fixed
+  wait # Wait for all backround processes to complete
 
-$NIX_INFRA cmd -d $WORK_DIR --target="$CLUSTER_NODES" "nixos-rebuild switch --fast"
-$NIX_INFRA cmd -d $WORK_DIR --target="$CLUSTER_NODES" "systemctl restart confd"
+  $NIX_INFRA cmd -d $WORK_DIR --target="$CLUSTER_NODES" "nixos-rebuild switch --fast"
+  $NIX_INFRA cmd -d $WORK_DIR --target="$CLUSTER_NODES" "systemctl restart confd"
 
-_init_nodes=`date +%s`
+  _init_nodes=`date +%s`
 
-# Now the nodes are up an running, let install apps
-echo "INSTALLING APPS..."
+  # Now the nodes are up an running, let install apps
+  echo "INSTALLING APPS..."
 
-$NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-  --target="registry001"
-$NIX_INFRA cmd -d $WORK_DIR --target="registry001" "nixos-rebuild switch --fast"
-$NIX_INFRA cmd -d $WORK_DIR --target="registry001" "systemctl restart confd"
+  $NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --target="registry001"
+  $NIX_INFRA cmd -d $WORK_DIR --target="registry001" "nixos-rebuild switch --fast"
+  $NIX_INFRA cmd -d $WORK_DIR --target="registry001" "systemctl restart confd"
 
-publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz"
-publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz"
+  publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz"
+  publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz"
+  publishImageToRegistry app-elasticsearch-pod "$WORK_DIR/app_images/app-elasticsearch-pod.tar.gz"
+  publishImageToRegistry app-redis-pod "$WORK_DIR/app_images/app-redis-pod.tar.gz"
 
-$NIX_INFRA store-secret -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-  --secret="super_secret_secret" \
-  --save-as-secret="my.test"
-echo "---"
-$NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-  --target="service001 service002 service003 worker001 worker002"
-$NIX_INFRA cmd -d $WORK_DIR --target="service001 service002 service003 worker001 worker002" "nixos-rebuild switch --fast"
-$NIX_INFRA cmd -d $WORK_DIR --target="service001 service002 service003 worker001 worker002" "systemctl restart confd"
+  $NIX_INFRA store-secret -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --secret="super_secret_secret" \
+    --save-as-secret="my.test"
+  $NIX_INFRA store-secret -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --secret="redis://default:SUPER_SECRET_PASSWORD@[%%service001.overlayIp%%]:6380" \
+    --save-as-secret="keydb.connectionString"
+    # --secret="redis://default:SUPER_SECRET_PASSWORD@127.0.0.1:6380" \
+  $NIX_INFRA store-secret -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --secret="http://[%%service001.overlayIp%%]:9200,http://[%%service002.overlayIp%%]:9200,http://[%%service003.overlayIp%%]:9200" \
+    --save-as-secret="elasticsearch.connectionString"
+    # --secret="http://127.0.0.1:9200" \
+  echo "---"
+  $NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --target="service001 service002 service003 worker001 worker002"
+  $NIX_INFRA cmd -d $WORK_DIR --target="service001 service002 service003 worker001 worker002" "nixos-rebuild switch --fast"
+  $NIX_INFRA cmd -d $WORK_DIR --target="service001 service002 service003 worker001 worker002" "systemctl restart confd"
 
-$NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="init" --env-vars="NODE_1=[%%service001.overlayIp%%],NODE_2=[%%service002.overlayIp%%],NODE_3=[%%service003.overlayIp%%]"
-echo "...INSTALLING APPS"
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="init" --env-vars="NODE_1=[%%service001.overlayIp%%],NODE_2=[%%service002.overlayIp%%],NODE_3=[%%service003.overlayIp%%]"
+  echo "...INSTALLING APPS"
 
-_end=`date +%s`
+  _end=`date +%s`
 
-echo "******************************************"
+  echo "******************************************"
 
-testCluster
+  testCluster
 
-echo "******************************************"
+  echo "******************************************"
 
-testApps
+  testApps
 
-echo "******************************************"
+  echo "******************************************"
 
-if [[ "$TEARDOWN" != "no" ]]; then
-  tearDownCluster
+  if [[ "$TEARDOWN" != "no" ]]; then
+    tearDownCluster
+  fi
+
+  _after_teardown=`date +%s`
+
+  echo "            **              **            "
+  echo "            **              **            "
+  echo "******************************************"
+
+  printTime() {
+    local _start=$1; local _end=$2; local _secs=$((_end-_start))
+    printf '%02dh:%02dm:%02ds' $(($_secs/3600)) $(($_secs%3600/60)) $(($_secs%60))
+  }
+  printf '+ provision  %s\n' $(printTime $_start $_provision)
+  printf '+ init ctrl  %s\n' $(printTime $_provision $_init_ctrl)
+  printf '+ init nodes  %s\n' $(printTime $_provision $_init_nodes)
+  printf '+ install apps %s\n' $(printTime $_init_nodes $_end)
+  printf '= SUM %s\n' $(printTime $_start $_end)
+  printf '> TEST TIME %s\n' $(printTime $_start $_after_teardown)
+
+  echo "***************** DONE *******************"
 fi
-
-_after_teardown=`date +%s`
-
-echo "            **              **            "
-echo "            **              **            "
-echo "******************************************"
-
-printTime() {
-  local _start=$1; local _end=$2; local _secs=$((_end-_start))
-  printf '%02dh:%02dm:%02ds' $(($_secs/3600)) $(($_secs%3600/60)) $(($_secs%60))
-}
-printf '+ provision  %s\n' $(printTime $_start $_provision)
-printf '+ init ctrl  %s\n' $(printTime $_provision $_init_ctrl)
-printf '+ init nodes  %s\n' $(printTime $_provision $_init_nodes)
-printf '+ install apps %s\n' $(printTime $_init_nodes $_end)
-printf '= SUM %s\n' $(printTime $_start $_end)
-printf '> TEST TIME %s\n' $(printTime $_start $_after_teardown)
-
-echo "***************** DONE *******************"

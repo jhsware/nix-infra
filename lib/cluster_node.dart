@@ -150,7 +150,7 @@ Future<void> deployAppsOnNode(
         expectedSecrets: expectedSecrets,
       );
     }
-    await syncSecrets(workingDir, node, expectedSecrets, sshClient,
+    await syncSecrets(workingDir, cluster, node, expectedSecrets, sshClient,
         secretsPwd: secretsPwd, debug: debug);
 
     // Create modules directory

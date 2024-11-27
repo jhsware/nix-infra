@@ -19,7 +19,7 @@ SECRETS_PWD=${SECRETS_PWD:-my_secrets_password}
 CTRL="etcd001 etcd002 etcd003"
 CLUSTER_NODES="registry001 service001 service002 service003 worker001 worker002 ingress001"
 
-if [[ "create teardown publish update test dev-app test-apps ssh cmd etcd" == *"$1"* ]]; then
+if [[ "create teardown publish update test test-apps ssh cmd etcd" == *"$1"* ]]; then
   CMD="$1"
   shift
 else
@@ -63,41 +63,6 @@ testCluster() {
   checkConfd "$CLUSTER_NODES"
 }
 
-devApp() {
-  source $SCRIPT_DIR/check.sh
-
-  $NIX_INFRA store-secret -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --secret="redis://127.0.0.1:6380" \
-    --save-as-secret="keydb.connectionString"
-
-  # Update app config
-  $NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --target="$REST"
-  $NIX_INFRA cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "systemctl status podman-app-redis*"
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "systemctl status podman-app-elastic*"
-
-  # Test
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-redis-pod: ";echo -n $(systemctl is-active podman-app-redis-pod.service)'
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: ";echo -n $(systemctl is-active podman-app-redis-pod.service)'
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-redis-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11411/ping' # > pong
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11411/ping' # > pong
-  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s http://127.0.0.1:11411/ping" # > pong
-  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s 'http://127.0.0.1:11411/db?id=1&message=hello'" # > 1
-  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s http://127.0.0.1:11411/db/1" # > hello
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-redis*"
-  
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)'
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)'
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' # > pong
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' # > pong
-  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s http://127.0.0.1:11511/ping" # > pong
-  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s 'http://127.0.0.1:11511/db?id=1&message=hello'" # > 1
-  # $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s http://127.0.0.1:11511/db/1" # > hello
-  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-elastic*"
-}
-
-
 testApps() {
   source $SCRIPT_DIR/check.sh
 
@@ -132,23 +97,23 @@ testApps() {
   wait # Wait for all process to complete
   # Check that app has correct functionality
   echo "Do apps function properly?"
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl --max-time 2 -s http://127.0.0.1:11211/hello" # > hello world!
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=1&message=hello'" # > 1
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/1" & # > hello
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl --max-time 2 -s http://127.0.0.1:11211/hello" & # > hello world!
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=1&message=hello'" & # > 1
   $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=2&message=bye'" & # > 1
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=3&message=hello_world'" & # > 1
+  wait
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/1" & # > hello
   $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/2" & # > bye
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=3&message=hello_world'" # > 1
   $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/3" & # > hello_world
   wait # Wait for all process to complete
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11411/db?id=1&message=hello'" # > 1
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s http://127.0.0.1:11411/db/1" # > hello
-
-  
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11511/db?id=1&message=hello'" # > 1
-  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s http://127.0.0.1:11511/db/1" # > hello
-
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-redis*"
-  $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-elastic*"
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11411/db?id=1&message=hello'" & # > 1
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11511/db?id=1&message=hello'" & # > 1
+  wait
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s http://127.0.0.1:11411/db/1" & # > hello
+  $NIX_INFRA cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s http://127.0.0.1:11511/db/1" & # > hello
+  wait
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-redis*"
+  # $NIX_INFRA cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-elastic*"
 }
 
 publishImageToRegistry() {
@@ -194,11 +159,6 @@ fi
 
 if [ "$CMD" = "test" ]; then
   testCluster
-  exit 0
-fi
-
-if [ "$CMD" = "dev-app" ]; then
-  devApp
   exit 0
 fi
 
@@ -355,9 +315,9 @@ if [ "$CMD" = "create" ]; then
     --save-as-secret="keydb.connectionString"
     # --secret="redis://default:SUPER_SECRET_PASSWORD@127.0.0.1:6380" \
   $NIX_INFRA store-secret -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --secret="http://[%%service001.overlayIp%%]:9200,http://[%%service002.overlayIp%%]:9200,http://[%%service003.overlayIp%%]:9200" \
+    --secret="http://127.0.0.1:9200" \
     --save-as-secret="elasticsearch.connectionString"
-    # --secret="http://127.0.0.1:9200" \
+    # --secret="http://[%%service001.overlayIp%%]:9200,http://[%%service002.overlayIp%%]:9200,http://[%%service003.overlayIp%%]:9200" \
   echo "---"
   $NIX_INFRA deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --target="service001 service002 service003 worker001 worker002"

@@ -138,7 +138,7 @@ if [ "$CMD" = "publish" ]; then
 fi
 
 if [ "$CMD" = "ssh" ]; then
-  hcloud server ssh $REST -i "$WORK_DIR/ssh/$SSH_KEY"
+  HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i "$WORK_DIR/ssh/$SSH_KEY"
   exit 0
 fi
 

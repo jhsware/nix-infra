@@ -142,20 +142,21 @@ void printBar(int val) {
   }
 }
 
-Future<bool> allServerRunNixos(
-    Directory workingDir, Iterable<ClusterNode> nodes, { bool debug = false }) async {
-  bool allGood = true;
+Future<List<ClusterNode>> getServersWithoutNixos(
+    Directory workingDir, Iterable<ClusterNode> nodes,
+    {bool debug = false}) async {
+  List<ClusterNode> nodesWithUbuntu = [];
   await Future.wait(nodes.map((node) async {
     final res = await runCommandOverSsh(workingDir, node, 'uname -v');
     if (res.contains('Ubuntu')) {
-      allGood = false;
+      nodesWithUbuntu.add(node);
       if (debug) echoDebug('- ${node.name}: Ubuntu');
     } else {
       if (debug) echoDebug('+ ${node.name}: NixOS');
     }
   }));
 
-  return allGood;
+  return nodesWithUbuntu;
 }
 
 class AsciiProgressBar {

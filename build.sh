@@ -50,12 +50,12 @@ if [ "$CMD" = "release" ]; then
   PKG="bin/nix-infra-installer"
   VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
 
-  # [ -f "bin/nix-infra" ] && rm -f bin/nix-infra
-  # [ -f "bin/nix-infra.zip" ] && rm -f bin/nix-infra.zip
+  [ -f "bin/nix-infra" ] && rm -f bin/nix-infra
+  [ -f "bin/nix-infra.zip" ] && rm -f bin/nix-infra.zip
   [ -d "bin/nix-infra-installer" ] && rm -rf bin/nix-infra-installer
 
-  # dart pub get --enforce-lockfile
-  # dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
+  dart pub get --enforce-lockfile
+  dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
 
   mkdir "$PKG"
   cp bin/nix-infra $PKG/

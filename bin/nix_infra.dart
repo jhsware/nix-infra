@@ -227,9 +227,24 @@ void main(List<String> arguments) async {
       );
       echo('Done!');
 
-      bool allGood =
-          await allServerRunNixos(workingDir, createdServers, debug: debug);
-      if (!allGood) {
+      int triesLeft = 3;
+      List<ClusterNode> failedConversions =
+          await getServersWithoutNixos(workingDir, createdServers, debug: true);
+      while (triesLeft-- > 0 && failedConversions.isNotEmpty) {
+        echo('WARN! Some nodes are still running Ubuntu, retrying...');
+        await installNixos(
+          workingDir,
+          failedConversions,
+          nixVersion: argResults.command!['nixos-version'],
+          sshKeyName: env['SSH_KEY'] ?? argResults.command!['ssh-key'],
+          debug: debug,
+        );
+        failedConversions = await getServersWithoutNixos(
+          workingDir, createdServers,
+          debug: true);
+      }
+
+      if (failedConversions.isNotEmpty) {
         echo('ERROR! Some nodes are still running Ubuntu');
         exit(2);
       }
@@ -533,7 +548,11 @@ void main(List<String> arguments) async {
       if (secretNamespace == null) {
         final res = await Future.wait(nodes.map((node) async {
           final inp = await runActionScriptOverSsh(workingDir, cluster,
-              target: node, appModule: appModule, cmd: cmd, envVars: envVars, debug: debug);
+              target: node,
+              appModule: appModule,
+              cmd: cmd,
+              envVars: envVars,
+              debug: debug);
           final tmp = inp.split('\n');
           final outp = tmp.map((str) => '${node.name}: $str');
           return outp.join('\n');

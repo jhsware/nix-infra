@@ -8,7 +8,7 @@ Why did I build this? I wanted to test the limits of NixOS when it comes to main
 
 - low and predictable cost -- runs on Hetzner Cloud
 - reproducable and auditable -- 100% configuration in code
-- guaranteed privacy -- all data within your private walled garden
+- privacy -- all data within your private walled garden
 - easy to debug -- zero blackbox services
 - extendable -- install anything than runs on NixOS or as an OCI-container
 - customise in any way you like

@@ -7,7 +7,7 @@ A [draft release](https://github.com/jhsware/nix-infra/releases) with a linux bi
 4. Run the macOS release command 
 
 ```sh
-./build.sh release --env=./env
+./build.sh release --env=./.env
 ```
 
 5. Upload the signed installer to the draft release and:

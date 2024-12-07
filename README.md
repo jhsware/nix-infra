@@ -43,29 +43,43 @@ Apple discusses privacy in a post about [Private Cloud Compute](https://security
 
 1. [Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary
 
-2. Try the [nix-infra-test](https://github.com/jhsware/nix-infra-test) cluster template
+2. Install hcloud cli tool
 
+Clone this repo and run `nix-shell` to ensure you get [the right version](https://github.com/jhsware/nix-infra/blob/main/nix/hcloud.nix) of the `hcloud` tool.
+
+3. Try the [nix-infra-test](https://github.com/jhsware/nix-infra-test) or [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) cluster templates
+
+You will find instructions in the each repo. Basically you will download and run a test script that automates the installation of the cluster. These scripts are also the documentation of the process.
 
 ### Test Script Options
 
 To build without immediately tearing down the cluster:
 
 ```sh
-$ scripts/test-nix-infra-with-apps.sh --no-teardown
+$ ./test-nix-infra-with-apps.sh --env=.env --no-teardown
+# -- or --
+$ ./test-nix-infra-ha-base.sh --env=.env --no-teardown
 ```
 
 Useful commands to explore the running test cluster (check the bash script for more):
 
 ```sh
-$ scripts/test-nix-infra-with-apps.sh etcd "/cluster"
-$ scripts/test-nix-infra-with-apps.sh cmd --target=ingress001 "uptime"
-$ scripts/test-nix-infra-with-apps.sh ssh ingress001
+$ ./test-nix-infra-with-apps.sh etcd --env=.env "get /cluster --prefix"
+$ ./test-nix-infra-with-apps.sh cmd --env=.env --target=ingress001 "uptime"
+$ ./test-nix-infra-with-apps.sh ssh --env=.env ingress001
+# -- or --
+$ ./test-nix-infra-ha-base.sh etcd --env=.env "get /cluster --prefix"
+$ ./test-nix-infra-ha-base.sh cmd --env=.env --target=ingress001 "uptime"
+$ ./test-nix-infra-ha-base.sh ssh --env=.env ingress001
+
 ```
 
 To tear down the cluster:
 
 ```sh
-$ scripts/test-nix-infra-with-apps.sh teardown
+$ ./test-nix-infra-with-apps.sh --env=.env teardown
+# -- or --
+$ ./test-nix-infra-ha-base.sh --env=.env teardown
 ```
 
 ## Build `nix-infra` From Source
@@ -89,43 +103,49 @@ Configuration of your cluster using the **Nix** language.
 
 Add remote actions written in **Bash** that can be run on cluster nodes.
 
+1. Clone a cluster template
+2. Run `nix-infra init` to create the cluster configuration folder
+3. Create a `.env` file
+4. Add the created ssh-key to the ssh agent (probably: `ssh-add`)
+5. Provision nodes `nix-infra provision`
+6. Initialise control plane `nix-infra init-ctrl``
+7. Initialise cluster nodes `nix-infra init-node`
+8. Configure apps (apps consist of app_module and node specific configuration)
+9. Deploy apps `nix-infra deploy`
+
+### Cluster Setup
+To create similar clusters you create a cluster template and fork it for each cluster.
 ```mermaid
 stateDiagram
 direction LR
 
-Template --> Repo.0 : git clone
-Repo.0 --> Repo.1 : nix-infra init
-Repo.1 --> Repo.2 : manual configure<br>ssh-add
-Repo.2 --> Cluster.1 : nix-infra provision<br>nix-infra init-ctrl<br>nix-infra init-node
-Repo.2 --> Repo.3 : configure apps
-Repo.3 --> Cluster.2 : nix-infra deploy
-
+Cluster_1: Cluster 1
+Cluster_2: Cluster 2
+Template --> Cluster_1
+Template --> Cluster_2
 ```
 
-### Cluster Setup
-To create similar clusters you create a template configuration and fork it for each cluster.
+To share apps you copy them to your cluster repo.
+```mermaid
+stateDiagram-v2
+direction LR
 
-To share app configurations you copy them to your cluster repo.
+Cluster_1: Cluster 1
+Cluster_2: Cluster 2
+Template --> Cluster_1
+Template --> Cluster_2
+Cluster_1 --> Cluster_2 : copy<br>app_modules/monogdb.nix<br>app_modules/keydb.nix
+```
 
 To create an exact copy of cluster, use the same cluster repo but different .env-files.
 ```mermaid
-stateDiagram
+stateDiagram-v2
 direction LR
 
-Template.1 --> Repo.1 : Clone a Cluster Template
-Repo.1 --> Repo.2 : Configure Cluster
-
-Repo.2 --> Cluster.1 : Deploy Cluster
-Repo.2 --> Repo.3 : Copy App Modules
-
-Repo.3 --> Repo.4 : Configure Applications
-
-Repo.4 --> Cluster.2 : Deploy Apps
-Repo.4 --> Repo.5
-
-Template.2 --> Repo.5 : Rebase/Merge/Pick
-Repo.5 --> Cluster.3 : Update Cluster
-
+Cluster_1: Cluster 1
+Template --> Cluster_1
+note left of Cluster_1 : .env-a
+note left of Cluster_1 : .env-b
 ```
 
 ### Cluster Configuration

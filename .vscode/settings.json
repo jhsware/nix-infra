@@ -1,4 +1,9 @@
 {
   "nixEnvSelector.nixFile": "${workspaceFolder}/shell.nix",
-  "dart.sdkPath": "~/fvm/versions/3.24.3/bin/cache/dart-sdk"
+  "terminal.integrated.profiles.linux": {  // or .osx/.windows
+    "nix-shell": {
+      "path": "nix-shell"
+    }
+  },
+  "terminal.integrated.defaultProfile.linux": "nix-shell"
 }

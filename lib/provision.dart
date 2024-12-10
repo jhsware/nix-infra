@@ -16,9 +16,23 @@ Future<List<String>> createNodes(
   required String location,
   required String sshKeyName,
   required String machineType,
+  String? placementGroup,
 }) async {
   final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
   await hcloud.addSshKeyToCloudProvider(workingDir, sshKeyName);
+
+  int? placementGroupId;
+  if (placementGroup != null) {
+    final placementGroups = await hcloud.getPlacementGroups();
+    if (placementGroups.any((el) => el.name == placementGroup)) {
+      final group =
+          placementGroups.firstWhere((el) => el.name == placementGroup);
+      placementGroupId = group.id;
+    } else {
+      final group = await hcloud.createPlacementGroup(placementGroup);
+      placementGroupId = group.id;
+    }
+  }
 
   echo('************* SPAWNING NODES *************');
   //
@@ -37,6 +51,7 @@ Future<List<String>> createNodes(
         machineType,
         location,
         sshKeyName,
+        placementGroupId,
       );
       createdNodes.add(name);
     }

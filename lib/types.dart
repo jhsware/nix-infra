@@ -31,3 +31,17 @@ enum CertType {
   tls,
   peer,
 }
+
+class PlacementGroup {
+  // https://docs.hetzner.cloud/#placement-groups-create-a-placementgroup
+  DateTime created;
+  int id;
+  // "labels": {
+  //   "key": "value"
+  // },
+  String name;
+  // "servers": [],
+  String type;
+
+  PlacementGroup(this.created, this.id, this.name, this.type);
+}

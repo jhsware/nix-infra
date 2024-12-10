@@ -35,7 +35,8 @@ void main(List<String> arguments) async {
     ..addOption('node-names', mandatory: true)
     ..addOption('nixos-version', defaultsTo: '23.11')
     ..addOption('machine-type', defaultsTo: 'cx22')
-    ..addOption('location', defaultsTo: 'hel1');
+    ..addOption('location', defaultsTo: 'hel1')
+    ..addOption('placement-group');
 
   parser.addCommand('update').addOption('target', mandatory: true);
 
@@ -203,7 +204,8 @@ void main(List<String> arguments) async {
           hcloudToken: env['HCLOUD_TOKEN']!,
           sshKeyName: env['SSH_KEY'] ?? argResults.command!['ssh-key'],
           location: argResults.command!['location'],
-          machineType: argResults.command!['machine-type']);
+          machineType: argResults.command!['machine-type'],
+          placementGroup: argResults.command!['placement-group']);
       final createdServers = await hcloud.getServers(only: createdNodeNames);
 
       await clearKnownHosts(createdServers);
@@ -240,8 +242,8 @@ void main(List<String> arguments) async {
           debug: debug,
         );
         failedConversions = await getServersWithoutNixos(
-          workingDir, createdServers,
-          debug: true);
+            workingDir, createdServers,
+            debug: true);
       }
 
       if (failedConversions.isNotEmpty) {

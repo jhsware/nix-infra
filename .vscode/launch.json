@@ -12,13 +12,34 @@
       "program": "bin/nix_infra.dart",
       "args": [
         "init",
+        "--batch",
         "-d",
         "../TEST_INFRA",
-        "--env=./.env",
+        "--env=./.env-test",
         "--debug",
         "--batch"
       ]
-    }, 
+    },
+    {
+      "name": "provision",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "provision",
+        "--batch",
+        "-d",
+        "../TEST_INFRA",
+        "--env=./.env-test",
+        "--nixos-version=$NIXOS_VERSION",
+        "--ssh-key=$SSH_KEY",
+        "--location=hel1",
+        "--machine-type=cpx21",
+        "--node-names=etcd001 etcd002 etcd003",
+        "--placement-group=ctrl-plane"
+      ]
+    },
     {
       "name": "action",
       "request": "launch",

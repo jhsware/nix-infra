@@ -27,6 +27,63 @@ class HetznerCloud {
     return authHeaders;
   }
 
+  Future<Iterable<PlacementGroup>> getPlacementGroups() async {
+    int page = 1;
+    List<PlacementGroup> outp = [];
+    while (page > 0) {
+      final url = Uri.https(
+          hetznerApiHost, '/v1/placement_groups', {'page': page.toString()});
+      final response = await http.get(url, headers: _getHeaders());
+      if (response.statusCode > 399) {
+        final body = JsonDecoder().convert(response.body);
+        throw Exception(body['error']['message']);
+      }
+
+      try {
+        final body = JsonDecoder().convert(response.body);
+        final tmp = body['placement_groups'].map<PlacementGroup>((inp) => PlacementGroup(
+            DateTime.parse(inp['created']),
+            inp['id'],
+            inp['name'],
+            inp['type'])).toList();
+        outp.addAll(tmp);
+        page = body['meta']['nextPage'] ?? 0;
+      } catch (e) {
+        // Do nothing
+      }
+    }
+
+    return outp;
+  }
+
+  Future<PlacementGroup> createPlacementGroup(String name) async {
+    final url = Uri.https(hetznerApiHost, '/v1/placement_groups');
+    final response = await http.post(url,
+        headers: _getHeaders(),
+        body: jsonEncode({
+          'name': name,
+          'type': 'spread',
+        }));
+    if (response.statusCode > 399) {
+      final body = JsonDecoder().convert(response.body);
+      throw Exception(body['error']['message']);
+    }
+
+    final body = JsonDecoder().convert(response.body);
+    final placementGroup = body['placement_group'];
+    return PlacementGroup(DateTime.parse(placementGroup['created']), placementGroup['id'],
+        placementGroup['name'], placementGroup['type']);
+  }
+
+  Future<void> destroyPlacementGroup(int id) async {
+    final url = Uri.https(hetznerApiHost, '/v1/placement_groups', {'id': id});
+    final response = await http.delete(url);
+    if (response.statusCode > 399) {
+      final body = JsonDecoder().convert(response.body);
+      throw Exception(body['error']['message']);
+    }
+  }
+
   Future<Iterable<ClusterNode>> getServers({List<String>? only}) async {
     final url = Uri.https(hetznerApiHost, '/v1/servers');
     List servers = [];
@@ -46,7 +103,7 @@ class HetznerCloud {
   }
 
   Future<void> createServer(String name, String machineType, String location,
-      String sshKeyName) async {
+      String sshKeyName, int? placementGroupId) async {
     final url = Uri.https(hetznerApiHost, '/v1/servers');
     final response = await http.post(
       url,
@@ -60,6 +117,7 @@ class HetznerCloud {
         'public_net': {
           'enable_ipv4': true,
         },
+        'placement-group': placementGroupId,
 //         'user_data': """#cloud-config
 // runcmd:
 // - curl https://raw.githubusercontent.com/elitak/nixos-infect/master/nixos-infect | PROVIDER=hetznercloud NIX_CHANNEL=nixos-23.05 bash 2>&1 | tee /tmp/infect.log
@@ -136,7 +194,12 @@ class HetznerCloud {
       if (response.statusCode == 201) {
         echo('SSH key added successfully.');
       } else {
-        echo('Failed to add SSH key: ${response.body}');
+        final errBody = JsonDecoder().convert(response.body);
+        if (errBody['error']['code'] == 'uniqueness_error') {
+          echo(errBody['error']['message']);
+        } else {
+          echo('Failed to add SSH key: ${response.body}');
+        }
       }
     }
 
@@ -211,7 +274,7 @@ class HetznerCloud {
         ?.firstWhere((action) => action['command'] == command);
   }
 
-  Future<int> getCpu(ClusterNode node, { bool debug = false }) async {
+  Future<int> getCpu(ClusterNode node, {bool debug = false}) async {
     // TODO: Fix this, we are getting an error: "Bad State"
     final now = DateTime.now();
     final params = {

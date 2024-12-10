@@ -17,7 +17,9 @@ INTERMEDIATE_CA_PASS=${INTERMEDIATE_CA_PASS:-my_ca_inter_password}
 SECRETS_PWD=${SECRETS_PWD:-my_secrets_password}
 
 CTRL="etcd001 etcd002 etcd003"
-CLUSTER_NODES="registry001 service001 service002 service003 worker001 worker002 ingress001"
+SERVICE="service001 service002 service003"
+OTHER="registry001 worker001 worker002 ingress001"
+CLUSTER_NODES="$SERVICE $OTHER"
 
 if [[ "create teardown publish update test test-apps ssh cmd etcd" == *"$1"* ]]; then
   CMD="$1"
@@ -240,13 +242,37 @@ if [ "$CMD" = "create" ]; then
   # We need to add the ssh-key for it to work for some reason
   ssh-add $WORK_DIR/ssh/$SSH_KEY
 
+  # We split the provisioning calls so we can select --placement-groups
+  # where it makes sense. Since provisioning takes a while we run
+  # them in parallel as background jobs.
   $NIX_INFRA provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
       --nixos-version=$NIXOS_VERSION \
       --ssh-key=$SSH_KEY \
       --location=hel1 \
       --machine-type=cpx21 \
-      --node-names="$CTRL $CLUSTER_NODES"
-  cleanupOnFail $? "ERROR: Provisioning failed! Cleaning up..."
+      --node-names="$CTRL" \
+      --placement-group="ctrl-plane" &
+  pid1=$!
+  $NIX_INFRA provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --ssh-key=$SSH_KEY \
+      --location=hel1 \
+      --machine-type=cpx21 \
+      --node-names="$SERVICE" \
+      --placement-group="service-workers" &
+  pid2=$!
+  $NIX_INFRA provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+      --nixos-version=$NIXOS_VERSION \
+      --ssh-key=$SSH_KEY \
+      --location=hel1 \
+      --machine-type=cpx21 \
+      --node-names="$OTHER" &
+  pid3=$!
+
+  for pid in $pid1 $pid2 $pid3; do
+    wait $pid
+    cleanupOnFail $? "ERROR: Provisioning failed! Cleaning up..."
+  done
 
   _provision=`date +%s`
 

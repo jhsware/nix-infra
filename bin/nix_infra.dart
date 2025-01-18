@@ -29,7 +29,7 @@ void main(List<String> arguments) async {
     ..addFlag('help');
 
   // parser.addCommand('install');
-  parser.addCommand('init');
+  parser.addCommand('init').addFlag('no-cert-auth', negatable: false);
 
   parser.addCommand('provision')
     ..addOption('node-names', mandatory: true)
@@ -44,6 +44,23 @@ void main(List<String> arguments) async {
     ..addOption('target', mandatory: true)
     ..addOption('ctrl-nodes', defaultsTo: 'etcd001 etcd002 etcd003');
 
+  // Stand alone machine
+  parser.addCommand('init-machine')
+    ..addOption('target', mandatory: true)
+    ..addOption('nixos-version', defaultsTo: '23.11')
+    ..addOption('node-module',
+        mandatory: true,
+        help: 'Path to module file relative to working directory.');
+
+  parser.addCommand('update-machine')
+    ..addOption('target', mandatory: true)
+    ..addOption('nixos-version', defaultsTo: '23.11')
+    ..addFlag('rebuild', defaultsTo: false)
+    ..addOption('node-module',
+        mandatory: true,
+        help: 'Path to module file relative to working directory.');
+
+  // Cluster control node
   parser.addCommand('init-ctrl')
     ..addOption('target', defaultsTo: 'etcd001 etcd002 etcd003')
     ..addOption('nixos-version', defaultsTo: '23.11')
@@ -54,6 +71,7 @@ void main(List<String> arguments) async {
     ..addOption('nixos-version', defaultsTo: '23.11')
     ..addFlag('rebuild', defaultsTo: false);
 
+  // Cluster worker node
   parser.addCommand('init-node')
     ..addOption('target', mandatory: true)
     ..addOption('nixos-version', defaultsTo: '23.11')
@@ -84,7 +102,8 @@ void main(List<String> arguments) async {
 
   parser.addCommand('deploy-apps')
     ..addOption('target', mandatory: true)
-    ..addFlag('rebuild', defaultsTo: false);
+    ..addFlag('rebuild', defaultsTo: false)
+    ..addFlag('overlay-network', defaultsTo: true);
 
   parser.addCommand('port-forward')
     ..addOption('target', mandatory: true)
@@ -150,34 +169,38 @@ void main(List<String> arguments) async {
           'Are you sure you want to init this directory (${workingDir.path})?',
           batch);
 
-      // NOTE: If you choose --batch you get a passwordless ssh-key
-      // if you omit it, you need to provide a password
-
-      final pwdCa =
-          env['CA_PASS'] ?? readPassword(ReadPasswordEnum.caRoot, batch);
-      final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
-          readPassword(ReadPasswordEnum.caIntermediate, batch);
-      final certEmail =
-          env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
-      final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
-      final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
-      final certCompany = env['CERT_COMPANY'] ?? 'unknown';
-
-      final sshEmail = env['SSH_EMAIL'] ?? readInput('ssh e-mail', batch);
+      final noCertAuth = argResults.command!['no-cert-auth'];
 
       // await copyConfigurationTemplates(workingDir);
-      await createCertificateAuthority(
-        workingDir,
-        pwdCa,
-        pwdCaInt,
-        certEmail: certEmail,
-        certCountryCode: certCountryCode,
-        certStateProvince: certStateProvince,
-        certCompany: certCompany,
-        batch: batch,
-        debug: debug,
-      );
 
+      if (!noCertAuth) {
+        // TODO: Check if this is implemented:
+        // NOTE: If you choose --batch you get a passwordless ssh-key
+        // if you omit it, you need to provide a password
+        final pwdCa =
+            env['CA_PASS'] ?? readPassword(ReadPasswordEnum.caRoot, batch);
+        final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
+            readPassword(ReadPasswordEnum.caIntermediate, batch);
+        final certEmail =
+            env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
+        final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
+        final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
+        final certCompany = env['CERT_COMPANY'] ?? 'unknown';
+
+        await createCertificateAuthority(
+          workingDir,
+          pwdCa,
+          pwdCaInt,
+          certEmail: certEmail,
+          certCountryCode: certCountryCode,
+          certStateProvince: certStateProvince,
+          certCompany: certCompany,
+          batch: batch,
+          debug: debug,
+        );
+      }
+
+      final sshEmail = env['SSH_EMAIL'] ?? readInput('ssh e-mail', batch);
       await createSshKeyPair(
         workingDir,
         sshEmail,
@@ -270,6 +293,43 @@ void main(List<String> arguments) async {
         hcloudToken: env['HCLOUD_TOKEN']!,
         sshKeyName: sshKeyName,
       );
+      exit(0);
+    case 'init-machine':
+      areYouSure('Are you sure you want to init the nodes?', batch);
+      final secretsPwd =
+          env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+      final nodeNames = argResults.command!['target'].split(' ');
+      // Allow passing multiple node names
+      final nodes = await hcloud.getServers(only: nodeNames);
+      final nodeType = argResults.command!['node-module'];
+      await deployMachine(
+        workingDir,
+        nodes,
+        nixVersion: argResults.command!['nixos-version'],
+        nodeType: nodeType,
+        secretsPwd: secretsPwd,
+      );
+      await nixosRebuild(workingDir, nodes);
+      exit(0);
+    case 'update-machine':
+      areYouSure('Are you sure you want to update the nodes?', batch);
+      final secretsPwd =
+          env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+      final nodeNames = argResults.command!['target'].split(' ');
+      // Allow passing multiple node names
+      final nodes = await hcloud.getServers(only: nodeNames);
+      await deployMachine(
+        workingDir,
+        nodes,
+        nixVersion: argResults.command!['nixos-version'],
+        nodeType: argResults.command!['node-module'],
+        secretsPwd: secretsPwd,
+      );
+
+      if (argResults.command!['rebuild']) {
+        echo("Rebuilding...");
+        await nixosRebuild(workingDir, nodes);
+      }
       exit(0);
     case 'init-ctrl':
       areYouSure('Are you sure you want to init a control plane?', batch);
@@ -439,6 +499,8 @@ void main(List<String> arguments) async {
       final secretsPwd =
           env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
+      final hasOverlayNetwork = argResults.command!['overlay-network'];
+
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
       final nodes = await hcloud.getServers(only: nodeNames);
@@ -450,6 +512,7 @@ void main(List<String> arguments) async {
         nodes,
         secretsPwd: secretsPwd,
         debug: debug,
+        overlayNetwork: hasOverlayNetwork,
       );
 
       if (argResults.command!['rebuild']) {

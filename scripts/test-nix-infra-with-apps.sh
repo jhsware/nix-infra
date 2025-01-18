@@ -2,7 +2,7 @@
 SCRIPT_DIR=$(dirname $0)
 WORK_DIR=${WORK_DIR:-"./TEST_INFRA"}
 NIX_INFRA=${NIX_INFRA:-"nix-infra"}
-NIXOS_VERSION=${NIXOS_VERSION:-"24.05"}
+NIXOS_VERSION=${NIXOS_VERSION:-"24.11"}
 TEMPLATE_REPO=${TEMPLATE_REPO:-"git@github.com:jhsware/nix-infra-test.git"}
 SSH_KEY="nixinfra"
 SSH_EMAIL=${SSH_EMAIL:-your-email@example.com}

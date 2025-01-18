@@ -33,10 +33,14 @@ Future<void> portForward(
   Iterable<ClusterNode> cluster,
   ClusterNode target,
   int localPort,
-  int remotePort,
-) async {
-  final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
-  final overlayIp = overlayMeshIps[target.name];
+  int remotePort, {
+  bool overlayNetwork = true,
+}) async {
+  String? overlayIp;
+  if (overlayNetwork) {
+    final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
+    overlayIp = overlayMeshIps[target.name];
+  }
 
   if (overlayIp == null) {
     throw Exception('Target node ${target.name} has no mesh-ip');
@@ -62,13 +66,17 @@ Future<String> runActionScriptOverSsh(
   required String cmd,
   required Iterable<String> envVars,
   bool debug = false,
+  bool overlayNetwork = true,
 }) async {
   // Create list of variable substitutions
   final substitutions = Map.fromEntries(
       cluster.map((node) => MapEntry('${node.name}.ipv4', node.ipAddr)));
-  final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
-  for (final entry in overlayMeshIps.entries) {
-    substitutions['${entry.key}.overlayIp'] = entry.value;
+  
+  if (overlayNetwork) {
+    final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
+    for (final entry in overlayMeshIps.entries) {
+      substitutions['${entry.key}.overlayIp'] = entry.value;
+    }
   }
 
   Map<String, String> nodeSubstitutions = Map.from(substitutions);

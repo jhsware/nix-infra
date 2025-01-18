@@ -26,6 +26,64 @@ Future<Iterable<String>> getTrustedKeys(
   return trustedKeys;
 }
 
+Future<void> deployMachine(
+  Directory workingDir,
+  Iterable<ClusterNode> nodes, {
+  required String nixVersion,
+  required String nodeType,
+  required String secretsPwd,
+}) async {
+  // Create list of variable substitutions
+  final deployments = nodes.map((node) async {
+    // Update configuration.nix by adding imported configuration file
+    // for control plane services such as etcd.
+    final authorizedKey =
+        await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
+
+    final SSHSocket connection = await waitAndGetSshConnection(node);
+    final SSHClient sshClient =
+        await getSshClient(workingDir, node, connection);
+    final sftp = await sshClient.sftp();
+
+    await sftpSend(sftp, '${workingDir.path}/configuration.nix',
+        '/etc/nixos/configuration.nix',
+        substitutions: {
+          'sshKey': authorizedKey,
+          'nodeName': node.name,
+        });
+
+    await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',
+        substitutions: {
+          'nixVersion':
+              nixVersion, // This is neither a secret or a node specific value, should probably not be a variable
+          'nodeName': node.name,
+          'hwArch':
+              'x86_64-linux', // QUESTION: Should we read variables from target node?
+        });
+
+    await sftpSend(
+        sftp, '${workingDir.path}/$nodeType', '/etc/nixos/cluster_node.nix');
+
+    // Create modules directory
+    await sftpMkDir(sftp, '/etc/nixos/modules');
+    await sftpMkDir(sftp, '/etc/nixos/app_modules');
+
+    // Send modules to the node
+    final modulesDir = Directory('${workingDir.path}/modules');
+    for (final file in modulesDir.listSync()) {
+      if (file is File) {
+        await sftpSend(
+            sftp, file.path, '/etc/nixos/modules/${file.path.split('/').last}');
+      }
+    }
+
+    sftp.close();
+    sshClient.close();
+  });
+
+  await Future.wait(deployments);
+}
+
 Future<void> deployClusterNode(
   Directory workingDir,
   Iterable<ClusterNode> cluster,
@@ -49,18 +107,14 @@ Future<void> deployClusterNode(
       "[ ${trustedKeys.map((k) => '"$k"').join(" ")} ]";
 
   final deployments = nodes.map((node) async {
-    Map<String, String> nodeSubstitutions = Map.from(substitutions);
-    nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
-    nodeSubstitutions['localhost.overlayIp'] =
-        substitutions['${node.name}.overlayIp'] ??
-            '-- overlayIp not found in etcd --';
-
     // Update configuration.nix by adding imported configuration file
     // for control plane services such as etcd.
-    final authorizedKey = await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
+    final authorizedKey =
+        await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
 
     final SSHSocket connection = await waitAndGetSshConnection(node);
-    final SSHClient sshClient = await getSshClient(workingDir, node, connection);
+    final SSHClient sshClient =
+        await getSshClient(workingDir, node, connection);
     final sftp = await sshClient.sftp();
 
     await sftpSend(sftp, '${workingDir.path}/configuration.nix',
@@ -114,13 +168,17 @@ Future<void> deployAppsOnNode(
   Iterable<ClusterNode> nodes, {
   required String secretsPwd,
   bool debug = false,
+  bool overlayNetwork = true,
 }) async {
   // Create list of variable substitutions
   final substitutions = Map.fromEntries(
       cluster.map((node) => MapEntry('${node.name}.ipv4', node.ipAddr)));
-  final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
-  for (final entry in overlayMeshIps.entries) {
-    substitutions['${entry.key}.overlayIp'] = entry.value;
+
+  if (overlayNetwork) {
+    final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
+    for (final entry in overlayMeshIps.entries) {
+      substitutions['${entry.key}.overlayIp'] = entry.value;
+    }
   }
 
   // Add cache key for nix-store
@@ -130,7 +188,8 @@ Future<void> deployAppsOnNode(
 
   final deployments = nodes.map((node) async {
     final SSHSocket connection = await waitAndGetSshConnection(node);
-    final SSHClient sshClient = await getSshClient(workingDir, node, connection);
+    final SSHClient sshClient =
+        await getSshClient(workingDir, node, connection);
     final sftp = await sshClient.sftp();
 
     Map<String, String> nodeSubstitutions = Map.from(substitutions);
@@ -150,12 +209,19 @@ Future<void> deployAppsOnNode(
         expectedSecrets: expectedSecrets,
       );
     }
-    await syncSecrets(workingDir, cluster, node, expectedSecrets, sshClient,
-        secretsPwd: secretsPwd, debug: debug);
+    await syncSecrets(
+      workingDir,
+      cluster,
+      node,
+      expectedSecrets,
+      sshClient,
+      secretsPwd: secretsPwd,
+      debug: debug,
+      overlayNetwork: overlayNetwork,
+    );
 
     // Create modules directory
     await sftpMkDir(sftp, '/etc/nixos/app_modules');
-
 
     // Send app modules to the node recursively
     final appModulesDir = Directory('${workingDir.path}/app_modules');
@@ -185,7 +251,8 @@ Future<void> registerClusterNode(
 }) async {
   final registrations = nodes.map((node) async {
     final SSHSocket connection = await waitAndGetSshConnection(node);
-    final SSHClient sshClient = await getSshClient(workingDir, node, connection);
+    final SSHClient sshClient =
+        await getSshClient(workingDir, node, connection);
 
     final payload = {
       "name": node.name,
@@ -215,7 +282,8 @@ Future<void> unregisterClusterNode(
   final registrations = nodes.map((node) async {
     final SSHSocket connection =
         await waitAndGetSshConnection(node, maxTries: 5);
-    final SSHClient sshClient = await getSshClient(workingDir, node, connection);
+    final SSHClient sshClient =
+        await getSshClient(workingDir, node, connection);
 
     await sshClient.run('''
       export ETCDCTL_DIAL_TIMEOUT=3s
@@ -233,11 +301,13 @@ Future<void> unregisterClusterNode(
   await Future.wait(registrations);
 }
 
-Future<void> triggerConfdUpdate(Directory workingDir, Iterable<ClusterNode> nodes) async {
+Future<void> triggerConfdUpdate(
+    Directory workingDir, Iterable<ClusterNode> nodes) async {
   final triggers = nodes.map((node) async {
     final SSHSocket connection =
         await waitAndGetSshConnection(node, maxTries: 5);
-    final SSHClient sshClient = await getSshClient(workingDir, node, connection);
+    final SSHClient sshClient =
+        await getSshClient(workingDir, node, connection);
 
     await sshClient.run('''
       systemctl restart confd

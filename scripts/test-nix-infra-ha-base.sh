@@ -2,7 +2,7 @@
 SCRIPT_DIR=$(dirname $0)
 WORK_DIR=${WORK_DIR:-"./TEST_INFRA_HA"}
 NIX_INFRA=${NIX_INFRA:-"nix-infra"}
-NIXOS_VERSION=${NIXOS_VERSION:-"24.05"}
+NIXOS_VERSION=${NIXOS_VERSION:-"24.11"}
 TEMPLATE_REPO=${TEMPLATE_REPO:-"git@github.com:jhsware/nix-infra-test.git"}
 SSH_KEY="nixinfra"
 SSH_EMAIL=${SSH_EMAIL:-your-email@example.com}
@@ -21,7 +21,29 @@ SERVICE="service001 service002 service003"
 OTHER="registry001 worker001 worker002 ingress001"
 CLUSTER_NODES="$SERVICE $OTHER"
 
-if [[ "create teardown publish update test test-apps ssh cmd etcd" == *"$1"* ]]; then
+__help_text__=$(cat <<EOF
+Examples:
+
+test-nix-infra-ha-base.sh --env=.env-test
+test-nix-infra-ha-base.sh --env=.env-test --no-teardown
+test-nix-infra-ha-base.sh teardown --env=.env-test
+
+# Interact with a node
+test-nix-infra-ha-base.sh ssh --env=.env-test service001
+test-nix-infra-ha-base.sh cmd --env=.env-test --target=service001 ls -alh
+test-nix-infra-ha-base.sh port-forward --env=.env-test --target=service001 --port-mapping=80:80
+# ssh -i ./TEST_INFRA_HA/ssh/nixinfra -N -L 27017:localhost
+:27017 root@[server-ip]
+
+# Query the etcd database
+test-nix-infra-ha-base.sh etcd --env=.env-test --target=etcd001 get --prefix /nodes
+
+# The action is hardcoded in this script, edit to try different stuff
+test-nix-infra-ha-base.sh action --env=.env-test --target=service001 args to action
+EOF
+)
+
+if [[ "create teardown publish update test test-apps ssh cmd etcd action port-forward" == *"$1"* ]]; then
   CMD="$1"
   shift
 else
@@ -40,6 +62,10 @@ for i in "$@"; do
     ;;
     --no-teardown)
     TEARDOWN=no
+    shift
+    ;;
+    --port-mapping=*)
+    PORT_MAPPING="${i#*=}"
     shift
     ;;
     *)
@@ -144,8 +170,29 @@ if [ "$CMD" = "teardown" ]; then
   exit 0
 fi
 
+if [ "$CMD" = "port-forward" ]; then
+  if [ -z "$TARGET" ] || [ -z "$PORT_MAPPING" ]; then
+    echo "Usage: $0 port-forward --env=$ENV --port-mapping=[local:remote]"
+    exit 1
+  fi
+
+  OLD_IFS=$IFS  # Save current IFS
+  IFS=: read LOCAL_PORT REMOTE_PORT <<< "$PORT_MAPPING"
+  IFS=$OLD_IFS  # Restore IFS to original value
+
+  $NIX_INFRA port-forward -d $WORK_DIR --env="$WORK_DIR/.env" \
+    --target="$TARGET" \
+    --local-port="$LOCAL_PORT" \
+    --remote-port="$REMOTE_PORT"
+  exit 0
+fi
+
 if [ "$CMD" = "update" ]; then
-  (cd $WORK_DIR && git pull --force)
+  if [ -z "$REST" ]; then
+    echo "Usage: $0 update --env=$ENV [node1 node2 ...]"
+    exit 1
+  fi
+  (cd "$WORK_DIR" && git fetch origin && git reset --hard origin/$(git branch --show-current))
   $NIX_INFRA update-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --nixos-version=$NIXOS_VERSION \
     --target="$REST" \
@@ -176,18 +223,42 @@ if [ "$CMD" = "publish" ]; then
 fi
 
 if [ "$CMD" = "ssh" ]; then
+  if [ -z "$REST" ]; then
+    echo "Usage: $0 ssh --env=$ENV [node]"
+    exit 1
+  fi
   # This is the only way I get ssh to work properly right now
   # the nix-infra ssh command won't handle control codes right now.
   HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i $WORK_DIR/ssh/$SSH_KEY
   exit 0
 fi
 
+if [ "$CMD" = "action" ]; then
+  # read action opts <<< "$REST"
+  # if [ -z $action ]; then
+  #   echo "Usage: $0 action [cmd] [opts]"
+  #   exit 1
+  # fi
+  # (cd "$WORK_DIR" && git fetch origin && git reset --hard origin/$(git branch --show-current))
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="elasticsearch" \
+    --cmd="$REST" # --env-vars="ELASTIC_PASSWORD="
+  exit 0
+fi
+
 if [ "$CMD" = "cmd" ]; then
+  if [ -z "$TARGET" ] || [ -z "$REST" ]; then
+    echo "Usage: $0 cmd --env=$ENV --target=[node] [cmd goes here]"
+    exit 1
+  fi
   $NIX_INFRA cmd -d $WORK_DIR --target="$TARGET" "$REST"
   exit 0
 fi
 
 if [ "$CMD" = "etcd" ]; then
+  if [ -z "$REST" ]; then
+    echo "Usage: $0 etcd --env=$ENV [etcd cmd goes here]"
+    exit 1
+  fi
   $NIX_INFRA etcd -d $WORK_DIR --ctrl-nodes="$CTRL" "$REST"
   exit 0
 fi
@@ -351,6 +422,9 @@ if [ "$CMD" = "create" ]; then
   $NIX_INFRA cmd -d $WORK_DIR --target="service001 service002 service003 worker001 worker002" "systemctl restart confd"
 
   $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="init" --env-vars="NODE_1=[%%service001.overlayIp%%],NODE_2=[%%service002.overlayIp%%],NODE_3=[%%service003.overlayIp%%]"
+  # security is currently turned off
+  # $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="elasticsearch" --cmd="init"
+
   echo "...INSTALLING APPS"
 
   _end=`date +%s`
@@ -361,9 +435,20 @@ if [ "$CMD" = "create" ]; then
 
   echo "******************************************"
 
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-db --database=hello"
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-db --database=test"
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-admin --database=test --username=test-admin"
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-admin --database=hello --username=hello-admin"
+  
+  echo "******************************************"
+
   testApps
 
   echo "******************************************"
+
+
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="dbs"
+  $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="users"
 
   if [[ "$TEARDOWN" != "no" ]]; then
     tearDownCluster

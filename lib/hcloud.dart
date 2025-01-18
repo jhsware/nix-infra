@@ -242,10 +242,10 @@ class HetznerCloud {
         headers: _getHeaders(),
       );
 
-      if (response.statusCode == 201) {
+      if (response.statusCode == 204) {
         echo('SSH key removed successfully.');
       } else {
-        echo('Failed to remove SSH key: ${response.body}');
+        echo('Failed to remove SSH key: ${response.statusCode.toString()}');
       }
     } else {
       echo('No SSH key named $keyName was found');

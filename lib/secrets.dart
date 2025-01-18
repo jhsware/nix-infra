@@ -126,14 +126,19 @@ Future<void> syncSecrets(
   SSHClient sshClient, {
   required String secretsPwd,
   bool debug = false,
+  bool overlayNetwork = true,
 }) async {
     // Create list of variable substitutions
   final substitutions = Map.fromEntries(
       cluster.map((node) => MapEntry('${node.name}.ipv4', node.ipAddr)));
-  final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
-  for (final entry in overlayMeshIps.entries) {
-    substitutions['${entry.key}.overlayIp'] = entry.value;
+
+  if (overlayNetwork) {
+    final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
+    for (final entry in overlayMeshIps.entries) {
+      substitutions['${entry.key}.overlayIp'] = entry.value;
+    }
   }
+  
   Map<String, String> nodeSubstitutions = Map.from(substitutions);
     nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
     nodeSubstitutions['localhost.overlayIp'] =

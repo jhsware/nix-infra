@@ -41,15 +41,20 @@ Apple discusses privacy in a post about [Private Cloud Compute](https://security
 
 ## Getting Started
 
-1. [Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary
+You are recommended to install Nix on your machine and work in a nix-shell. If you don't know how to install Nix, try the [Determinate Systems Nix installer](https://github.com/DeterminateSystems/nix-installer), it has uninstall support and automatic garbage collection.
 
-2. Install hcloud cli tool
+1. [Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary
 
 Clone this repo and run `nix-shell` to ensure you get [the right version](https://github.com/jhsware/nix-infra/blob/main/nix/hcloud.nix) of the `hcloud` tool.
 
-3. Try the [nix-infra-test](https://github.com/jhsware/nix-infra-test) or [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) cluster templates
 
-You will find instructions in the each repo. Basically you will download and run a test script that automates the installation of the cluster. These scripts are also the documentation of the process.
+### Option 1: Create a cluster setup
+2. Use the [nix-infra-test](https://github.com/jhsware/nix-infra-test) or [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) cluster templates
+
+### Option 2: Create a fleet of standalone machines
+2. Use the [nix-infra-test-machine](https://github.com/jhsware/nix-infra-test-machine) standalone machines template (contains a cli-script as a starter for you to customise)
+
+You will find instructions in the each repo. Basically you will download and run a test script that automates the installation of the cluster. Or, you can clone the repo and create your own bespoke automation scripts inspired by the test script.
 
 ### Test Script Options
 

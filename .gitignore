@@ -6,3 +6,4 @@ bin/nix-infra
 .env-*
 nix-infra-installer.pkg
 bin/nix-infra-installer
+nix-infra-macos.pkg

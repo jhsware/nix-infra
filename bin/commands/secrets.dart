@@ -1,56 +1,63 @@
+import 'dart:io';
 import 'package:args/command_runner.dart';
+import 'package:nix_infra/secrets.dart';
+import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/types.dart';
+import 'package:path/path.dart' as path;
+import 'package:dotenv/dotenv.dart';
+import 'utils.dart';
 
 class SecretsCommand extends Command {
   @override
   final name = 'secrets';
   @override
-  final description = 'Secrets management commands';
+  final description = 'Manage encrypted secrets';
 
   SecretsCommand() {
     argParser
-      ..addOption('working-dir', abbr: 'd', defaultsTo: '.', help: 'Working directory')
-      ..addOption('ssh-key', defaultsTo: 'nixinfra', help: 'SSH key name')
-      ..addOption('env', help: 'Path to .env file')
-      ..addFlag('batch', help: 'Run in batch mode');
-
-    addSubcommand(StoreCommand());
-    addSubcommand(UpdateCommand());
-    addSubcommand(DestroyCommand());
+      ..addOption(
+        'working-dir',
+        abbr: 'd',
+        defaultsTo: '.',
+        help: 'Directory containing secrets'
+      )
+      ..addOption(
+        'secret',
+        mandatory: true,
+        help: 'Secret value to store'
+      )
+      ..addOption(
+        'save-as',
+        mandatory: true,
+        help: 'Name to save the secret under'
+      )
+      ..addOption(
+        'env',
+        help: 'Path to environment file'
+      )
+      ..addFlag(
+        'batch',
+        help: 'Run non-interactively using environment variables'
+      );
   }
-}
-
-class StoreCommand extends Command {
-  @override
-  final name = 'store';
-  @override
-  final description = 'Store a new secret';
 
   @override
-  void run() async {}
-}
+  void run() async {
+    final workingDir = Directory(path.normalize(path.absolute(argResults!['working-dir'])));
+    final batch = argResults!['batch'] as bool;
 
-class UpdateCommand extends Command {
-  @override
-  final name = 'update';
-  @override
-  final description = 'Update an existing secret';
+    // Load environment variables
+    final env = DotEnv(includePlatformEnvironment: true);
+    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
+    if (await envFile.exists()) {
+      env.load([envFile.path]);
+    }
 
-  @override
-  void run() async {}
-}
+    final secretsPwd = env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final secret = argResults!['secret'];
+    final secretName = argResults!['save-as'];
 
-class DestroyCommand extends Command {
-  @override
-  final name = 'destroy';
-  @override
-  final description = 'Destroy a secret';
-
-  @override
-  void run() async {}
-}
-
-void main(List<String> arguments) {
-  CommandRunner('nix-infra', 'Infrastructure management tool')
-    ..addCommand(SecretsCommand())
-    ..run(arguments);
+    await saveSecret(workingDir, secretsPwd, secretName, secret);
+    echo('Secret saved as $secretName');
+  }
 }

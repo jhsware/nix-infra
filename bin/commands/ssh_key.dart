@@ -1,64 +1,100 @@
+import 'dart:io';
 import 'package:args/command_runner.dart';
+import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/hcloud.dart';
+import 'package:path/path.dart' as path;
+import 'package:dotenv/dotenv.dart';
+import './utils.dart';
 
-class SSHKeyCommand extends Command {
+class SshKeyCommand extends Command {
   @override
   final name = 'ssh-key';
   @override
-  final description = 'SSH key management commands';
+  final description = 'Manage SSH keys for infrastructure access';
 
-  SSHKeyCommand() {
-    argParser
-      ..addOption('working-dir', abbr: 'd', defaultsTo: '.', help: 'Working directory')
-      ..addOption('ssh-key', defaultsTo: 'nixinfra', help: 'SSH key name')
-      ..addOption('env', help: 'Path to .env file')
-      ..addFlag('batch', help: 'Run in batch mode');
-
-    addSubcommand(CreateCommand());
-    addSubcommand(AddCommand());
-    addSubcommand(RemoveCommand());
+  SshKeyCommand() {
+    addSubcommand(CreateSshKeyCommand());
+    addSubcommand(RemoveSshKeyCommand());
   }
 }
 
-class CreateCommand extends Command {
+class CreateSshKeyCommand extends Command {
   @override
   final name = 'create';
   @override
-  final description = 'Create a new SSH key';
+  final description = 'Create a new SSH key pair';
 
-  @override
-  void run() async {}
-}
-
-class AddCommand extends Command {
-  @override
-  final name = 'add';
-  @override
-  final description = 'Add SSH key to provider';
-
-  AddCommand() {
-    argParser.addOption('provider', mandatory: true);
+  CreateSshKeyCommand() {
+    argParser
+      ..addOption('working-dir',
+          abbr: 'd', defaultsTo: '.', help: 'Directory to store SSH keys')
+      ..addOption('ssh-key',
+          defaultsTo: 'nixinfra', help: 'Name for the SSH key')
+      ..addOption('env', help: 'Path to environment file')
+      ..addFlag('batch',
+          help: 'Run non-interactively using environment variables');
   }
 
   @override
-  void run() async {}
+  void run() async {
+    final workingDir =
+        Directory(path.normalize(path.absolute(argResults!['working-dir'])));
+    final batch = argResults!['batch'] as bool;
+
+    final env = DotEnv(includePlatformEnvironment: true);
+    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
+    if (await envFile.exists()) {
+      env.load([envFile.path]);
+    }
+
+    final sshEmail = env['SSH_EMAIL'] ?? readInput('ssh e-mail', batch);
+    final sshKeyName = env['SSH_KEY'] ?? argResults!['ssh-key'];
+
+    await createSshKeyPair(
+      workingDir,
+      sshEmail,
+      sshKeyName,
+      debug: false,
+      batch: batch,
+    );
+  }
 }
 
-class RemoveCommand extends Command {
+class RemoveSshKeyCommand extends Command {
   @override
   final name = 'remove';
   @override
-  final description = 'Remove SSH key from provider';
+  final description = 'Remove an SSH key from cloud provider';
 
-  RemoveCommand() {
-    argParser.addOption('provider', mandatory: true);
+  RemoveSshKeyCommand() {
+    argParser
+      ..addOption('working-dir',
+          abbr: 'd', defaultsTo: '.', help: 'Working directory')
+      ..addOption('ssh-key-name',
+          mandatory: true, help: 'Name of SSH key to remove')
+      ..addOption('env', help: 'Path to environment file');
   }
 
   @override
-  void run() async {}
-}
+  void run() async {
+    final workingDir =
+        Directory(path.normalize(path.absolute(argResults!['working-dir'])));
 
-void main(List<String> arguments) {
-  CommandRunner('nix-infra', 'Infrastructure management tool')
-    ..addCommand(SSHKeyCommand())
-    ..run(arguments);
+    final env = DotEnv(includePlatformEnvironment: true);
+    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
+    if (await envFile.exists()) {
+      env.load([envFile.path]);
+    }
+
+    if (env['HCLOUD_TOKEN'] == null) {
+      echo('ERROR! env var HCLOUD_TOKEN not found');
+      exit(2);
+    }
+
+    final hcloud = HetznerCloud(
+        token: env['HCLOUD_TOKEN']!, sshKey: env['SSH_KEY'] ?? 'nixinfra');
+    await hcloud.removeSshKeyFromCloudProvider(
+        workingDir, argResults!['ssh-key-name']);
+  }
 }

@@ -1,67 +1,95 @@
+import 'dart:io';
 import 'package:args/command_runner.dart';
+import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/types.dart';
+import 'package:path/path.dart' as path;
+import 'package:dotenv/dotenv.dart';
+import './utils.dart';
 
 class CertCommand extends Command {
   @override
   final name = 'cert';
   @override
-  final description = 'Certificate management commands';
+  final description =
+      'Certificate management commands for nodes and infrastructure';
 
   CertCommand() {
     argParser
-      ..addOption('working-dir', abbr: 'd', defaultsTo: '.', help: 'Working directory')
-      ..addOption('ssh-key', defaultsTo: 'nixinfra', help: 'SSH key name')
-      ..addOption('env', help: 'Path to .env file')
-      ..addFlag('batch', help: 'Run in batch mode');
-
-    addSubcommand(CreateCommand());
-    addSubcommand(RenewCommand());
-    addSubcommand(RevokeCommand());
-    addSubcommand(ShowCommand());
+      ..addOption('working-dir',
+          abbr: 'd',
+          defaultsTo: '.',
+          help: 'Directory containing certificates and configuration')
+      ..addOption('target',
+          help: 'Target node names (space separated)', mandatory: true)
+      ..addOption('ctrl-nodes',
+          defaultsTo: 'etcd001 etcd002 etcd003',
+          help: 'Control node names for cluster')
+      ..addOption('cert-type',
+          allowed: ['tls', 'peer'],
+          defaultsTo: 'tls',
+          help: 'Certificate type to generate (tls or peer)')
+      ..addOption('env', help: 'Path to environment file')
+      ..addFlag('batch',
+          help: 'Run non-interactively using environment variables');
   }
-}
-
-class CreateCommand extends Command {
-  @override
-  final name = 'create';
-  @override
-  final description = 'Create a new certificate';
 
   @override
-  void run() async {}
-}
+  void run() async {
+    final workingDir =
+        Directory(path.normalize(path.absolute(argResults!['working-dir'])));
+    if (!await workingDir.exists()) {
+      echo('ERROR! Working directory does not exist: ${workingDir.path}');
+      exit(2);
+    }
 
-class RenewCommand extends Command {
-  @override
-  final name = 'renew';
-  @override
-  final description = 'Renew an existing certificate';
+    // Load environment variables
+    final env = DotEnv(includePlatformEnvironment: true);
+    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
+    if (await envFile.exists()) {
+      env.load([envFile.path]);
+    }
 
-  @override
-  void run() async {}
-}
+    final batch = argResults!['batch'] as bool;
+    final target = argResults!['target'] as String;
+    final certType =
+        argResults!['cert-type'] == 'peer' ? CertType.peer : CertType.tls;
 
-class RevokeCommand extends Command {
-  @override
-  final name = 'revoke';
-  @override
-  final description = 'Revoke a certificate';
+    final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
+        readPassword(ReadPasswordEnum.caIntermediate, batch);
 
-  @override
-  void run() async {}
-}
+    final certEmail =
+        env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
+    final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
+    final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
+    final certCompany = env['CERT_COMPANY'] ?? 'unknown';
 
-class ShowCommand extends Command {
-  @override
-  final name = 'show';
-  @override
-  final description = 'Show certificate details';
+    // Implementation placeholder for certificate generation
+    // TODO: Implement after HCloud service is available:
+    // final hcloud = HetznerCloud(token: env['HCLOUD_TOKEN']!, sshKey: sshKeyName);
+    // final nodes = await hcloud.getServers(only: target.split(' '));
 
-  @override
-  void run() async {}
-}
+    // await generateCerts(
+    //   workingDir,
+    //   nodes,
+    //   [certType],
+    //   passwordIntermediateCa: pwdCaInt,
+    //   certEmail: certEmail,
+    //   certCountryCode: certCountryCode,
+    //   certStateProvince: certStateProvince,
+    //   certCompany: certCompany,
+    //   batch: batch,
+    //   debug: false,
+    // );
 
-void main(List<String> arguments) {
-  CommandRunner('nix-infra', 'Infrastructure management tool')
-    ..addCommand(CertCommand())
-    ..run(arguments);
+    // await deployEtcdCertsOnClusterNode(
+    //   workingDir,
+    //   nodes,
+    //   [certType],
+    //   debug: false
+    // );
+
+    echo(
+        'Certificate management command implemented. Cloud provider integration pending.');
+    exit(0);
+  }
 }

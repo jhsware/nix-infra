@@ -188,9 +188,3 @@ class ActionCommand extends Command {
   @override
   void run() async {}
 }
-
-void main(List<String> arguments) {
-  CommandRunner('nix-infra', 'Infrastructure management tool')
-    ..addCommand(MachineCommand())
-    ..run(arguments);
-}

@@ -1,4 +1,12 @@
+import 'dart:io';
 import 'package:args/command_runner.dart';
+import 'package:nix_infra/cluster_node.dart';
+import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/provision.dart';
+import 'package:nix_infra/ssh.dart';
+import 'shared.dart';
+import 'utils.dart';
 
 class MachineCommand extends Command {
   @override
@@ -8,13 +16,17 @@ class MachineCommand extends Command {
 
   MachineCommand() {
     argParser
-      ..addOption('working-dir', abbr: 'd', defaultsTo: '.', help: 'Working directory')
+      ..addOption('working-dir',
+          abbr: 'd', defaultsTo: '.', help: 'Working directory')
       ..addOption('ssh-key', defaultsTo: 'nixinfra', help: 'SSH key name')
-      ..addOption('env', help: 'Path to .env file')
-      ..addFlag('batch', help: 'Run in batch mode');
+      ..addOption('env', defaultsTo: "./.env", help: 'Path to .env file')
+      ..addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
 
     addSubcommand(ProvisionCommand());
+    
+    addSubcommand(InitMachineCommand());
     addSubcommand(UpdateCommand());
+    
     addSubcommand(DestroyCommand());
     addSubcommand(DeployAppsCommand());
     addSubcommand(GCCommand());
@@ -27,24 +39,50 @@ class MachineCommand extends Command {
   }
 }
 
-class ProvisionCommand extends Command {
+class InitMachineCommand extends Command {
   @override
-  final name = 'provision';
+  final name = 'init';
   @override
-  final description = 'Provision new machines';
+  final description = 'Init machine';
 
-  ProvisionCommand() {
-    argParser
-      ..addOption('node-names', mandatory: true)
-      ..addOption('provider', mandatory: true)
-      ..addOption('nixos-version')
-      ..addOption('machine-type')
-      ..addOption('location')
-      ..addOption('placement-group');
+  InitMachineCommand() {
+    argParser.addOption('target', mandatory: true);
+    argParser.addOption('node-module', mandatory: true);
+    argParser.addOption('nixos-version', mandatory: true);
   }
 
   @override
-  void run() async {}
+  void run() async {
+    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final env = await loadEnv(argResults!['env'], workingDir);
+
+    // final bool debug = argResults!['debug'];
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final String nodeType = argResults!['node-module'];
+    final List<String> targets = argResults!['target'].split(' ');
+    final String nixOsVersion = argResults!['nixos-version'];
+
+    areYouSure('Are you sure you want to init the nodes?', batch);
+
+    final secretsPwd =
+        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+
+    // Allow passing multiple node names
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final nodes = await hcloud.getServers(only: targets);
+
+    await deployMachine(
+      workingDir,
+      nodes,
+      nixVersion: nixOsVersion,
+      nodeType: nodeType,
+      secretsPwd: secretsPwd,
+    );
+
+    await nixosRebuild(workingDir, nodes);
+  }
 }
 
 class UpdateCommand extends Command {
@@ -54,11 +92,46 @@ class UpdateCommand extends Command {
   final description = 'Update machine';
 
   UpdateCommand() {
+    argParser.addFlag('batch', defaultsTo: false);
     argParser.addOption('target', mandatory: true);
+    argParser.addOption('node-module', mandatory: true);
+    argParser.addOption('nixos-version', mandatory: true);
   }
 
   @override
-  void run() async {}
+  void run() async {
+    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final env = await loadEnv(argResults!['env'], workingDir);
+
+    // final bool debug = argResults!['debug'];
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final String nodeType = argResults!['node-module'];
+    final List<String> targets = argResults!['target'].split(' ');
+    final String nixOsVersion = argResults!['nixos-version'];
+    final bool rebuild = argResults!['rebuild'];
+
+    areYouSure('Are you sure you want to update the nodes?', batch);
+    final secretsPwd =
+        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+
+    // Allow passing multiple node names
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final nodes = await hcloud.getServers(only: targets);
+    await deployMachine(
+      workingDir,
+      nodes,
+      nixVersion: nixOsVersion,
+      nodeType: nodeType,
+      secretsPwd: secretsPwd,
+    );
+
+    if (rebuild) {
+      echo("Rebuilding...");
+      await nixosRebuild(workingDir, nodes);
+    }
+  }
 }
 
 class DestroyCommand extends Command {
@@ -68,11 +141,33 @@ class DestroyCommand extends Command {
   final description = 'Destroy machine';
 
   DestroyCommand() {
+    argParser.addFlag('batch', defaultsTo: false);
     argParser.addOption('target', mandatory: true);
   }
 
   @override
-  void run() async {}
+  void run() async {
+    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final env = await loadEnv(argResults!['env'], workingDir);
+
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final List<String> targets = argResults!['target'].split(' ');
+
+    areYouSure('Are you sure you want to destroy these nodes?', batch);
+
+    // Allow passing multiple node names
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final nodes = await hcloud.getServers(only: targets);
+
+    await destroyNodes(
+      workingDir,
+      nodes,
+      hcloudToken: hcloudToken,
+      sshKeyName: sshKeyName,
+    );
+  }
 }
 
 class DeployAppsCommand extends Command {
@@ -82,81 +177,50 @@ class DeployAppsCommand extends Command {
   final description = 'Deploy applications to machine';
 
   DeployAppsCommand() {
+    argParser.addFlag('batch', defaultsTo: false);
     argParser.addOption('target', mandatory: true);
+    argParser.addFlag('rebuild', defaultsTo: true);
+    
   }
 
   @override
-  void run() async {}
-}
+  void run() async {
+    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final env = await loadEnv(argResults!['env'], workingDir);
 
-class GCCommand extends Command {
-  @override
-  final name = 'gc';
-  @override
-  final description = 'Garbage collect machine';
+    final bool debug = argResults!['debug'];
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final List<String> targets = argResults!['target'].split(' ');
+    final bool rebuild = argResults!['rebuild'];
 
-  GCCommand() {
-    argParser.addOption('target', mandatory: true);
+    areYouSure('Are you sure you want to deploy apps?', batch);
+
+    final secretsPwd =
+        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+
+    // Allow passing multiple node names
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final nodes = await hcloud.getServers(only: targets);
+    final cluster = await hcloud.getServers();
+
+    await deployAppsOnNode(
+      workingDir,
+      cluster,
+      nodes,
+      secretsPwd: secretsPwd,
+      debug: debug,
+      overlayNetwork: false,
+    );
+
+    if (rebuild) {
+      await nixosRebuild(workingDir, nodes);
+      // I don't believe this is needed for app updates, it should
+      // be done automatically:
+      // await triggerConfdUpdate(nodes);
+    }
   }
-
-  @override
-  void run() async {}
-}
-
-class UpgradeCommand extends Command {
-  @override
-  final name = 'upgrade';
-  @override
-  final description = 'Upgrade machine';
-
-  UpgradeCommand() {
-    argParser.addOption('target', mandatory: true);
-  }
-
-  @override
-  void run() async {}
-}
-
-class RollbackCommand extends Command {
-  @override
-  final name = 'rollback';
-  @override
-  final description = 'Rollback machine';
-
-  RollbackCommand() {
-    argParser.addOption('target', mandatory: true);
-  }
-
-  @override
-  void run() async {}
-}
-
-class SSHCommand extends Command {
-  @override
-  final name = 'ssh';
-  @override
-  final description = 'SSH into machine';
-
-  SSHCommand() {
-    argParser.addOption('target', mandatory: true);
-  }
-
-  @override
-  void run() async {}
-}
-
-class CmdCommand extends Command {
-  @override
-  final name = 'cmd';
-  @override
-  final description = 'Run command on machine';
-
-  CmdCommand() {
-    argParser.addOption('target', mandatory: true);
-  }
-
-  @override
-  void run() async {}
 }
 
 class PortForwardCommand extends Command {
@@ -166,25 +230,39 @@ class PortForwardCommand extends Command {
   final description = 'Forward port from machine';
 
   PortForwardCommand() {
+    argParser.addFlag('batch', defaultsTo: false);
     argParser.addOption('target', mandatory: true);
+    argParser.addOption('local-port', mandatory: true);
+    argParser.addOption('remote-port', mandatory: true);
   }
 
   @override
-  void run() async {}
-}
+  void run() async {
+    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final env = await loadEnv(argResults!['env'], workingDir);
 
-class ActionCommand extends Command {
-  @override
-  final name = 'action';
-  @override
-  final description = 'Run action on machine';
+    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final List<String> targets = argResults!['target'].split(' ');
+    final localPort = int.parse(argResults!['local-port']);
+    final remotePort = int.parse(argResults!['remote-port']);
 
-  ActionCommand() {
-    argParser
-      ..addOption('target', mandatory: true)
-      ..addOption('cmd', mandatory: true);
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+
+    final cluster = await hcloud.getServers();
+    final nodes = await hcloud.getServers(only: targets);
+    if (nodes.isEmpty) {
+      echo('ERROR! Node not found in cluster: $targets');
+      exit(2);
+    }
+    final node = nodes.first;
+    await portForward(
+      workingDir,
+      cluster,
+      node,
+      localPort,
+      remotePort,
+      overlayNetwork: false,
+    );
   }
-
-  @override
-  void run() async {}
 }

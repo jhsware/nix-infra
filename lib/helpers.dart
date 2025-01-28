@@ -8,7 +8,15 @@ import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 
 void echo(String message) {
-  print('- $message');
+  final tmp = message.split('\n');
+  final outp = tmp.map((str) => '- $str');
+  print(outp.join('\n'));
+}
+
+void echoFromNode(String nodeName, String message) {
+  final tmp = message.split('\n');
+  final outp = tmp.map((str) => '$nodeName: $str');
+  print(outp.join('\n'));
 }
 
 void echoDebug(String message) {

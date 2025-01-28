@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:args/command_runner.dart';
 import 'commands/init.dart';
 import 'commands/cluster.dart';
@@ -19,7 +21,9 @@ void main(List<String> arguments) async {
       ..addCommand(RegistryCommand())
       ..addCommand(SecretsCommand());
     await cmd.run(arguments);
+    exit(0);
   } catch (err) {
     await legacyCommands(arguments);
+    exit(0);
   }
 }

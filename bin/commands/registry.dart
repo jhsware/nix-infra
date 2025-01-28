@@ -1,10 +1,7 @@
-import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/docker_registry.dart';
 import 'package:nix_infra/hcloud.dart';
-import 'package:nix_infra/helpers.dart';
-import 'package:path/path.dart' as path;
-import 'package:dotenv/dotenv.dart';
+import 'utils.dart';
 
 class RegistryCommand extends Command {
   @override
@@ -19,7 +16,7 @@ class RegistryCommand extends Command {
           defaultsTo: '.',
           help: 'Directory containing certificates and configuration')
       ..addOption('target',
-          help: 'Target node names (space separated)', mandatory: true)
+          help: 'Name of machine hosting the registry', mandatory: true)
       ..addOption('env', help: 'Path to environment file')
       ..addFlag('batch',
           help: 'Run non-interactively using environment variables');
@@ -37,40 +34,31 @@ class PublishImageCommand extends Command {
 
   PublishImageCommand() {
     argParser
-      ..addOption('image-name', mandatory: true, help: 'Name for the image')
-      ..addOption('file', mandatory: true, help: 'Image file path');
+      ..addOption('file', mandatory: true, help: 'Image file path')
+      ..addOption('image-name', mandatory: true, help: 'Name for the image');
   }
 
   @override
   void run() async {
-    final workingDir = Directory(path.normalize(path.absolute(argResults!['working-dir'])));
-    if (!await workingDir.exists()) {
-      echo('ERROR! Working directory does not exist: ${workingDir.path}');
-      exit(2);
-    }
+    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final env = await loadEnv(argResults!['env'], workingDir);
 
-    final env = DotEnv(includePlatformEnvironment: true);
-    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
-    if (await envFile.exists()) {
-      env.load([envFile.path]);
-    }
+    // final bool debug = argResults!['debug'];
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final List<String> targets = argResults!['target'].split(' ');
+    final String fileName = argResults!['file'];
+    final String imageName = argResults!['image-name'];
 
-    if (env['HCLOUD_TOKEN'] == null) {
-      echo('ERROR! env var HCLOUD_TOKEN not found');
-      exit(2);
-    }
+    areYouSure('Are you sure you want to publish this image?', batch);
 
-    final hcloud = HetznerCloud(token: env['HCLOUD_TOKEN']!, sshKey: env['SSH_KEY'] ?? 'nixinfra');
-    final nodes = await hcloud.getServers(only: [argResults!['target']]);
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final nodes = await hcloud.getServers(only: targets);
     final cluster = await hcloud.getServers();
-    
-    await publishImageToRegistry(
-      workingDir, 
-      cluster, 
-      nodes.first,
-      file: argResults!['file'],
-      name: argResults!['image-name']
-    );
+
+    await publishImageToRegistry(workingDir, cluster, nodes.first,
+        file: fileName, name: imageName);
   }
 }
 
@@ -80,31 +68,25 @@ class ListImagesCommand extends Command {
   @override
   final description = 'List images in the container registry';
 
-  ListImagesCommand() {}
+  ListImagesCommand();
 
   @override
   void run() async {
-    final workingDir = Directory(path.normalize(path.absolute(argResults!['working-dir'])));
-    if (!await workingDir.exists()) {
-      echo('ERROR! Working directory does not exist: ${workingDir.path}');
-      exit(2);
-    }
+    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final env = await loadEnv(argResults!['env'], workingDir);
 
-    final env = DotEnv(includePlatformEnvironment: true);
-    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
-    if (await envFile.exists()) {
-      env.load([envFile.path]);
-    }
+    // final bool debug = argResults!['debug'];
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final List<String> targets = argResults!['target'].split(' ');
 
-    if (env['HCLOUD_TOKEN'] == null) {
-      echo('ERROR! env var HCLOUD_TOKEN not found');
-      exit(2);
-    }
+    areYouSure('Are you sure you want to publish this image?', batch);
 
-    final hcloud = HetznerCloud(token: env['HCLOUD_TOKEN']!, sshKey: env['SSH_KEY'] ?? 'nixinfra');
-    final nodes = await hcloud.getServers(only: [argResults!['target']]);
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final nodes = await hcloud.getServers(only: targets);
     final cluster = await hcloud.getServers();
-    
+
     await listImagesInRegistry(workingDir, cluster, nodes.first);
   }
 }

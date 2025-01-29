@@ -18,8 +18,8 @@ class MachineCommand extends Command {
     argParser
       ..addOption('working-dir',
           abbr: 'd', defaultsTo: '.', help: 'Working directory')
-      ..addOption('ssh-key', defaultsTo: 'nixinfra', help: 'SSH key name')
-      ..addOption('env', defaultsTo: "./.env", help: 'Path to .env file')
+      ..addOption('ssh-key', help: 'SSH key name')
+      ..addOption('env', help: 'Path to .env file')
       ..addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
 
     addSubcommand(ProvisionCommand());
@@ -46,19 +46,21 @@ class InitMachineCommand extends Command {
   final description = 'Init machine';
 
   InitMachineCommand() {
-    argParser.addOption('target', mandatory: true);
-    argParser.addOption('node-module', mandatory: true);
-    argParser.addOption('nixos-version', mandatory: true);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('target', mandatory: true)
+      ..addOption('node-module', mandatory: true)
+      ..addOption('nixos-version', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    // final bool debug = argResults!['debug'];
+    // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String nodeType = argResults!['node-module'];
     final List<String> targets = argResults!['target'].split(' ');
@@ -100,12 +102,12 @@ class UpdateCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    // final bool debug = argResults!['debug'];
+    // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String nodeType = argResults!['node-module'];
     final List<String> targets = argResults!['target'].split(' ');
@@ -147,11 +149,11 @@ class DestroyCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
@@ -185,12 +187,12 @@ class DeployAppsCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = argResults!['debug'];
+    final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final bool rebuild = argResults!['rebuild'];
@@ -238,10 +240,10 @@ class PortForwardCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final localPort = int.parse(argResults!['local-port']);

@@ -17,6 +17,7 @@ class ProvisionCommand extends Command {
 
   ProvisionCommand() {
     argParser
+      ..addFlag('batch', defaultsTo: false)
       ..addOption('node-names', mandatory: true)
       ..addOption('provider')
       ..addOption('nixos-version')
@@ -27,16 +28,17 @@ class ProvisionCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = argResults!['debug'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final bool debug = parent?.argResults!['debug'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY']!;
     final List<String> nodeNames = argResults!['node-names'].split(' ');
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String location = argResults!['location'];
     final String machineType = argResults!['machine-type'];
-    final String placementGroup = argResults!['placement-group'];
+    final String? placementGroup = argResults!['placement-group'];
     final String nixOsVersion = argResults!['nixos-version'];
 
     final createdNodeNames = await createNodes(workingDir, nodeNames,
@@ -100,16 +102,19 @@ class GCCommand extends Command {
   final description = 'Garbage collect cluster node';
 
   GCCommand() {
-    argParser.addOption('target', mandatory: true);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('target', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
@@ -121,13 +126,15 @@ class GCCommand extends Command {
       exit(2);
     }
 
-    areYouSure('This clears the rollback history. Are you sure you want to garbage collect?', batch);
+    areYouSure(
+        'This clears the rollback history. Are you sure you want to garbage collect?',
+        batch);
 
     await Future.wait(nodes.map((node) async {
-      final message = await runCommandOverSsh(workingDir, node, 'nix-collect-garbage -d');
+      final message =
+          await runCommandOverSsh(workingDir, node, 'nix-collect-garbage -d');
       echoFromNode(node.name, message);
     }));
-
   }
 }
 
@@ -138,15 +145,19 @@ class UpgradeCommand extends Command {
   final description = 'Upgrade cluster node';
 
   UpgradeCommand() {
-    argParser.addOption('target', mandatory: true);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('target', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
@@ -159,7 +170,8 @@ class UpgradeCommand extends Command {
     }
 
     await Future.wait(nodes.map((node) async {
-      final message = await runCommandOverSsh(workingDir, node, 'nixos-rebuild switch --upgrade');
+      final message = await runCommandOverSsh(
+          workingDir, node, 'nixos-rebuild switch --upgrade');
       echoFromNode(node.name, message);
     }));
   }
@@ -172,15 +184,19 @@ class RollbackCommand extends Command {
   final description = 'Rollback cluster node';
 
   RollbackCommand() {
-    argParser.addOption('target', mandatory: true);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('target', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final bool batch = argResults!['batch'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
@@ -193,7 +209,8 @@ class RollbackCommand extends Command {
     }
 
     await Future.wait(nodes.map((node) async {
-      final message = await runCommandOverSsh(workingDir, node, 'nixos-rebuild switch --rollback');
+      final message = await runCommandOverSsh(
+          workingDir, node, 'nixos-rebuild switch --rollback');
       echoFromNode(node.name, message);
     }));
   }
@@ -211,10 +228,11 @@ class SSHCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
@@ -235,7 +253,7 @@ class CmdCommand extends Command {
   @override
   final name = 'cmd';
   @override
-  final description = 'Run command on cluster node';
+  final description = 'Run command on target machine(s)';
 
   CmdCommand() {
     argParser.addOption('target', mandatory: true);
@@ -243,10 +261,11 @@ class CmdCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
@@ -280,12 +299,13 @@ class ActionCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = argResults!['debug'];
+    final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final String appModule = argResults?['app-module'];

@@ -20,7 +20,12 @@ void main(List<String> arguments) async {
       ..addCommand(CertCommand())
       ..addCommand(RegistryCommand())
       ..addCommand(SecretsCommand());
-    await cmd.run(arguments);
+    await cmd.run(arguments)
+        .catchError((error) {
+          if (error is! UsageException) throw error;
+          print(error);
+          exit(64); // Exit code 64 indicates a usage error.
+        });
     exit(0);
   } catch (err) {
     await legacyCommands(arguments);

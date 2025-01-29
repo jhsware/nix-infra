@@ -51,8 +51,12 @@ if [ -z "$HCLOUD_TOKEN" ]; then
   exit 1
 fi
 
+source $SCRIPT_DIR/check.sh
+cmd () { # Override the local declaration
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$1" "$2"
+}
+
 testCluster() {
-  source $SCRIPT_DIR/check.sh
   checkNixos "$CTRL $CLUSTER_NODES"
   checkEtcd "$CTRL"
   checkWireguard "$CLUSTER_NODES"
@@ -60,8 +64,6 @@ testCluster() {
 }
 
 testApps() {
-  source $SCRIPT_DIR/check.sh
-
   # Check that apps are running
   $NIX_INFRA cmd -d $WORK_DIR --target="worker001" "printf 'app-pod: ';        systemctl is-active podman-app-pod.service"
   $NIX_INFRA cmd -d $WORK_DIR --target="worker001" "printf 'app-mongodb-pod: ';systemctl is-active podman-app-mongodb-pod.service"

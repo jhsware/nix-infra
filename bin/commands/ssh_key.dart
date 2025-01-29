@@ -36,7 +36,7 @@ class CreateSshKeyCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = argResults!['name'];
@@ -66,8 +66,8 @@ class AddSshKeyCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = argResults!['name'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
@@ -79,7 +79,7 @@ class AddSshKeyCommand extends Command {
 
 class RemoveSshKeyCommand extends Command {
   @override
-  final name = 'add';
+  final name = 'remove';
   @override
   final description = 'Add an SSH public key to cloud provider';
 
@@ -91,8 +91,8 @@ class RemoveSshKeyCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = argResults!['name'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;

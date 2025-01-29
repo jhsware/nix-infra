@@ -36,10 +36,10 @@ class StoreCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    // final bool debug = argResults!['debug'];
+    // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String secret = argResults!['secret'];
     final String secretName = argResults!['name'];
@@ -65,10 +65,10 @@ class StoreCommand extends Command {
 
 //   @override
 //   void run() async {
-//     final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-//     final env = await loadEnv(argResults!['env'], workingDir);
+//     final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+//     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-//     // final bool debug = argResults!['debug'];
+//     // final bool debug = parent?.argResults!['debug'];
 //     final bool batch = argResults!['batch'];
 //     final String secret = argResults!['secret'];
 //     final String secretName = argResults!['name'];

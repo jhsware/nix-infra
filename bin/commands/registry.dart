@@ -17,9 +17,8 @@ class RegistryCommand extends Command {
           help: 'Directory containing certificates and configuration')
       ..addOption('target',
           help: 'Name of machine hosting the registry', mandatory: true)
-      ..addOption('env', help: 'Path to environment file')
-      ..addFlag('batch',
-          help: 'Run non-interactively using environment variables');
+      ..addOption('ssh-key', help: 'SSH key name')
+      ..addOption('env', help: 'Path to environment file');
 
     addSubcommand(PublishImageCommand());
     addSubcommand(ListImagesCommand());
@@ -35,19 +34,21 @@ class PublishImageCommand extends Command {
   PublishImageCommand() {
     argParser
       ..addOption('file', mandatory: true, help: 'Image file path')
-      ..addOption('image-name', mandatory: true, help: 'Name for the image');
+      ..addOption('image-name', mandatory: true, help: 'Name for the image')
+      ..addFlag('batch',
+          help: 'Run non-interactively using environment variables', defaultsTo: false);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    // final bool debug = argResults!['debug'];
+    // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
-    final List<String> targets = argResults!['target'].split(' ');
+    final List<String> targets = parent?.argResults!['target'].split(' ');
     final String fileName = argResults!['file'];
     final String imageName = argResults!['image-name'];
 
@@ -72,14 +73,14 @@ class ListImagesCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    // final bool debug = argResults!['debug'];
+    // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
-    final List<String> targets = argResults!['target'].split(' ');
+    final List<String> targets = parent?.argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to publish this image?', batch);
 

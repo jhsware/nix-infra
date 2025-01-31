@@ -290,11 +290,18 @@ class ActionCommand extends Command {
   final name = 'action';
   @override
   final description = 'Run action on cluster node';
+  bool overlayNetwork;
 
-  ActionCommand() {
+  ActionCommand({ this.overlayNetwork = false }) {
     argParser
       ..addOption('target', mandatory: true)
-      ..addOption('cmd', mandatory: true);
+      ..addOption('app-module', mandatory: true)
+      ..addOption('cmd', mandatory: true)
+      ..addOption('env-vars', mandatory: false)
+      ..addOption('save-as-secret', mandatory: false)
+      ..addFlag('batch',
+          help: 'Run non-interactively using environment variables',
+          defaultsTo: false);
   }
 
   @override
@@ -311,7 +318,7 @@ class ActionCommand extends Command {
     final String appModule = argResults?['app-module'];
     final String cmd = argResults?['cmd'];
     final String? secretNamespace = argResults?['save-as-secret'];
-    final List<String> envVars = argResults?['env-vars'].split(' ');
+    final List<String> envVars = argResults?['env-vars']?.split(' ') ?? [];
 
     final String secretsPwd =
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
@@ -327,12 +334,16 @@ class ActionCommand extends Command {
 
     if (secretNamespace == null) {
       await Future.wait(nodes.map((node) async {
-        final message = await runActionScriptOverSsh(workingDir, cluster,
-            target: node,
-            appModule: appModule,
-            cmd: cmd,
-            envVars: envVars,
-            debug: debug);
+        final message = await runActionScriptOverSsh(
+          workingDir,
+          cluster,
+          target: node,
+          appModule: appModule,
+          cmd: cmd,
+          envVars: envVars,
+          debug: debug,
+          overlayNetwork: overlayNetwork,
+        );
         echoFromNode(node.name, message);
       }));
     } else {
@@ -341,8 +352,15 @@ class ActionCommand extends Command {
         exit(2);
       }
       final node = nodes.first;
-      final secret = await runActionScriptOverSsh(workingDir, cluster,
-          target: node, appModule: appModule, cmd: cmd, envVars: envVars);
+      final secret = await runActionScriptOverSsh(
+        workingDir,
+        cluster,
+        target: node,
+        appModule: appModule,
+        cmd: cmd,
+        envVars: envVars,
+        overlayNetwork: overlayNetwork,
+      );
       await saveSecret(workingDir, secretsPwd, secretNamespace, secret);
       echo('Output saved as secret: $secretNamespace');
     }

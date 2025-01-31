@@ -21,8 +21,8 @@ class ClusterCommand extends Command {
     argParser
       ..addOption('working-dir',
           abbr: 'd', defaultsTo: '.', help: 'Working directory')
-      ..addOption('ssh-key', defaultsTo: 'nixinfra', help: 'SSH key name')
-      ..addOption('env', defaultsTo: "./.env", help: 'Path to .env file')
+      ..addOption('ssh-key', help: 'SSH key name')
+      ..addOption('env', help: 'Path to .env file')
       ..addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
 
     addSubcommand(ProvisionCommand());
@@ -31,7 +31,7 @@ class ClusterCommand extends Command {
     addSubcommand(UpdateCtrlCommand());
     addSubcommand(InitNodeCommand());
     addSubcommand(UpdateNodeCommand());
-    
+
     addSubcommand(DestroyCommand());
     addSubcommand(DeployAppsCommand());
     addSubcommand(GCCommand());
@@ -40,8 +40,8 @@ class ClusterCommand extends Command {
     addSubcommand(SSHCommand());
     addSubcommand(CmdCommand());
     addSubcommand(PortForwardCommand());
-    addSubcommand(ActionCommand());
-    
+    addSubcommand(ActionCommand(overlayNetwork: true));
+
     addSubcommand(EtcdCommand());
   }
 }
@@ -53,18 +53,22 @@ class InitCtrlCommand extends Command {
   final description = 'Initialize control nodes';
 
   InitCtrlCommand() {
-    argParser.addFlag('batch', defaultsTo: false);
-    argParser.addOption('target', mandatory: true);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('target', mandatory: true)
+      ..addOption('nixos-version', mandatory: true)
+      ..addOption('cluster-uuid', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = argResults!['debug'];
+    final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
@@ -120,17 +124,21 @@ class UpdateCtrlCommand extends Command {
   final description = 'Update control nodes';
 
   UpdateCtrlCommand() {
-    argParser.addFlag('batch', defaultsTo: false);
-    argParser.addOption('target', mandatory: true);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('target', mandatory: true)
+      ..addOption('nixos-version', mandatory: true)
+      ..addOption('cluster-uuid', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
@@ -162,22 +170,31 @@ class InitNodeCommand extends Command {
   final description = 'Initialize cluster node';
 
   InitNodeCommand() {
-    argParser.addFlag('batch', defaultsTo: false);
-    argParser.addOption('target', mandatory: true);
-    argParser.addOption('ctrl-nodes');
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('ctrl-nodes')
+      ..addOption('target', mandatory: true)
+      ..addOption('node-module', mandatory: true)
+      ..addOption('service-group', mandatory: false)
+      ..addOption('nixos-version', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = argResults!['debug'];
+    final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
-    final List<String> ctrlNodeNames = argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
+    final List<String> ctrlNodeNames =
+        argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
+    final String nodeType = argResults!['node-module'];
+    final String nixOsVersion = argResults!['nixos-version'];
+    final List<String> serviceGroups = argResults!['service-group']?.split(" ");
 
     areYouSure('Are you sure you want to init the nodes?', batch);
 
@@ -215,14 +232,11 @@ class InitNodeCommand extends Command {
     final ctrlNodes = await hcloud.getServers(only: ctrlNodeNames);
     final cluster = await hcloud.getServers();
 
-    final nodeType = argResults!['node-module'];
-    final serviceGroups = argResults!['service-group']?.split(" ");
-
     await deployClusterNode(
       workingDir,
       cluster,
       nodes,
-      nixVersion: argResults!['nixos-version'],
+      nixVersion: nixOsVersion,
       nodeType: nodeType,
       ctrlNodes: ctrlNodes,
       secretsPwd: secretsPwd,
@@ -243,23 +257,32 @@ class UpdateNodeCommand extends Command {
   final description = 'Update cluster node';
 
   UpdateNodeCommand() {
-    argParser.addFlag('batch', defaultsTo: false);
-    argParser.addOption('target', mandatory: true);
-    argParser.addOption('ctrl-nodes');
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addFlag('rebuild', defaultsTo: false)
+      ..addOption('ctrl-nodes')
+      ..addOption('target', mandatory: true)
+      ..addOption('node-module', mandatory: true)
+      ..addOption('nixos-version', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
-    final List<String> ctrlNodeNames = argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
+    final List<String> ctrlNodeNames =
+        argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
     final String secretsPwd =
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final String nixOsVersion = argResults!['nixos-version'];
+    final String nodeType = argResults!['node-module'];
+    final bool rebuild = argResults!['rebuild'];
 
     areYouSure('Are you sure you want to update the nodes?', batch);
 
@@ -274,13 +297,13 @@ class UpdateNodeCommand extends Command {
       workingDir,
       cluster,
       nodes,
-      nixVersion: argResults!['nixos-version'],
-      nodeType: argResults!['node-module'],
+      nixVersion: nixOsVersion,
+      nodeType: nodeType,
       ctrlNodes: ctrlNodes,
       secretsPwd: secretsPwd,
     );
 
-    if (argResults!['rebuild']) {
+    if (rebuild) {
       echo("Rebuilding...");
       await nixosRebuild(workingDir, nodes);
       await triggerConfdUpdate(workingDir, nodes);
@@ -295,20 +318,23 @@ class DestroyCommand extends Command {
   final description = 'Destroy cluster node';
 
   DestroyCommand() {
-    argParser.addFlag('batch', defaultsTo: false);
-    argParser.addOption('target', mandatory: true);
-    argParser.addOption('ctrl-nodes');
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('ctrl-nodes')
+      ..addOption('target', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
-    final List<String> ctrlNodeNames = argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
+    final List<String> ctrlNodeNames =
+        argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to destroy these nodes?', batch);
@@ -337,19 +363,21 @@ class DeployAppsCommand extends Command {
   final description = 'Deploy applications to cluster node';
 
   DeployAppsCommand() {
-    argParser.addFlag('batch', defaultsTo: false);
-    argParser.addOption('target', mandatory: true);
-    argParser.addFlag('rebuild', defaultsTo: false);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addFlag('rebuild', defaultsTo: false)
+      ..addOption('target', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = argResults!['debug'];
+    final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final bool rebuild = argResults!['rebuild'];
@@ -389,18 +417,20 @@ class PortForwardCommand extends Command {
   final description = 'Forward port from cluster node';
 
   PortForwardCommand() {
-    argParser.addFlag('batch', defaultsTo: false);
-    argParser.addOption('target', mandatory: true);
-    argParser.addOption('local-port', mandatory: true);
-    argParser.addOption('remote-port', mandatory: true);
+    argParser
+      ..addFlag('batch', defaultsTo: false)
+      ..addOption('target', mandatory: true)
+      ..addOption('local-port', mandatory: true)
+      ..addOption('remote-port', mandatory: true);
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final localPort = int.parse(argResults!['local-port']);
@@ -433,18 +463,21 @@ class EtcdCommand extends Command {
   final description = 'Run etcd command';
 
   EtcdCommand() {
-    argParser.addOption('target', mandatory: true);
-    argParser.addOption('ctrl-nodes');
+    argParser
+      ..addOption('target', mandatory: true)
+      ..addOption('ctrl-nodes');
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(argResults!['working-dir']);
-    final env = await loadEnv(argResults!['env'], workingDir);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
-    final List<String> ctrlNodeNames = argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
+    final List<String> ctrlNodeNames =
+        argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final String cmd = argResults!.rest.join(' ');
 
     final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);

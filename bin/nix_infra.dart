@@ -28,7 +28,8 @@ void main(List<String> arguments) async {
         });
     exit(0);
   } catch (err) {
-    await legacyCommands(arguments);
+    rethrow;
+    // await legacyCommands(arguments);
     exit(0);
   }
 }

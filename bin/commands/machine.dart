@@ -23,10 +23,10 @@ class MachineCommand extends Command {
       ..addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
 
     addSubcommand(ProvisionCommand());
-    
+
     addSubcommand(InitMachineCommand());
     addSubcommand(UpdateCommand());
-    
+
     addSubcommand(DestroyCommand());
     addSubcommand(DeployAppsCommand());
     addSubcommand(GCCommand());
@@ -55,7 +55,8 @@ class InitMachineCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     // final bool debug = parent?.argResults!['debug'];
@@ -102,7 +103,8 @@ class UpdateCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     // final bool debug = parent?.argResults!['debug'];
@@ -149,7 +151,8 @@ class DestroyCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
@@ -182,12 +185,12 @@ class DeployAppsCommand extends Command {
     argParser.addFlag('batch', defaultsTo: false);
     argParser.addOption('target', mandatory: true);
     argParser.addFlag('rebuild', defaultsTo: true);
-    
   }
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool debug = parent?.argResults!['debug'];
@@ -240,7 +243,8 @@ class PortForwardCommand extends Command {
 
   @override
   void run() async {
-    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];

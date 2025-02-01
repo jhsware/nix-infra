@@ -318,7 +318,7 @@ class ActionCommand extends Command {
     final String appModule = argResults?['app-module'];
     final String cmd = argResults?['cmd'];
     final String? secretNamespace = argResults?['save-as-secret'];
-    final List<String> envVars = argResults?['env-vars']?.split(' ') ?? [];
+    final List<String> envVars = argResults?['env-vars']?.split(',') ?? [];
 
     final String secretsPwd =
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);

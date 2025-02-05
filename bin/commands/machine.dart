@@ -8,13 +8,13 @@ import 'package:nix_infra/ssh.dart';
 import 'shared.dart';
 import 'utils.dart';
 
-class MachineCommand extends Command {
+class FleetCommand extends Command {
   @override
-  final name = 'machine';
+  final name = 'fleet';
   @override
-  final description = 'Machine management commands';
+  final description = 'Fleet management commands';
 
-  MachineCommand() {
+  FleetCommand() {
     argParser
       ..addOption('working-dir',
           abbr: 'd', defaultsTo: '.', help: 'Working directory')
@@ -41,7 +41,7 @@ class MachineCommand extends Command {
 
 class InitMachineCommand extends Command {
   @override
-  final name = 'init';
+  final name = 'init-machine';
   @override
   final description = 'Init machine';
 

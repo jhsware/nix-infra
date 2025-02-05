@@ -16,7 +16,7 @@ void main(List<String> arguments) async {
   try {
     final cmd = CommandRunner('nix-infra', 'Infrastructure management tool')
       ..addCommand(InitCommand())
-      ..addCommand(MachineCommand())
+      ..addCommand(FleetCommand())
       ..addCommand(ClusterCommand())
       ..addCommand(SshKeyCommand())
       ..addCommand(CertCommand())

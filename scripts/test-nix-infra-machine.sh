@@ -71,7 +71,7 @@ fi
 
 source $SCRIPT_DIR/check.sh
 cmd () { # Override the local declaration
-  $NIX_INFRA machine cmd -d $WORK_DIR --target="$1" "$2"
+  $NIX_INFRA fleet cmd -d $WORK_DIR --target="$1" "$2"
 }
 
 testMachines() {
@@ -81,12 +81,12 @@ testMachines() {
 testApps() {
   # Check that apps are running
   echo "Are apps active?"
-  $NIX_INFRA machine cmd -d $WORK_DIR --target="node001" 'printf "app-pod: ";        echo -n $(systemctl is-active podman-app-pod.service)' &
+  $NIX_INFRA fleet cmd -d $WORK_DIR --target="node001" 'printf "app-pod: ";        echo -n $(systemctl is-active podman-app-pod.service)' &
   wait # Wait for all process to complete
 }
 
 tearDown() {
-  $NIX_INFRA machine destroy -d $WORK_DIR --batch \
+  $NIX_INFRA fleet destroy -d $WORK_DIR --batch \
       --target="$NODES"
   $NIX_INFRA ssh-key remove -d $WORK_DIR --batch --name="$SSH_KEY"
 }
@@ -106,7 +106,7 @@ if [ "$CMD" = "port-forward" ]; then
   IFS=: read LOCAL_PORT REMOTE_PORT <<< "$PORT_MAPPING"
   IFS=$OLD_IFS  # Restore IFS to original value
 
-  $NIX_INFRA machine port-forward -d $WORK_DIR --env="$WORK_DIR/.env" \
+  $NIX_INFRA fleet port-forward -d $WORK_DIR --env="$WORK_DIR/.env" \
     --target="$TARGET" \
     --local-port="$LOCAL_PORT" \
     --remote-port="$REMOTE_PORT"
@@ -119,15 +119,15 @@ if [ "$CMD" = "update" ]; then
     exit 1
   fi
   (cd "$WORK_DIR" && git fetch origin && git reset --hard origin/$(git branch --show-current))
-  $NIX_INFRA machine update -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+  $NIX_INFRA fleet update -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --nixos-version=$NIXOS_VERSION \
     --target="$REST" \
     --node-module="node_types/standalone_machine.nix" \
     --rebuild
   
-  $NIX_INFRA machine deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+  $NIX_INFRA fleet deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --target="$REST"
-  $NIX_INFRA machine cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
+  $NIX_INFRA fleet cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
   exit 0
 fi
 
@@ -159,7 +159,7 @@ if [ "$CMD" = "action" ]; then
   #   exit 1
   # fi
   # (cd "$WORK_DIR" && git fetch origin && git reset --hard origin/$(git branch --show-current))
-  $NIX_INFRA machine action -d $WORK_DIR --target="service001" --app-module="elasticsearch" \
+  $NIX_INFRA fleet action -d $WORK_DIR --target="service001" --app-module="elasticsearch" \
     --cmd="$REST" # --env-vars="ELASTIC_PASSWORD="
   exit 0
 fi
@@ -169,7 +169,7 @@ if [ "$CMD" = "cmd" ]; then
     echo "Usage: $0 cmd --env=$ENV --target=[node] [cmd goes here]"
     exit 1
   fi
-  $NIX_INFRA machine cmd -d $WORK_DIR --target="$TARGET" "$REST"
+  $NIX_INFRA fleet cmd -d $WORK_DIR --target="$TARGET" "$REST"
   exit 0
 fi
 
@@ -214,7 +214,7 @@ if [ "$CMD" = "create" ]; then
   # We split the provisioning calls so we can select --placement-groups
   # where it makes sense. Since provisioning takes a while we run
   # them in parallel as background jobs.
-  $NIX_INFRA machine provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+  $NIX_INFRA fleet provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
       --nixos-version=$NIXOS_VERSION \
       --ssh-key=$SSH_KEY \
       --location=hel1 \
@@ -224,22 +224,22 @@ if [ "$CMD" = "create" ]; then
 
   _provision=`date +%s`
 
-  $NIX_INFRA machine init -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+  $NIX_INFRA fleet init-machine -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
       --nixos-version=$NIXOS_VERSION \
       --target="$NODES" \
       --node-module="node_types/standalone_machine.nix"
 
   # TODO: Is this really needed?
-  $NIX_INFRA machine cmd -d $WORK_DIR --target="$NODES" "nixos-rebuild switch --fast"
+  $NIX_INFRA fleet cmd -d $WORK_DIR --target="$NODES" "nixos-rebuild switch --fast"
 
   _init_nodes=`date +%s`
 
   # Now the nodes are up an running, let install apps
   echo "INSTALLING APPS..."
 
-  $NIX_INFRA machine deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+  $NIX_INFRA fleet deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --target="$NODES"
-  $NIX_INFRA machine cmd -d $WORK_DIR --target="$NODES" "nixos-rebuild switch --fast"
+  $NIX_INFRA fleet cmd -d $WORK_DIR --target="$NODES" "nixos-rebuild switch --fast"
   
   echo "...INSTALLING APPS"
 

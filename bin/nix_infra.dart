@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
+import 'commands/etcd.dart';
 import 'commands/init.dart';
 import 'commands/cluster.dart';
 import 'commands/machine.dart';
@@ -19,17 +21,17 @@ void main(List<String> arguments) async {
       ..addCommand(SshKeyCommand())
       ..addCommand(CertCommand())
       ..addCommand(RegistryCommand())
+      ..addCommand(EtcdCommand())
       ..addCommand(SecretsCommand());
-    await cmd.run(arguments)
-        .catchError((error) {
-          if (error is! UsageException) throw error;
-          print(error);
-          exit(64); // Exit code 64 indicates a usage error.
-        });
-    exit(0);
+    await cmd.run(arguments).catchError((error) {
+      if (error is! UsageException) throw error;
+      print(error);
+      exit(64); // Exit code 64 indicates a usage error.
+    });
   } catch (err) {
-    rethrow;
-    // await legacyCommands(arguments);
-    exit(0);
+    if (err is FormatException) {
+      await legacyCommands(arguments);
+    }
   }
+  exit(0);
 }

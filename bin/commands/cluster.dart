@@ -42,7 +42,7 @@ class ClusterCommand extends Command {
     addSubcommand(PortForwardCommand());
     addSubcommand(ActionCommand(overlayNetwork: true));
 
-    addSubcommand(EtcdCommand());
+    // addSubcommand(EtcdCommand());
   }
 }
 
@@ -456,49 +456,49 @@ class PortForwardCommand extends Command {
   }
 }
 
-class EtcdCommand extends Command {
-  @override
-  final name = 'etcd';
-  @override
-  final description = 'Run etcd command';
+// class EtcdCommand extends Command {
+//   @override
+//   final name = 'etcd';
+//   @override
+//   final description = 'Run etcd command';
 
-  EtcdCommand() {
-    argParser
-      ..addOption('target', mandatory: true)
-      ..addOption('ctrl-nodes');
-  }
+//   EtcdCommand() {
+//     argParser
+//       ..addOption('target', mandatory: true)
+//       ..addOption('ctrl-nodes');
+//   }
 
-  @override
-  void run() async {
-    final workingDir =
-        await getWorkingDirectory(parent?.argResults!['working-dir']);
-    final env = await loadEnv(parent?.argResults!['env'], workingDir);
+//   @override
+//   void run() async {
+//     final workingDir =
+//         await getWorkingDirectory(parent?.argResults!['working-dir']);
+//     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
-    final List<String> ctrlNodeNames =
-        argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
-    final String cmd = argResults!.rest.join(' ');
+//     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+//     final String hcloudToken = env['HCLOUD_TOKEN']!;
+//     final List<String> ctrlNodeNames =
+//         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
+//     final String cmd = argResults!.rest.join(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+//     final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
 
-    final ctrlNodes = await hcloud.getServers(only: ctrlNodeNames);
-    if (ctrlNodes.isEmpty) {
-      echo('ERROR! Nodes not found in cluster: $ctrlNodeNames');
-      exit(2);
-    }
+//     final ctrlNodes = await hcloud.getServers(only: ctrlNodeNames);
+//     if (ctrlNodes.isEmpty) {
+//       echo('ERROR! Nodes not found in cluster: $ctrlNodeNames');
+//       exit(2);
+//     }
 
-    final node = ctrlNodes.first;
-    final cmdScript = [
-      'export ETCDCTL_DIAL_TIMEOUT=3s',
-      'export ETCDCTL_CACERT=/root/certs/ca-chain.cert.pem',
-      'export ETCDCTL_CERT=/root/certs/${node.name}-client-tls.cert.pem',
-      'export ETCDCTL_KEY=/root/certs/${node.name}-client-tls.key.pem',
-      'export ETCDCTL_API=3',
-      'etcdctl $cmd',
-    ].join('\n');
+//     final node = ctrlNodes.first;
+//     final cmdScript = [
+//       'export ETCDCTL_DIAL_TIMEOUT=3s',
+//       'export ETCDCTL_CACERT=/root/certs/ca-chain.cert.pem',
+//       'export ETCDCTL_CERT=/root/certs/${node.name}-client-tls.cert.pem',
+//       'export ETCDCTL_KEY=/root/certs/${node.name}-client-tls.key.pem',
+//       'export ETCDCTL_API=3',
+//       'etcdctl $cmd',
+//     ].join('\n');
 
-    final inp = await runCommandOverSsh(workingDir, node, cmdScript);
-    echoFromNode(node.name, inp);
-  }
-}
+//     final inp = await runCommandOverSsh(workingDir, node, cmdScript);
+//     echoFromNode(node.name, inp);
+//   }
+// }

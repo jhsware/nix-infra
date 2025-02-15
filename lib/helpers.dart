@@ -239,3 +239,7 @@ Future<Map<String, String>> getOverlayMeshIps(
   echo(overlayIps.toString());
   return overlayIps;
 }
+
+String multi(Iterable<String> lines) {
+  return lines.toList().join('\n');
+}

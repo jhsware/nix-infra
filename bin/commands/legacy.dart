@@ -98,6 +98,7 @@ Future<void> legacyCommands(List<String> arguments) async {
   parser.addCommand('publish-image')
     ..addOption('target', mandatory: true)
     ..addOption('image-name', mandatory: true)
+    ..addOption('image-tag', mandatory: true)
     ..addOption('file', mandatory: true);
 
   parser.addCommand('list-images').addOption('target', mandatory: true);
@@ -487,7 +488,8 @@ Future<void> legacyCommands(List<String> arguments) async {
       final nodes = await hcloud.getServers(only: nodeNames);
       await publishImageToRegistry(workingDir, cluster, nodes.first,
           file: argResults.command!['file'],
-          name: argResults.command!['image-name']);
+          name: argResults.command!['image-name'],
+          tag: argResults.command!['image-tag']);
       exit(0);
     case 'list-images':
       final nodeNames = argResults.command!['target'].split(' ');

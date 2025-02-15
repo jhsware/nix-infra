@@ -149,9 +149,11 @@ testApps() {
 publishImageToRegistry() {
     local IMAGE_NAME=$1
     local FILE=$2
+    local IMAGE_TAG=$3
     $NIX_INFRA registry publish-image -d $WORK_DIR --batch \
       --target="registry001" \
       --image-name="$IMAGE_NAME" \
+      --image-tag="$IMAGE_TAG" \
       --file="$FILE"
 }
 
@@ -219,8 +221,9 @@ if [ "$CMD" = "test-apps" ]; then
 fi
 
 if [ "$CMD" = "publish" ]; then
-  publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz"
-  publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz"
+  echo Publish applications...
+  publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz" "1.0"
+  publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz" "1.0"
   exit 0
 fi
 
@@ -401,10 +404,10 @@ if [ "$CMD" = "create" ]; then
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="registry001" "nixos-rebuild switch --fast"
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="registry001" "systemctl restart confd"
 
-  publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz"
-  publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz"
-  publishImageToRegistry app-elasticsearch-pod "$WORK_DIR/app_images/app-elasticsearch-pod.tar.gz"
-  publishImageToRegistry app-redis-pod "$WORK_DIR/app_images/app-redis-pod.tar.gz"
+  publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz" "1.0"
+  publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz" "1.0"
+  publishImageToRegistry app-elasticsearch-pod "$WORK_DIR/app_images/app-elasticsearch-pod.tar.gz" "1.0"
+  publishImageToRegistry app-redis-pod "$WORK_DIR/app_images/app-redis-pod.tar.gz" "1.0"
 
   $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --secret="super_secret_secret" \

@@ -18,7 +18,8 @@ class RegistryCommand extends Command {
       ..addOption('target',
           help: 'Name of machine hosting the registry', mandatory: true)
       ..addOption('ssh-key', help: 'SSH key name')
-      ..addOption('env', help: 'Path to environment file');
+      ..addOption('env', help: 'Path to environment file')
+      ..addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
 
     addSubcommand(PublishImageCommand());
     addSubcommand(ListImagesCommand());
@@ -35,6 +36,7 @@ class PublishImageCommand extends Command {
     argParser
       ..addOption('file', mandatory: true, help: 'Image file path')
       ..addOption('image-name', mandatory: true, help: 'Name for the image')
+      ..addOption('image-tag', mandatory: true, help: 'Tag for the image, probably version')
       ..addFlag('batch',
           help: 'Run non-interactively using environment variables', defaultsTo: false);
   }
@@ -47,10 +49,12 @@ class PublishImageCommand extends Command {
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final bool debug = parent?.argResults!['debug'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = parent?.argResults!['target'].split(' ');
     final String fileName = argResults!['file'];
     final String imageName = argResults!['image-name'];
+    final String imageTag = argResults!['image-tag'];
 
     areYouSure('Are you sure you want to publish this image?', batch);
 
@@ -59,7 +63,7 @@ class PublishImageCommand extends Command {
     final cluster = await hcloud.getServers();
 
     await publishImageToRegistry(workingDir, cluster, nodes.first,
-        file: fileName, name: imageName);
+        file: fileName, name: imageName, tag: imageTag, debug: debug);
   }
 }
 

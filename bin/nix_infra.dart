@@ -24,7 +24,7 @@ void main(List<String> arguments) async {
       ..addCommand(EtcdCommand())
       ..addCommand(SecretsCommand());
     await cmd.run(arguments).catchError((error) {
-      if (error is! UsageException) throw error;
+      if (error is! UsageException && error is! ArgumentError) throw error;
       print(error);
       exit(64); // Exit code 64 indicates a usage error.
     });

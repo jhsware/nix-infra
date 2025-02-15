@@ -41,7 +41,9 @@ class ClusterCommand extends Command {
     addSubcommand(CmdCommand());
     addSubcommand(PortForwardCommand());
     addSubcommand(ActionCommand(overlayNetwork: true));
-
+    
+    addSubcommand(UploadCommand());
+    
     // addSubcommand(EtcdCommand());
   }
 }

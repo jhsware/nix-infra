@@ -72,12 +72,17 @@ String substitute(String contents, Map<String, String> substitutions,
   });
 }
 
+Stream<Uint8List> convertToUint8List(Stream<List<int>> input) {
+  return input.map((List<int> data) => Uint8List.fromList(data));
+}
+
 Future<void> sftpSend(SftpClient sftp, String localPath, String remotePath,
     {Map<String, String>? substitutions, List<String>? expectedSecrets}) async {
   final local = File(localPath);
   final remote = await sftp.open(remotePath, mode: writeCreateMode);
   if (substitutions == null) {
-    await remote.writeBytes(await local.readAsBytes());
+    final readStream = local.openRead();
+    await remote.write(convertToUint8List(readStream));
   } else {
     // Do variable substitution [%%sshKeyPubPath%%] => { sshKeyPubPath }
     final contents = await local.readAsString();

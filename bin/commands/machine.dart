@@ -36,6 +36,7 @@ class FleetCommand extends Command {
     addSubcommand(CmdCommand());
     addSubcommand(PortForwardCommand());
     addSubcommand(ActionCommand());
+    addSubcommand(UploadCommand());
   }
 }
 

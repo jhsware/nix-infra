@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
+import 'package:dartssh2/dartssh2.dart';
 import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/secrets.dart';
 import 'package:nix_infra/ssh.dart';
@@ -249,6 +250,90 @@ class SSHCommand extends Command {
   }
 }
 
+class UploadCommand extends Command {
+  @override
+  final name = 'upload';
+  @override
+  final description = 'Send one or more files to target(s) over sftp.';
+
+  UploadCommand() {
+    argParser
+      ..addOption('target', mandatory: true)
+      ..addOption('file', mandatory: true);
+  }
+
+  @override
+  void run() async {
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
+
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final List<String> targets = argResults!['target'].split(' ');
+    final List<String> files = argResults!['file'].split(' ');
+
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+
+    final nodes = await hcloud.getServers(only: targets);
+    if (nodes.isEmpty) {
+      echo('ERROR! Node(s) not found in cluster: $name');
+      exit(2);
+    }
+
+    final futs = nodes.map((node) async {
+      final SSHSocket connection = await waitAndGetSshConnection(node);
+      final SSHClient sshClient =
+          await getSshClient(workingDir, node, connection);
+      final sftp = await sshClient.sftp();
+
+      const uploadPath = '/root/uploads';
+
+      try {
+        await sftpMkDir(sftp, uploadPath);
+
+        final queue = [];
+        for (final filePath in files) {
+          FileSystemEntity entity = FileSystemEntity.typeSync(filePath) ==
+                  FileSystemEntityType.directory
+              ? Directory(filePath)
+              : File(filePath);
+
+          final relPath = entity.path.split("/").last;
+          queue.add({
+            "relPath": relPath,
+            "entity": entity,
+          });
+        }
+
+        while (queue.isNotEmpty) {
+          final item = queue.removeAt(0);
+          final entity = item["entity"];
+          final relPath = item["relPath"];
+          if (entity is Directory) {
+            queue.addAll(entity.listSync().map((e) {
+              final newRelPath = "$relPath/${entity.path.split("/").last}";
+              return {
+                "relPath": newRelPath,
+                "entity": e,
+              };
+            }));
+            continue;
+          }
+
+          await sftpSend(sftp, entity.path, '$uploadPath/$relPath');
+        }
+
+        sftp.close();
+      } finally {
+        sshClient.close();
+      }
+    });
+
+    await Future.wait(futs);
+  }
+}
+
 class CmdCommand extends Command {
   @override
   final name = 'cmd';
@@ -292,7 +377,7 @@ class ActionCommand extends Command {
   final description = 'Run action on cluster node';
   bool overlayNetwork;
 
-  ActionCommand({ this.overlayNetwork = false }) {
+  ActionCommand({this.overlayNetwork = false}) {
     argParser
       ..addOption('target', mandatory: true)
       ..addOption('app-module', mandatory: true)

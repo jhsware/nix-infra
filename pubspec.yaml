@@ -8,11 +8,11 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-  args: ^2.5.0
-  dartssh2: ^2.8.2
+  args: ^2.7.0
+  dartssh2: ^2.12.0
   dotenv: ^4.2.0
-  http: ^1.1.0
-  path: ^1.9.0
+  http: ^1.3.0
+  path: ^1.9.1
   posix: ^6.0.1
   process_run: ^0.14.2
   cli_script: ^1.0.0

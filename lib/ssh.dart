@@ -54,7 +54,7 @@ Future<void> portForward(
   await for (final socket in serverSocket) {
     final forward = await sshClient.forwardLocal(overlayIp, remotePort);
     forward.stream.cast<List<int>>().pipe(socket);
-    socket.pipe(forward.sink);
+    socket.cast<List<int>>().pipe(forward.sink);
   }
 }
 

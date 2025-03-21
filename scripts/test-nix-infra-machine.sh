@@ -9,7 +9,7 @@ SSH_EMAIL=${SSH_EMAIL:-your-email@example.com}
 
 SECRETS_PWD=${SECRETS_PWD:-my_secrets_password}
 
-NODES="node001"
+NODES="node001 node002"
 
 __help_text__=$(cat <<EOF
 Examples:

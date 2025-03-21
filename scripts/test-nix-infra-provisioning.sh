@@ -53,8 +53,12 @@ if [ -z "$HCLOUD_TOKEN" ]; then
   exit 1
 fi
 
+source $SCRIPT_DIR/check.sh
+cmd () { # Override the local declaration
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$1" "$2"
+}
+
 testCluster() {
-  source $SCRIPT_DIR/check.sh
   checkNixos "$CTRL $CLUSTER_NODES"
 }
 

@@ -299,7 +299,7 @@ Future<void> nixosRebuild(
       ],
     );
 
-    await sshClient.run('nixos-rebuild switch --fast');
+    await sshClient.run('nixos-rebuild switch --fast --impure');
     sshClient.close();
   });
 

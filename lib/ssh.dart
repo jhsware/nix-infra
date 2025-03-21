@@ -54,7 +54,7 @@ Future<void> portForward(
   await for (final socket in serverSocket) {
     final forward = await sshClient.forwardLocal(overlayIp, remotePort);
     forward.stream.cast<List<int>>().pipe(socket);
-    socket.pipe(forward.sink);
+    socket.cast<List<int>>().pipe(forward.sink);
   }
 }
 
@@ -71,7 +71,7 @@ Future<String> runActionScriptOverSsh(
   // Create list of variable substitutions
   final substitutions = Map.fromEntries(
       cluster.map((node) => MapEntry('${node.name}.ipv4', node.ipAddr)));
-  
+
   if (overlayNetwork) {
     final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
     for (final entry in overlayMeshIps.entries) {
@@ -96,7 +96,11 @@ Future<String> runActionScriptOverSsh(
           .join(' ')
       : '';
   // final envVarsToRemote = Map.fromEntries(enviromentVariables.split('\n').map((e) => MapEntry(e.split('=')[0], e.split('=')[1])));
-  if (debug) echoDebug(jsonEncode(nodeSubstitutions));
+  if (debug) {
+    echoDebug(jsonEncode(nodeSubstitutions));
+    echoDebug("env-vars: $envVarsToRemote");
+    echoDebug("Command to run: /root/action.sh $cmd");
+  }
   // Don't print this on debug. There is a risk that user passes secrets that are left in the logs
   // print('$envVarsToRemote bash /root/action.sh $cmd');
 

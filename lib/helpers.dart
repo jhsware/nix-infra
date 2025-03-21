@@ -8,7 +8,15 @@ import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 
 void echo(String message) {
-  print('- $message');
+  final tmp = message.split('\n');
+  final outp = tmp.map((str) => '- $str');
+  print(outp.join('\n'));
+}
+
+void echoFromNode(String nodeName, String message) {
+  final tmp = message.split('\n');
+  final outp = tmp.map((str) => '$nodeName: $str');
+  print(outp.join('\n'));
 }
 
 void echoDebug(String message) {
@@ -64,12 +72,17 @@ String substitute(String contents, Map<String, String> substitutions,
   });
 }
 
+Stream<Uint8List> convertToUint8List(Stream<List<int>> input) {
+  return input.map((List<int> data) => Uint8List.fromList(data));
+}
+
 Future<void> sftpSend(SftpClient sftp, String localPath, String remotePath,
     {Map<String, String>? substitutions, List<String>? expectedSecrets}) async {
   final local = File(localPath);
   final remote = await sftp.open(remotePath, mode: writeCreateMode);
   if (substitutions == null) {
-    await remote.writeBytes(await local.readAsBytes());
+    final readStream = local.openRead();
+    await remote.write(convertToUint8List(readStream));
   } else {
     // Do variable substitution [%%sshKeyPubPath%%] => { sshKeyPubPath }
     final contents = await local.readAsString();
@@ -225,4 +238,8 @@ Future<Map<String, String>> getOverlayMeshIps(
 
   echo(overlayIps.toString());
   return overlayIps;
+}
+
+String multi(Iterable<String> lines) {
+  return lines.toList().join('\n');
 }

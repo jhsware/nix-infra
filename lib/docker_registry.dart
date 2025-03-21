@@ -14,9 +14,15 @@ String _getHashFromOCIManifest(dynamic manifest) {
   return hash.substring(0, 12);
 }
 
-Future<void> publishImageToRegistry(Directory workingDir,
-    Iterable<ClusterNode> cluster, ClusterNode registryNode,
-    {required String file, required String name}) async {
+Future<void> publishImageToRegistry(
+  Directory workingDir,
+  Iterable<ClusterNode> cluster,
+  ClusterNode registryNode, {
+  required String file,
+  required String name,
+  required String tag,
+  bool debug = false,
+}) async {
   final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
   final registryOverlayIp = overlayMeshIps[registryNode.name];
 
@@ -30,6 +36,8 @@ Future<void> publishImageToRegistry(Directory workingDir,
     final manifestJson = await manifestPipeline.stdout.text;
     final imageHash = _getHashFromOCIManifest(jsonDecode(manifestJson));
 
+    if (debug) echo('Uploading image...');
+
     final pipeline = Script('cat $file') | Script('$sshCmd "podman load"');
     await pipeline.stdout.text;
 
@@ -38,11 +46,17 @@ Future<void> publishImageToRegistry(Directory workingDir,
     // final tmp = await ipCmd.stdout.text;
     // final registryIp = tmp.replaceFirst('inet ', '');
     echo('Registry IP: $registryOverlayIp');
+    if (debug) echo('Pushing image to registry...');
 
     // After loading the image, push it to the local registry
-    final pushCmd = Script(
-        '$sshCmd "podman push \$(podman images --format {{.ID}} $imageHash) $registryOverlayIp:5000/apps/$imageHash:latest"');
-    await pushCmd.stdout.text;
+    final pushCmd = Script(multi([
+      '$sshCmd "',
+      'podman push \$(podman images --format {{.ID}} $imageHash) $registryOverlayIp:5000/apps/$name:latest &&',
+      'podman push \$(podman images --format {{.ID}} $imageHash) $registryOverlayIp:5000/apps/$name:$tag',
+      '"'
+    ]));
+    String tmpOutp = await pushCmd.stdout.text;
+    if (debug) echo(tmpOutp);
 
     final removeCmd = Script(
         '$sshCmd "podman rmi \$(podman images --format {{.ID}} $imageHash)"');

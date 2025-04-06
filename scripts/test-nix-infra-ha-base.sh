@@ -232,9 +232,9 @@ if [ "$CMD" = "ssh" ]; then
     echo "Usage: $0 ssh --env=$ENV [node]"
     exit 1
   fi
-  # This is the only way I get ssh to work properly right now
-  # the nix-infra ssh command won't handle control codes right now.
-  HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i $WORK_DIR/ssh/$SSH_KEY
+  # Fallback if ssh terminal isn't working as expected:
+  # HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i $WORK_DIR/ssh/$SSH_KEY
+  $NIX_INFRA cluster ssh -d $WORK_DIR --target="$REST"
   exit 0
 fi
 

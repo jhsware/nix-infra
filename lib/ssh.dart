@@ -195,10 +195,10 @@ Future<SSHSession> getSshShell(
 }) async {
   final shell = await sshClient.shell();
   if (listenToStdOut) {
-    shell.stdout.listen((uintlst) => stdout.add(uintlst));
+    stdout.addStream(shell.stdout);
   }
   if (listenToStdErr) {
-    shell.stderr.listen((uintlst) => stderr.add(uintlst));
+    stderr.addStream(shell.stderr);
   }
   return shell;
 }
@@ -224,9 +224,20 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
           type: 'xterm-256color'));
   stdout.addStream(shell.stdout);
   stderr.addStream(shell.stderr);
-  stdin.cast<Uint8List>().listen(shell.write);
+
+  stdin.echoMode = false;
+  stdin.lineMode = false;
+
+  stdin.listen((List<int> data) {
+    final uint8Data = Uint8List.fromList(data);
+    shell.write(uint8Data);
+  });
 
   await shell.done;
+  
+  stdin.echoMode = true;
+  stdin.lineMode = true;
+  
   shell.close();
   sshClient.close();
 }

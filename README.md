@@ -27,6 +27,7 @@ Features:
 
 Limitations:
 - NixOS doesn't support SELinux
+  - UPDATE: https://tristanxr.com/post/selinux-on-nixos/
 - nix-infra currently only supports Hetzner Cloud
 - the code is the primary documentation
 

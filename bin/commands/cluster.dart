@@ -41,9 +41,9 @@ class ClusterCommand extends Command {
     addSubcommand(CmdCommand());
     addSubcommand(PortForwardCommand());
     addSubcommand(ActionCommand(overlayNetwork: true));
-    
+
     addSubcommand(UploadCommand());
-    
+
     // addSubcommand(EtcdCommand());
   }
 }
@@ -393,7 +393,6 @@ class DeployAppsCommand extends Command {
     final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
     final nodes = await hcloud.getServers(only: targets);
     final cluster = await hcloud.getServers();
-
     await deployAppsOnNode(
       workingDir,
       cluster,
@@ -402,7 +401,6 @@ class DeployAppsCommand extends Command {
       debug: debug,
       overlayNetwork: true,
     );
-
     if (rebuild) {
       await nixosRebuild(workingDir, nodes);
       // I don't believe this is needed for app updates, it should

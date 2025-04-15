@@ -43,7 +43,7 @@ test-nix-infra-ha-base.sh action --env=.env-test --target=service001 args to act
 EOF
 )
 
-if [[ "create teardown publish update test test-apps ssh cmd etcd action port-forward" == *"$1"* ]]; then
+if [[ "create teardown pull publish update test test-apps ssh cmd etcd action port-forward" == *"$1"* ]]; then
   CMD="$1"
   shift
 else
@@ -106,6 +106,8 @@ testApps() {
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: ";echo -n $(systemctl is-active podman-app-redis-pod.service)' &
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)' &
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: ";echo -n $(systemctl is-active podman-app-elasticsearch-pod.service)' &
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker001" 'printf "app-mariadb-pod: ";echo -n $(systemctl is-active podman-app-mariadb-pod.service)' &
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" 'printf "app-mariadb-pod: ";echo -n $(systemctl is-active podman-app-mariadb-pod.service)' &
   wait # Wait for all process to complete
   # Check that apps are responding locally
   echo "Do apps responds locally?"
@@ -117,6 +119,8 @@ testApps() {
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" 'printf "app-redis-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11411/ping' & # > pong
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker001" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' & # > pong
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" 'printf "app-elasticsearch-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11511/ping' & # > pong
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker001" 'printf "app-mariadb-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11611/ping' & # > pong
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" 'printf "app-mariadb-pod: "; curl -s http://$(ifconfig flannel-wg | grep inet | awk '\''$1=="inet" {print $2}'\''):11611/ping' & # > pong
   wait # Wait for all process to complete
   # Check that apps are reachable from ingress node
   echo "Can apps be reached from ingress?"
@@ -124,24 +128,33 @@ testApps() {
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl -s http://127.0.0.1:11311/ping" & # > pong
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl -s http://127.0.0.1:11411/ping" & # > pong
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl -s http://127.0.0.1:11511/ping" & # > pong
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl -s http://127.0.0.1:11611/ping" & # > pong
   wait # Wait for all process to complete
   # Check that app has correct functionality
   echo "Do apps function properly?"
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl --max-time 2 -s http://127.0.0.1:11211/hello" & # > hello world!
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=1&message=hello'" & # > 1
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=2&message=bye'" & # > 1
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=3&message=hello_world'" & # > 1
-  wait
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/1" & # > hello
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/2" & # > bye
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/3" & # > hello_world
-  wait # Wait for all process to complete
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11411/db?id=1&message=hello'" & # > 1
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11511/db?id=1&message=hello'" & # > 1
-  wait
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s http://127.0.0.1:11411/db/1" & # > hello
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s http://127.0.0.1:11511/db/1" & # > hello
-  wait
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl --max-time 2 -s http://127.0.0.1:11211/hello" # > hello world!
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=1&message=hello'" # > 1
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=2&message=bye'" # > 2
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=3&message=hello_world'" # > 3
+  
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11611/db?id=1&message=hello'" # > 1
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11611/db?id=2&message=bye'" # > 2
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11611/db?id=3&message=hello_world'" # > 3
+  # wait # Wait for all process to complete
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/1" # > hello
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/2" # > bye
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s http://127.0.0.1:11311/db/3" # > hello_world
+
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl --max-time 2 -s http://127.0.0.1:11611/db/1" # > hello
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl --max-time 2 -s http://127.0.0.1:11611/db/2" # > bye
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl --max-time 2 -s http://127.0.0.1:11611/db/3" # > hello_world
+  # wait # Wait for all process to complete
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11411/db?id=1&message=hello'" # > 1
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11511/db?id=1&message=hello'" # > 1
+  # wait
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-redis-pod: '; curl --max-time 2 -s http://127.0.0.1:11411/db/1" # > hello
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-elasticsearch-pod: '; curl --max-time 2 -s http://127.0.0.1:11511/db/1" # > hello
+  # wait
   # $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-redis*"
   # $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker002" "journalctl -n 20 -u podman-app-elastic*"
 }
@@ -184,7 +197,7 @@ if [ "$CMD" = "port-forward" ]; then
   IFS=: read LOCAL_PORT REMOTE_PORT <<< "$PORT_MAPPING"
   IFS=$OLD_IFS  # Restore IFS to original value
 
-  $NIX_INFRA port-forward -d $WORK_DIR --env="$WORK_DIR/.env" \
+  $NIX_INFRA cluster port-forward -d $WORK_DIR --env="$WORK_DIR/.env" \
     --target="$TARGET" \
     --local-port="$LOCAL_PORT" \
     --remote-port="$REMOTE_PORT"
@@ -197,16 +210,22 @@ if [ "$CMD" = "update" ]; then
     exit 1
   fi
   (cd "$WORK_DIR" && git fetch origin && git reset --hard origin/$(git branch --show-current))
-  $NIX_INFRA update-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --nixos-version=$NIXOS_VERSION \
-    --target="$REST" \
-    --node-module="node_types/cluster_node.nix" \
-    --ctrl-nodes="$CTRL" \
-    --rebuild
+  # $NIX_INFRA cluster update-node -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+  #   --nixos-version=$NIXOS_VERSION \
+  #   --target="$REST" \
+  #   --node-module="node_types/cluster_node.nix" \
+  #   --ctrl-nodes="$CTRL" \
+  #   --rebuild
 
+  $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306,[%%service003.overlayIp%%]:3306/db?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
+    --name="mariadb.connectionString"
+
+  # ls  $WORK_DIR/app_modules
   $NIX_INFRA cluster deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --target="$REST"
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
+  # $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "ls /etc/nixos/app_modules"
   exit 0
 fi
 
@@ -224,6 +243,14 @@ if [ "$CMD" = "publish" ]; then
   echo Publish applications...
   publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz" "1.0"
   publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz" "1.0"
+  publishImageToRegistry app-mariadb-pod "$WORK_DIR/app_images/app-mariadb-pod.tar.gz" "1.0"
+  exit 0
+fi
+
+if [ "$CMD" = "pull" ]; then
+  # Fallback if ssh terminal isn't working as expected:
+  # HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i $WORK_DIR/ssh/$SSH_KEY
+  git -C $WORK_DIR pull
   exit 0
 fi
 
@@ -239,14 +266,16 @@ if [ "$CMD" = "ssh" ]; then
 fi
 
 if [ "$CMD" = "action" ]; then
-  # read action opts <<< "$REST"
-  # if [ -z $action ]; then
-  #   echo "Usage: $0 action [cmd] [opts]"
-  #   exit 1
-  # fi
+  if [ -z "$REST" ]; then
+    echo "Usage: $0 action [target] [cmd]"
+    exit 1
+  fi
+  
+  read -r module cmd < <(echo "$REST")
+  _target=${TARGET:-"service001"}
   # (cd "$WORK_DIR" && git fetch origin && git reset --hard origin/$(git branch --show-current))
-  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="elasticsearch" \
-    --cmd="$REST" # --env-vars="ELASTIC_PASSWORD="
+  $NIX_INFRA cluster action -d $WORK_DIR --target="$_target" --app-module="$module" \
+    --cmd="$cmd" # --env-vars="ELASTIC_PASSWORD="
   exit 0
 fi
 
@@ -270,7 +299,7 @@ fi
 
 if [ "$CMD" = "create" ]; then
   rm -rf $WORK_DIR;
-  git clone $TEMPLATE_REPO $WORK_DIR
+  git clone -b mariadb $TEMPLATE_REPO $WORK_DIR
 
   env=$(cat <<EOF
 # NOTE: The following secrets are required for various operations
@@ -404,11 +433,6 @@ if [ "$CMD" = "create" ]; then
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="registry001" "nixos-rebuild switch --fast"
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="registry001" "systemctl restart confd"
 
-  publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz" "1.0"
-  publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz" "1.0"
-  publishImageToRegistry app-elasticsearch-pod "$WORK_DIR/app_images/app-elasticsearch-pod.tar.gz" "1.0"
-  publishImageToRegistry app-redis-pod "$WORK_DIR/app_images/app-redis-pod.tar.gz" "1.0"
-
   $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --secret="super_secret_secret" \
     --name="my.test"
@@ -420,30 +444,51 @@ if [ "$CMD" = "create" ]; then
     --secret="http://127.0.0.1:9200" \
     --name="elasticsearch.connectionString"
     # --secret="http://[%%service001.overlayIp%%]:9200,http://[%%service002.overlayIp%%]:9200,http://[%%service003.overlayIp%%]:9200" \
+  $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+    --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306,[%%service003.overlayIp%%]:3306/db?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
+    --name="mariadb.connectionString"
+    # --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306,[%%service002.overlayIp%%]:3306,[%%service003.overlayIp%%]:3306/db?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
+
+  # This takes a while and allows DBs to form clusters during upload
+  publishImageToRegistry app-pod "$WORK_DIR/app_images/app-pod.tar.gz" "1.0"
+  publishImageToRegistry app-mongodb-pod "$WORK_DIR/app_images/app-mongodb-pod.tar.gz" "1.0"
+  publishImageToRegistry app-elasticsearch-pod "$WORK_DIR/app_images/app-elasticsearch-pod.tar.gz" "1.0"
+  publishImageToRegistry app-redis-pod "$WORK_DIR/app_images/app-redis-pod.tar.gz" "1.0"
+  publishImageToRegistry app-mariadb-pod "$WORK_DIR/app_images/app-mariadb-pod.tar.gz" "1.0"
+
   echo "---"
   $NIX_INFRA cluster deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --target="service001 service002 service003 worker001 worker002"
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="service001 service002 service003 worker001 worker002" "nixos-rebuild switch --fast"
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="service001 service002 service003 worker001 worker002" "systemctl restart confd"
 
+
+  _end=`date +%s`
+
+  # Testing cluster to allow services and apps some time to spin up and form clusters
+  echo "******************************************"
+  testCluster
+  echo "******************************************"
+
+  echo -e "\n** MongoDB **"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="init" --env-vars="NODE_1=[%%service001.overlayIp%%],NODE_2=[%%service002.overlayIp%%],NODE_3=[%%service003.overlayIp%%]"
+
   # security is currently turned off
   # $NIX_INFRA action -d $WORK_DIR --target="service001" --app-module="elasticsearch" --cmd="init"
 
   echo "...INSTALLING APPS"
 
-  _end=`date +%s`
-
-  echo "******************************************"
-
-  testCluster
-
-  echo "******************************************"
-
+  echo -e "\n** MongoDB **"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-db --database=hello"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-db --database=test"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-admin --database=test --username=test-admin"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="create-admin --database=hello --username=hello-admin"
+
+  echo -e "\n** MariaDB **"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="create-db --database=hello"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="create-db --database=test"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="create-admin --database=test --username=test-admin"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="create-admin --database=hello --username=hello-admin"
   
   echo "******************************************"
 
@@ -451,9 +496,17 @@ if [ "$CMD" = "create" ]; then
 
   echo "******************************************"
 
-
+  echo -e "\n** MongoDB **"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="status"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="dbs"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mongodb" --cmd="users"
+
+  echo -e "\n** MariaDB **"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="status"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="dbs"
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="users"
+
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="worker001" "journalctl -n 60 -u podman-app-mariadb-pod"
 
   if [[ "$TEARDOWN" != "no" ]]; then
     tearDownCluster

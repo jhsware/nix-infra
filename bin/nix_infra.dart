@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
+import 'package:nix_infra/helpers.dart';
 import 'commands/etcd.dart';
 import 'commands/init.dart';
 import 'commands/cluster.dart';
@@ -25,7 +26,7 @@ void main(List<String> arguments) async {
       ..addCommand(SecretsCommand());
     await cmd.run(arguments).catchError((error) {
       if (error is! UsageException && error is! ArgumentError) throw error;
-      print(error);
+      echo(error.toString());
       exit(64); // Exit code 64 indicates a usage error.
     });
   } catch (err) {

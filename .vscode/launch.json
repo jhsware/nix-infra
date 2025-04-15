@@ -59,5 +59,22 @@
         "--env-vars=NODE_1=[%%service001.overlayIp%%],NODE_2=[%%service002.overlayIp%%],NODE_3=[%%service003.overlayIp%%]",
       ]
     }, 
+    {
+      "name": "deploy-apps",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster",
+        "deploy-apps",
+        "-d",
+        "./TEST_INFRA_HA",
+        "--env=./.env-test",
+        "--debug",
+        "--batch",
+        "--target=worker001",
+      ]
+    }, 
   ]
 }

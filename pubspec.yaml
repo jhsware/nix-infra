@@ -12,6 +12,7 @@ dependencies:
   dartssh2: ^2.12.0
   dotenv: ^4.2.0
   http: ^1.3.0
+  mcp_dart: ^0.5.3
   path: ^1.9.1
   posix: ^6.0.1
   process_run: ^0.14.2

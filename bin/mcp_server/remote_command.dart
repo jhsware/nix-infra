@@ -7,7 +7,11 @@ class RemoteCommand extends McpTool {
       'Executes a remote command over SSH and returns the result';
 
   static const inputSchemaProperties = {
-    'target': {'type': 'string'},
+    'target': {
+      'type': 'string',
+      'description':
+          'Single node or comma separated list of nodes to run commands on.',
+    },
     'command': {'type': 'string'},
   };
 
@@ -21,8 +25,14 @@ class RemoteCommand extends McpTool {
     final target = args!['target'];
     final command = args!['command'];
 
-    final nodes = await hcloud.getServers(only: [target]);
-    final result = await runCommandOverSsh(workingDir, nodes.first, command);
+    final tmpTargets = target.split(',');
+    final nodes = await hcloud.getServers(only: tmpTargets);
+    
+    final Iterable<Future<String>> futures = nodes
+        .toList()
+        .map((node) => runCommandOverSsh(workingDir, node, command));
+    final result = (await Future.wait(futures)).join('\n');
+
 
     return CallToolResult.fromContent(
       content: [

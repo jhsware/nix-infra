@@ -8,7 +8,8 @@ class SystemCtl extends McpTool {
   static const Map<String, dynamic> inputSchemaProperties = {
     'target': {
       'type': 'string',
-      'description': 'Cluster node to run query.',
+      'description':
+          'Single node or comma separated list of nodes to run commands on.',
     },
     'options': {'type': 'string', 'description': 'Options for systemctl call'},
     'command': {'type': 'string', 'description': 'Command for systemctl call'},
@@ -42,9 +43,13 @@ class SystemCtl extends McpTool {
       cmd.add(options);
     }
 
-    final nodes = await hcloud.getServers(only: [target]);
-    final result =
-        await runCommandOverSsh(workingDir, nodes.first, cmd.join(' '));
+    final tmpTargets = target.split(',');
+    final nodes = await hcloud.getServers(only: tmpTargets);
+    
+    final Iterable<Future<String>> futures = nodes
+        .toList()
+        .map((node) => runCommandOverSsh(workingDir, node, cmd.join(' ')));
+    final result = (await Future.wait(futures)).join('\n');
 
     return CallToolResult.fromContent(
       content: [

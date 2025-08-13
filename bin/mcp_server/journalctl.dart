@@ -1,5 +1,6 @@
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/types.dart';
 import 'mcp_tool.dart';
 
 class JournalCtl extends McpTool {
@@ -8,17 +9,11 @@ class JournalCtl extends McpTool {
   static const Map<String, dynamic> inputSchemaProperties = {
     'target': {
       'type': 'string',
-      'description': 'Cluster node to run commands on.',
+      'description':
+          'Single node or comma separated list of nodes to run commands on.',
     },
-    'options': {
-      'type': 'string',
-      'description': 'Options for journalctl call'
-    },
-    'matches': {
-      'type': 'string',
-      'description': 'Matches for journalctl call'
-    },
-
+    'options': {'type': 'string', 'description': 'Options for journalctl call'},
+    'matches': {'type': 'string', 'description': 'Matches for journalctl call'},
   };
 
   JournalCtl({
@@ -40,8 +35,13 @@ class JournalCtl extends McpTool {
       cmd.add(matches);
     }
 
-    final nodes = await hcloud.getServers(only: [target]);
-    final result = await runCommandOverSsh(workingDir, nodes.first, cmd.join(' '));
+    final tmpTargets = target.split(',');
+    final nodes = await hcloud.getServers(only: tmpTargets);
+    
+    final Iterable<Future<String>> futures = nodes
+        .toList()
+        .map((node) => runCommandOverSsh(workingDir, node, cmd.join(' ')));
+    final result = (await Future.wait(futures)).join('\n');
 
     return CallToolResult.fromContent(
       content: [

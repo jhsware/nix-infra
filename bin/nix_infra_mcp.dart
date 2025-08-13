@@ -4,7 +4,6 @@ import 'mcp_server/calculate.dart';
 import 'mcp_server/remote_command.dart';
 import 'mcp_server/cluster_nodes.dart';
 import 'mcp_server/etcd.dart';
-import 'mcp_server/etcd_preset_queries.dart';
 import 'mcp_server/journalctl.dart';
 import 'mcp_server/systemctl.dart';
 import 'package:nix_infra/helpers.dart';
@@ -95,21 +94,6 @@ void main() async {
     description: ControlPlaneEtcd.description,
     inputSchemaProperties: ControlPlaneEtcd.inputSchemaProperties,
     callback: controlPlaneEtcd.callback,
-  );
-
-  // *** ControlPlaneEtcdPresetQueries ***
-
-  final controlPlaneEtcdPresetQueries = ControlPlaneEtcdPresetQueries(
-    workingDir: workingDir,
-    sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
-  );
-
-  server.tool(
-    "etcd-preset-queries",
-    description: ControlPlaneEtcdPresetQueries.description,
-    inputSchemaProperties: ControlPlaneEtcdPresetQueries.inputSchemaProperties,
-    callback: controlPlaneEtcdPresetQueries.callback,
   );
 
   // *** JournalCtl ***

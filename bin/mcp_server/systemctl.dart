@@ -38,7 +38,7 @@ class SystemCtl extends McpTool {
     }
     if (units != null && units != '') {
       final Iterable<String> tmp = units.split(',');
-      cmd.add(tmp.map((unit) => '-u $unit').join(' '));
+      cmd.add(tmp.join(' '));
     }
     if (options != null && options != '') {
       cmd.add(options);

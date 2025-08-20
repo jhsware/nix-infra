@@ -1,6 +1,5 @@
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:nix_infra/ssh.dart';
-import 'package:nix_infra/types.dart';
 import 'mcp_tool.dart';
 
 class JournalCtl extends McpTool {
@@ -27,7 +26,7 @@ class JournalCtl extends McpTool {
     final options = args!['options'];
     final matches = args!['matches'];
 
-    final cmd = ['systemctl'];
+    final cmd = ['journalctl'];
     if (options != null && options != '') {
       cmd.add(options);
     }
@@ -37,7 +36,7 @@ class JournalCtl extends McpTool {
 
     final tmpTargets = target.split(',');
     final nodes = await hcloud.getServers(only: tmpTargets);
-    
+
     final Iterable<Future<String>> futures = nodes
         .toList()
         .map((node) => runCommandOverSsh(workingDir, node, cmd.join(' ')));

@@ -31,13 +31,14 @@ class SystemCtl extends McpTool {
     final command = args!['command'];
     final units = args!['units'];
 
-    final cmd = ['journalctl'];
+    final cmd = ['systemctl'];
+    
+    if (command != null && command != '') {
+      cmd.add(command);
+    }
     if (units != null && units != '') {
       final Iterable<String> tmp = units.split(',');
       cmd.add(tmp.map((unit) => '-u $unit').join(' '));
-    }
-    if (command != null && command != '') {
-      cmd.add(command);
     }
     if (options != null && options != '') {
       cmd.add(options);

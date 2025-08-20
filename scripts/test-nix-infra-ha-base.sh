@@ -132,6 +132,8 @@ testApps() {
   wait # Wait for all process to complete
   # Check that app has correct functionality
   echo "Do apps function properly?"
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mariadb-pod: '; curl --max-time 2 -s http://127.0.0.1:11611/init" # > init
+
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-pod: ';         curl --max-time 2 -s http://127.0.0.1:11211/hello" # > hello world!
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=1&message=hello'" # > 1
   $NIX_INFRA cluster cmd -d $WORK_DIR --target="ingress001" "printf 'app-mongodb-pod: '; curl --max-time 2 -s 'http://127.0.0.1:11311/db?id=2&message=bye'" # > 2
@@ -210,19 +212,17 @@ if [ "$CMD" = "update" ]; then
     exit 1
   fi
   (cd "$WORK_DIR" && git fetch origin && git reset --hard origin/$(git branch --show-current))
-  
-  $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306/db?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
-    --name="mariadb.connectionString"
-  # $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-  #   --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306,[%%service002.overlayIp%%]:3306,[%%service003.overlayIp%%]:3306/db?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
-  #   --name="mariadb.connectionString"
 
-  # ls  $WORK_DIR/app_modules
-  $NIX_INFRA cluster deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --target="$REST"
-  # $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "ls /etc/nixos/app_modules"
+  # $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
+  #   --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306/test?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
+  #   --name="mariadb.connectionString"
+  $NIX_INFRA cluster deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" --target="$REST"
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
+  # publishImageToRegistry app-mariadb-pod "$WORK_DIR/app_images/app-mariadb-pod.tar.gz" "1.0"
+  # $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "systemctl restart podman-app-mariadb-pod"
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "curl --max-time 2 -s 'http://127.0.0.1:11611/db?id=1&message=hello'"
+  
+  #$NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "ls /etc/nixos/app_modules"
   exit 0
 fi
 
@@ -442,7 +442,7 @@ if [ "$CMD" = "create" ]; then
     --name="elasticsearch.connectionString"
     # --secret="http://[%%service001.overlayIp%%]:9200,http://[%%service002.overlayIp%%]:9200,http://[%%service003.overlayIp%%]:9200" \
   $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-    --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306,[%%service003.overlayIp%%]:3306/db?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
+    --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306/test?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
     --name="mariadb.connectionString"
     # --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306,[%%service002.overlayIp%%]:3306,[%%service003.overlayIp%%]:3306/db?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
 
@@ -508,6 +508,7 @@ if [ "$CMD" = "create" ]; then
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="create-db --database=test"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="create-admin --database=test --username=test-admin"
   $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="create-admin --database=hello --username=hello-admin"
+
   
   echo "******************************************"
 

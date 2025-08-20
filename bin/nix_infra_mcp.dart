@@ -4,6 +4,7 @@ import 'mcp_server/calculate.dart';
 import 'mcp_server/remote_command.dart';
 import 'mcp_server/cluster_nodes.dart';
 import 'mcp_server/etcd.dart';
+import 'mcp_server/filesystem.dart';
 import 'mcp_server/journalctl.dart';
 import 'mcp_server/systemctl.dart';
 import 'package:nix_infra/helpers.dart';
@@ -124,6 +125,21 @@ void main() async {
     description: SystemCtl.description,
     inputSchemaProperties: SystemCtl.inputSchemaProperties,
     callback: systemCtl.callback,
+  );
+
+  // *** Filesystem ***
+
+  final filesystem = FileSystem(
+    workingDir: workingDir,
+    sshKeyName: sshKeyName,
+    hcloudToken: hcloudToken,
+  );
+
+  server.tool(
+    "configuration-files",
+    description: FileSystem.description,
+    inputSchemaProperties: FileSystem.inputSchemaProperties,
+    callback: filesystem.callback,
   );
 
   server.connect(StdioServerTransport());

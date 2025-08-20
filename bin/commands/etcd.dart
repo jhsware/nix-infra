@@ -33,6 +33,7 @@ class EtcdCommand extends Command {
     argParser
       ..addOption('working-dir',
           abbr: 'd', defaultsTo: '.', help: 'Directory to store SSH keys')
+      ..addOption('ssh-key', mandatory: false)
       ..addOption('env', help: 'Path to environment file');
 
     addSubcommand(EtcdctlCommand());
@@ -40,6 +41,7 @@ class EtcdCommand extends Command {
     addSubcommand(ListServicesCommand());
     addSubcommand(ListBackendsCommand());
     addSubcommand(ListFrontendsCommand());
+    addSubcommand(ShowNetworkCommand());
   }
 }
 
@@ -49,7 +51,10 @@ class EtcdctlCommand extends Command {
   @override
   final description = 'Run a command with etcdctl';
 
-  EtcdctlCommand();
+  EtcdctlCommand() {
+    
+    argParser.addOption('target', mandatory: true);
+  }
 
   @override
   void run() async {
@@ -126,7 +131,7 @@ class ListServicesCommand extends Command {
 
   @override
   void run() async {
-final workingDir =
+    final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
@@ -160,7 +165,7 @@ class ListBackendsCommand extends Command {
 
   @override
   void run() async {
-final workingDir =
+    final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
@@ -194,7 +199,7 @@ class ListFrontendsCommand extends Command {
 
   @override
   void run() async {
-final workingDir =
+    final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
@@ -211,6 +216,40 @@ final workingDir =
     }
 
     final cmd = 'get /cluster/frontends --prefix';
+    final outp = await runEtcdCtlCommand(workingDir, cmd, ctrlNodes.first);
+    echo(outp.join('\n'));
+  }
+}
+
+class ShowNetworkCommand extends Command {
+  @override
+  final name = 'network';
+  @override
+  final description = 'List frontends registered with etcd';
+
+  ShowNetworkCommand() {
+    argParser.addOption('target', mandatory: true);
+  }
+
+  @override
+  void run() async {
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
+
+    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final List<String> targets = argResults!['target'].split(' ');
+
+    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final ctrlNodes = await hcloud.getServers(only: targets);
+
+    if (ctrlNodes.isEmpty) {
+      echo('ERROR! Nodes not found in cluster: $targets');
+      exit(2);
+    }
+
+    final cmd = 'get /coreos.com --prefix';
     final outp = await runEtcdCtlCommand(workingDir, cmd, ctrlNodes.first);
     echo(outp.join('\n'));
   }

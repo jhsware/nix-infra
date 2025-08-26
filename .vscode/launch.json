@@ -75,6 +75,49 @@
         "--batch",
         "--target=worker001",
       ]
-    }, 
+    },
+    {
+      "name": "init-node",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster",
+        "init-node",
+        "-d", "./TEST_INFRA_HA",
+        "--batch",
+        "--env=./TEST_INFRA_HA/.env",
+        "--debug",
+        "--nixos-version=24.11",
+        "--target=worker001",
+        "--node-module=node_types/cluster_node.nix",
+        "--service-group=backends",
+        "--test-dir=TEST_INFRA_HA/__test__/mariadb",
+        "--ctrl-nodes=etcd001",
+        
+      ]
+    },
+    {
+      "name": "update-node",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster",
+        "update-node",
+        "-d", "./TEST_INFRA_HA",
+        "--batch",
+        "--env=./TEST_INFRA_HA/.env",
+        "--debug",
+        "--nixos-version=24.11",
+        "--target=worker001",
+        "--node-module=node_types/cluster_node.nix",
+        "--test-dir=TEST_INFRA_HA/__test__/mariadb",
+        "--ctrl-nodes=etcd001",
+        
+      ]
+    },
   ]
 }

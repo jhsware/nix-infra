@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/helpers.dart';
 import 'commands/etcd.dart';

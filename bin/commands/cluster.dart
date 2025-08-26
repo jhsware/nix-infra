@@ -8,6 +8,7 @@ import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/types.dart';
 import 'package:nix_infra/hcloud.dart';
+import 'etcd.dart';
 import 'shared.dart';
 import 'utils.dart';
 

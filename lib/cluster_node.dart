@@ -134,7 +134,9 @@ Future<void> deployClusterNode(
         });
 
     await sftpSend(
-        sftp, '${workingDir.path}/$nodeType', '/etc/nixos/cluster_node.nix',
+        sftp,
+        '${workingDir.path}/$nodeType',
+        '/etc/nixos/cluster_node.nix',
         substitutions: {
           'etcdCluster': ctrlNodes
               .map(

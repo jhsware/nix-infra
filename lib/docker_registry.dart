@@ -21,10 +21,11 @@ Future<void> publishImageToRegistry(
   required String file,
   required String name,
   required String tag,
+  bool useLocalhost = false,
   bool debug = false,
 }) async {
   final overlayMeshIps = await getOverlayMeshIps(workingDir, cluster);
-  final registryOverlayIp = overlayMeshIps[registryNode.name];
+  final registryOverlayIp = useLocalhost ? '127.0.0.1' : overlayMeshIps[registryNode.name];
 
   final deployments = [registryNode].map((node) async {
     // TODO: Use podman if available, fallback to docker

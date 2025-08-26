@@ -44,7 +44,7 @@ class ClusterCommand extends Command {
 
     addSubcommand(UploadCommand());
 
-    // addSubcommand(EtcdCommand());
+    addSubcommand(EtcdCommand());
   }
 }
 

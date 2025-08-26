@@ -368,6 +368,7 @@ class DeployAppsCommand extends Command {
     argParser
       ..addFlag('batch', defaultsTo: false)
       ..addFlag('rebuild', defaultsTo: false)
+      ..addOption('test-dir', mandatory: false)
       ..addOption('target', mandatory: true);
   }
 
@@ -376,6 +377,8 @@ class DeployAppsCommand extends Command {
     final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
+    Directory? testDir =
+        await getWorkingDirectory(argResults!['test-dir']);
 
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
@@ -400,6 +403,7 @@ class DeployAppsCommand extends Command {
       secretsPwd: secretsPwd,
       debug: debug,
       overlayNetwork: true,
+      testDir: testDir,
     );
     if (rebuild) {
       await nixosRebuild(workingDir, nodes);

@@ -7,6 +7,7 @@ import 'mcp_server/etcd.dart';
 import 'mcp_server/filesystem.dart';
 import 'mcp_server/journalctl.dart';
 import 'mcp_server/systemctl.dart';
+import 'mcp_server/test_runner.dart';
 import 'package:nix_infra/helpers.dart';
 import 'mcp_server/utils.dart';
 
@@ -140,6 +141,21 @@ void main() async {
     description: FileSystem.description,
     inputSchemaProperties: FileSystem.inputSchemaProperties,
     callback: filesystem.callback,
+  );
+
+  // *** Filesystem ***
+
+  final testRunner = TestRunner(
+    workingDir: workingDir,
+    sshKeyName: sshKeyName,
+    hcloudToken: hcloudToken,
+  );
+
+  server.tool(
+    "test-runner",
+    description: TestRunner.description,
+    inputSchemaProperties: TestRunner.inputSchemaProperties,
+    callback: testRunner.callback,
   );
 
   server.connect(StdioServerTransport());

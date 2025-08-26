@@ -4,6 +4,7 @@ WORK_DIR=${WORK_DIR:-"./TEST_INFRA_HA"}
 NIX_INFRA=${NIX_INFRA:-"nix-infra"}
 NIXOS_VERSION=${NIXOS_VERSION:-"24.11"}
 TEMPLATE_REPO=${TEMPLATE_REPO:-"git@github.com:jhsware/nix-infra-test.git"}
+TEMPLATE_REPO_BRANCH=${TEMPLATE_REPO_BRANCH:-"main"}
 SSH_KEY="nixinfra"
 SSH_EMAIL=${SSH_EMAIL:-your-email@example.com}
 
@@ -62,6 +63,10 @@ for i in "$@"; do
     ;;
     --no-teardown)
     TEARDOWN=no
+    shift
+    ;;
+    --branch=*)
+    TEMPLATE_REPO_BRANCH="${i#*=}"
     shift
     ;;
     --port-mapping=*)
@@ -216,11 +221,13 @@ if [ "$CMD" = "update" ]; then
   # $NIX_INFRA secrets store -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
   #   --secret="mysql://root:your-secure-password@[%%service001.overlayIp%%]:3306/test?&connectTimeout=10000&connectionLimit=10&multipleStatements=true" \
   #   --name="mariadb.connectionString"
-  $NIX_INFRA cluster deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" --target="$REST"
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
+  #$NIX_INFRA cluster deploy-apps -d $WORK_DIR --batch --env="$WORK_DIR/.env" --target="$REST"
+  #$NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "nixos-rebuild switch --fast"
   # publishImageToRegistry app-mariadb-pod "$WORK_DIR/app_images/app-mariadb-pod.tar.gz" "1.0"
   # $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "systemctl restart podman-app-mariadb-pod"
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "curl --max-time 2 -s 'http://127.0.0.1:11611/db?id=1&message=hello'"
+  # $NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "curl --max-time 2 -s 'http://127.0.0.1:11611/db?id=1&message=hello'"
+  # sleep 10
+  $NIX_INFRA cluster action -d $WORK_DIR --target="service001" --app-module="mariadb" --cmd="status"
   
   #$NIX_INFRA cluster cmd -d $WORK_DIR --target="$REST" "ls /etc/nixos/app_modules"
   exit 0
@@ -296,7 +303,7 @@ fi
 
 if [ "$CMD" = "create" ]; then
   rm -rf $WORK_DIR;
-  git clone -b mariadb $TEMPLATE_REPO $WORK_DIR
+  git clone -b $TEMPLATE_REPO_BRANCH $TEMPLATE_REPO $WORK_DIR
 
   env=$(cat <<EOF
 # NOTE: The following secrets are required for various operations

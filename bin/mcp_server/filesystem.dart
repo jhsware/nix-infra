@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path/path.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
 
@@ -84,7 +85,7 @@ read-files -- read the content of several files provided as comma separated list
         if (s.type == FileSystemEntityType.directory) {
           allContents.addAll(await Directory(item.path).list().toList());
         }
-        return '${relPath} -- size: ${s.size}; type: ${s.type}';
+        return '$relPath -- size: ${s.size}; type: ${s.type}';
       });
       outp.addAll(await Future.wait(fut));
     }
@@ -96,9 +97,14 @@ read-files -- read the content of several files provided as comma separated list
       return 'No absolute paths allowed';
     }
 
-    final file = File(getAbsolutePath(path));
-    if (await file.exists()) {
-      return 'File not found: $path';
+    if (path.split('/').any((s) => s.startsWith('.'))) {
+      return 'No hidden files or directories allowed';
+    }
+
+    final filePath = getAbsolutePath(path);
+    final file = File(filePath);
+    if (!await file.exists()) {
+      return 'File not found: $filePath';
     }
 
     return await file.readAsString();
@@ -112,8 +118,12 @@ read-files -- read the content of several files provided as comma separated list
         outp.add('$path: No absolute paths allowed');
       }
 
+      if (path.split('/').any((s) => s.startsWith('.'))) {
+        outp.add('$path: No hidden files or directories allowed');
+      }
+
       final file = File(getAbsolutePath(path));
-      if (await file.exists()) {
+      if (!await file.exists()) {
         outp.add('$path: File not found');
       }
 
@@ -125,9 +135,9 @@ read-files -- read the content of several files provided as comma separated list
 }
 
 String getAbsolutePath(String path) {
-  return path == '.'
-      ? Directory.current.path
-      : '${Directory.current.path}/$path';
+  final projectRootPath = Directory.current.absolute.path;
+  final outp = path == '.' ? projectRootPath : '$projectRootPath/$path';
+  return normalize(outp);
 }
 
 bool isHiddenPath(String path) {

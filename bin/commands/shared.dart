@@ -63,7 +63,7 @@ class ProvisionCommand extends Command {
 
     await waitForSsh(createdServers);
 
-    echo('Converting to NixOS...');
+    echo('Converting to NixOS... $nixOsVersion');
     await installNixos(
       workingDir,
       createdServers,
@@ -141,13 +141,14 @@ class GCCommand extends Command {
 
 class UpgradeCommand extends Command {
   @override
-  final name = 'upgrade';
+  final name = 'upgrade-nixos';
   @override
   final description = 'Upgrade cluster node';
 
   UpgradeCommand() {
     argParser
       ..addFlag('batch', defaultsTo: false)
+      ..addOption('nix-version', mandatory: false)
       ..addOption('target', mandatory: true);
   }
 
@@ -158,9 +159,12 @@ class UpgradeCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
+    final String? nixVersion = argResults!['nix-version'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
+
+    areYouSure('Are you sure you want to upgrade to NixOS $nixVersion?', batch);
 
     final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
 
@@ -171,9 +175,57 @@ class UpgradeCommand extends Command {
     }
 
     await Future.wait(nodes.map((node) async {
-      final message = await runCommandOverSsh(
-          workingDir, node, 'nixos-rebuild switch --upgrade');
-      echoFromNode(node.name, message);
+      String outp;
+
+      outp = await runCommandOverSsh(workingDir, node, 'nixos-version');
+      echoFromNode(node.name, 'Current NixOS version: $outp');
+
+      // If we do a major upgrade we need to perform some extra steps
+      if (nixVersion != null && !outp.startsWith(nixVersion)) {
+        final authorizedKey =
+            await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
+
+        final SSHSocket connection = await waitAndGetSshConnection(node);
+        final SSHClient sshClient =
+            await getSshClient(workingDir, node, connection);
+        final sftp = await sshClient.sftp();
+
+        await sftpSend(sftp, '${workingDir.path}/configuration.nix',
+            '/etc/nixos/configuration.nix',
+            substitutions: {
+              'sshKey': authorizedKey,
+              'nodeName': node.name,
+              'nixVersion': nixVersion,
+            });
+
+        await sftpSend(
+            sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',
+            substitutions: {
+              'nixVersion':
+                  nixVersion, // This is neither a secret or a node specific value, should probably not be a variable
+              'nodeName': node.name,
+              'hwArch':
+                  'x86_64-linux', // QUESTION: Should we read variables from target node?
+            });
+
+        sftp.close();
+        sshClient.close();
+
+        outp = await runCommandOverSsh(workingDir, node,
+            'nix-channel --add https://nixos.org/channels/nixos-$nixVersion nixos');
+        echoFromNode(node.name, outp);
+      }
+
+      // Now perform the actual update
+      outp = await runCommandOverSsh(workingDir, node, 'nix-channel --update');
+      echoFromNode(node.name, outp);
+
+      outp = await runCommandOverSsh(
+          workingDir, node, 'nixos-rebuild switch --fast');
+      echoFromNode(node.name, outp);
+
+      outp = await runCommandOverSsh(workingDir, node, 'nixos-version');
+      echoFromNode(node.name, 'Upgraded NixOS version: $outp');
     }));
   }
 }
@@ -200,6 +252,8 @@ class RollbackCommand extends Command {
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
+
+    areYouSure('Are you sure you want to rollback?', batch);
 
     final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
 

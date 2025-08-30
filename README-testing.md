@@ -30,4 +30,6 @@ TEST_NIX_INFRA/__test__/run-tests.sh action --env=.env-test mariadb status
 TEST_NIX_INFRA/__test__/run-tests.sh reset --env=.env-test
 TEST_NIX_INFRA/__test__/run-tests.sh run --env=.env-test other-test
 TEST_NIX_INFRA/__test__/run-tests.sh teardown --env=.env-test
+
+(cd TEST_NIX_INFRA; __test__/run-tests.sh run mongodb mariadb keydb elasticsearch | tee test.log)
 ```

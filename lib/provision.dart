@@ -85,10 +85,8 @@ Future<void> installNixos(Directory workingDir, Iterable<ClusterNode> nodes,
     bool debug = false}) async {
   final progressBar = AsciiProgressBar();
 
-  final installNixos = nodes.map((node) async {
-    final progressBarId = <String, int?>{"current": null};
-    final nixChannel = 'nixos-$nixVersion';
-    final installScript = """#!/usr/bin/env bash
+  final nixChannel = 'nixos-$nixVersion';
+  final installScript = """#!/usr/bin/env bash
 echo "mute=on"
 curl -s https://raw.githubusercontent.com/elitak/nixos-infect/master/nixos-infect | NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x 2>/dev/null;
 
@@ -99,7 +97,10 @@ cp -f /root/configuration.nix /etc/nixos/configuration.nix;
 /nix/var/nix/profiles/system/sw/bin/nix-collect-garbage 2>/dev/null;
 /nix/var/nix/profiles/system/bin/switch-to-configuration boot 2>/dev/null;
 reboot;
-    """;
+  """;
+
+  final installNixos = nodes.map((node) async {
+    final progressBarId = <String, int?>{"current": null};
 // begore GC:
 // NIXOS_CONFIG=/etc/nixos/configuration.nix nix-env --set -I nixpkgs=\$(realpath \$HOME/.nix-defexpr/channels/nixos) -f '<nixpkgs/nixos>' -p /nix/var/nix/profiles/system -A system;
 
@@ -118,9 +119,9 @@ reboot;
     await sftpSend(
         sftp, '${workingDir.path}/configuration.nix', '/root/configuration.nix',
         substitutions: {
-          'sshKey': authorizedKey,
           'nixVersion': nixVersion,
           'nodeName': node.name,
+          'sshKey': authorizedKey,
         });
 
     sftp.close();

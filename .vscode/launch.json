@@ -13,9 +13,7 @@
       "args": [
         "init",
         "--batch",
-        "-d",
-        "../TEST_INFRA",
-        "--env=./.env-test",
+        "-d", "./TEST_NIX_INFRA",
         "--debug",
         "--batch"
       ]
@@ -27,17 +25,29 @@
       "toolArgs": ["--verbosity=error"],
       "program": "bin/nix_infra.dart",
       "args": [
-        "provision",
+        "cluster", "provision",
         "--batch",
-        "-d",
-        "../TEST_INFRA",
-        "--env=./.env-test",
-        "--nixos-version=$NIXOS_VERSION",
-        "--ssh-key=$SSH_KEY",
+        "-d", "./TEST_NIX_INFRA",
+        "--nixos-version=25.05",
+        "--ssh-key=nixinfra",
         "--location=hel1",
         "--machine-type=cpx21",
-        "--node-names=etcd001 etcd002 etcd003",
+        "--node-names=etcd001",
         "--placement-group=ctrl-plane"
+      ]
+    },
+    {
+      "name": "destroy",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster", "destroy",
+        "--batch",
+        "-d", "./TEST_NIX_INFRA",
+        "--target=etcd001",
+        "--ctrl-nodes=etcd001",
       ]
     },
     {
@@ -48,9 +58,7 @@
       "program": "bin/nix_infra.dart",
       "args": [
         "action",
-        "-d",
-        "../TEST_INFRA",
-        "--env=./.env",
+        "-d", "./TEST_NIX_INFRA",
         "--debug",
         "--batch",
         "--target=service001",
@@ -68,9 +76,7 @@
       "args": [
         "cluster",
         "deploy-apps",
-        "-d",
-        "./TEST_INFRA_HA",
-        "--env=./.env-test",
+        "-d", "./TEST_NIX_INFRA",
         "--debug",
         "--batch",
         "--target=worker001",
@@ -85,9 +91,8 @@
       "args": [
         "cluster",
         "init-node",
-        "-d", "./TEST_INFRA_HA",
+        "-d", "./TEST_NIX_INFRA",
         "--batch",
-        "--env=./TEST_INFRA_HA/.env",
         "--debug",
         "--nixos-version=24.11",
         "--target=worker001",
@@ -107,9 +112,8 @@
       "args": [
         "cluster",
         "update-node",
-        "-d", "./TEST_INFRA_HA",
+        "-d", "./TEST_NIX_INFRA",
         "--batch",
-        "--env=./TEST_INFRA_HA/.env",
         "--debug",
         "--nixos-version=24.11",
         "--target=worker001",

@@ -22,6 +22,7 @@ Future<void> deployControlNode(
         substitutions: {
           'sshKey': authorizedKey,
           'nodeName': node.name,
+          'nixVersion': nixVersion,
         });
 
     await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',

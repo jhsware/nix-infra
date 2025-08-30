@@ -50,6 +50,7 @@ Future<void> deployMachine(
         substitutions: {
           'sshKey': authorizedKey,
           'nodeName': node.name,
+          'nixVersion': nixVersion,
         });
 
     await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',
@@ -122,6 +123,7 @@ Future<void> deployClusterNode(
         substitutions: {
           'sshKey': authorizedKey,
           'nodeName': node.name,
+          'nixVersion': nixVersion,
         });
 
     await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',

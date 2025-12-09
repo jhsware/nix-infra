@@ -7,8 +7,7 @@ appendWithLineBreak() {
 }
 
 cmd () {
-  echo "You need to add a command similar to the following after you import this file:"
-  echo '$NIX_INFRA cmd -d $WORK_DIR --target="$1" "$2"'
+  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$1" "$2"
 }
 
 checkNixos() {

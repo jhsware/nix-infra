@@ -5,6 +5,52 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Bash-Debug (run-tests.sh)",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/TEST_NIX_INFRA/__test__/run-tests.sh",
+      "args": [
+        "action",
+        "--target=service002",
+        "mariadb",
+        "status"
+      ]
+    },
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "env": {
+        "TEMPLATE_REPO": "../nix-infra-ha-cluster"
+      },
+      "name": "Bash-Debug (test-nix-infra-ha-base.sh)",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/scripts/test-nix-infra-ha-base.sh",
+      "args": [
+        "create",
+        "--branch=nixos-native-services",
+        "--env=.env-test-ha",
+        "--no-teardown"
+      ]
+    },
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "env": {
+        "TEMPLATE_REPO": "../nix-infra-ha-cluster"
+      },
+      "name": "Bash-Debug (test-nix-infra-ha-mongodb.sh)",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/scripts/test-nix-infra-ha-mongodb.sh",
+      "args": [
+        "create",
+        "--branch=nixos-native-services",
+        "--env=.env-test-ha",
+        "--no-teardown"
+      ]
+    },
+
+    {
       "name": "init",
       "request": "launch",
       "type": "dart",
@@ -57,7 +103,7 @@
       "toolArgs": ["--verbosity=error"],
       "program": "bin/nix_infra.dart",
       "args": [
-        "action",
+        "cluster", "action",
         "-d", "./TEST_NIX_INFRA",
         "--debug",
         "--batch",
@@ -76,7 +122,7 @@
       "args": [
         "cluster",
         "deploy-apps",
-        "-d", "./TEST_NIX_INFRA",
+        "-d", "./TEST_INFRA_HA",
         "--debug",
         "--batch",
         "--target=worker001",
@@ -98,7 +144,6 @@
         "--target=worker001",
         "--node-module=node_types/cluster_node.nix",
         "--service-group=backends",
-        "--test-dir=TEST_INFRA_HA/__test__/mariadb",
         "--ctrl-nodes=etcd001",
         
       ]

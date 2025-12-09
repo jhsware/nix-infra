@@ -139,16 +139,16 @@ class GCCommand extends Command {
   }
 }
 
-class UpgradeCommand extends Command {
+class UpgradeNixOsCommand extends Command {
   @override
   final name = 'upgrade-nixos';
   @override
   final description = 'Upgrade cluster node';
 
-  UpgradeCommand() {
+  UpgradeNixOsCommand() {
     argParser
       ..addFlag('batch', defaultsTo: false)
-      ..addOption('nix-version', mandatory: false)
+      ..addOption('nixos-version', mandatory: false)
       ..addOption('target', mandatory: true);
   }
 
@@ -159,7 +159,7 @@ class UpgradeCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String? nixVersion = argResults!['nix-version'];
+    final String? nixVersion = argResults!['nixos-version'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');

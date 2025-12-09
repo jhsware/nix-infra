@@ -30,7 +30,7 @@ class FleetCommand extends Command {
     addSubcommand(DestroyCommand());
     addSubcommand(DeployAppsCommand());
     addSubcommand(GCCommand());
-    addSubcommand(UpgradeCommand());
+    addSubcommand(UpgradeNixOsCommand());
     addSubcommand(RollbackCommand());
     addSubcommand(SSHCommand());
     addSubcommand(CmdCommand());

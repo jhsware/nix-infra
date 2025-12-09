@@ -1,5 +1,6 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i bash
+set -e
 
 if [[ "build-macos build-linux release list-identities create-keychain-profile notarytool-log" == *"$1"* ]]; then
   CMD="$1"
@@ -45,8 +46,11 @@ fi
 
 if [ "$CMD" = "release" ]; then
   # https://scriptingosx.com/2021/07/notarize-a-command-line-tool-with-notarytool/
-  checkVar $DEV_CERTIFICATE DEV_CERTIFICATE 
-  
+  checkVar "$DEV_CERTIFICATE" DEV_CERTIFICATE 
+  checkVar "$DEV_APP_CERTIFICATE" DEV_APP_CERTIFICATE
+  checkVar "$DEV_IDENTIFIER" DEV_IDENTIFIER
+  checkVar "$DEV_CREDENTIAL_PROFILE" DEV_CREDENTIAL_PROFILE
+
   PKG="bin/nix-infra-installer"
   VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
 

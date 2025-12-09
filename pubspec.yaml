@@ -1,6 +1,6 @@
 name: nix_infra
 description: Create a private PaaS on Hetzner Cloud in minutes.
-version: 0.11.0-alpha
+version: 0.12.0-alpha
 # repository: https://github.com/my_org/my_repo
 
 environment:

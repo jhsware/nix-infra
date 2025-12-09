@@ -136,9 +136,7 @@ Future<void> deployClusterNode(
         });
 
     await sftpSend(
-        sftp,
-        '${workingDir.path}/$nodeType',
-        '/etc/nixos/cluster_node.nix',
+        sftp, '${workingDir.path}/$nodeType', '/etc/nixos/cluster_node.nix',
         substitutions: {
           'etcdCluster': ctrlNodes
               .map(
@@ -199,13 +197,15 @@ Future<void> deployAppsOnNode(
     final sftp = await sshClient.sftp();
 
     Map<String, String> nodeSubstitutions = Map.from(substitutions);
+    nodeSubstitutions['localhost.hostname'] = node.name;
     nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
     nodeSubstitutions['localhost.overlayIp'] =
         substitutions['${node.name}.overlayIp'] ??
             '-- overlayIp not found in etcd --';
 
     final expectedSecrets = <String>[];
-    final nodeConfigFile = File('${testDir == null ? workingDir.path : testDir.path}/nodes/${node.name}.nix');
+    final nodeConfigFile = File(
+        '${testDir == null ? workingDir.path : testDir.path}/nodes/${node.name}.nix');
     if (nodeConfigFile.existsSync()) {
       await sftpSend(
         sftp,

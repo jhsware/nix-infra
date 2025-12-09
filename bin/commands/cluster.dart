@@ -36,7 +36,7 @@ class ClusterCommand extends Command {
     addSubcommand(DestroyCommand());
     addSubcommand(DeployAppsCommand());
     addSubcommand(GCCommand());
-    addSubcommand(UpgradeCommand());
+    addSubcommand(UpgradeNixOsCommand());
     addSubcommand(RollbackCommand());
     addSubcommand(SSHCommand());
     addSubcommand(CmdCommand());
@@ -378,8 +378,8 @@ class DeployAppsCommand extends Command {
     final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
-    Directory? testDir =
-        await getWorkingDirectory(argResults!['test-dir']);
+    final testDir = argResults!['test-dir'] != null ?
+        await getWorkingDirectory(argResults!['test-dir']) : null;
 
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];

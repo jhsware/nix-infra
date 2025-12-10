@@ -1,10 +1,10 @@
 name: nix_infra
 description: Create a private PaaS on Hetzner Cloud in minutes.
-version: 0.12.0-alpha
+version: 0.12.1-alpha
 # repository: https://github.com/my_org/my_repo
 
 environment:
-  sdk: ^3.1.0-edge.d5415d624e2fe836cbaf4b8f77b7857b2990cb2a
+  sdk: ">=3.4.0 <4.0.0"
 
 # Add regular dependencies here.
 dependencies:

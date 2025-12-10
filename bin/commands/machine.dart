@@ -100,6 +100,7 @@ class UpdateCommand extends Command {
     argParser.addOption('target', mandatory: true);
     argParser.addOption('node-module', mandatory: true);
     argParser.addOption('nixos-version', mandatory: true);
+    argParser.addFlag('rebuild', defaultsTo: true);
   }
 
   @override

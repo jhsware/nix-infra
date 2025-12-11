@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_server/calculate.dart';
 import 'mcp_server/remote_command.dart';
-import 'mcp_server/cluster_nodes.dart';
+import 'mcp_server/available_nodes.dart';
 import 'mcp_server/etcd.dart';
 import 'mcp_server/filesystem.dart';
 import 'mcp_server/journalctl.dart';
@@ -68,18 +68,18 @@ void main() async {
     callback: remoteCommand.callback,
   );
 
-  // *** ListClusterNodes ***
+  // *** ListAvailableNodes ***
 
-  final listClusterNodes = ListClusterNodes(
+  final listClusterNodes = ListAvailableNodes(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     hcloudToken: hcloudToken,
   );
 
   server.tool(
-    "list-cluster-nodes",
-    description: ListClusterNodes.description,
-    inputSchemaProperties: ListClusterNodes.inputSchemaProperties,
+    "list-available-nodes",
+    description: ListAvailableNodes.description,
+    inputSchemaProperties: ListAvailableNodes.inputSchemaProperties,
     callback: listClusterNodes.callback,
   );
 

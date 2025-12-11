@@ -2,7 +2,7 @@
 #!nix-shell -i bash
 set -e
 
-if [[ "build-macos build-linux release list-identities create-keychain-profile notarytool-log" == *"$1"* ]]; then
+if [[ "build-macos build-linux release-macos list-identities create-keychain-profile notarytool-log" == *"$1"* ]]; then
   CMD="$1"
 fi
 
@@ -25,7 +25,7 @@ done
 
 checkVar() {
   if [ -z "$1" ]; then
-    echo "Missing env-var $2"
+    echo "Missing env-var $2" >&2
     exit 1
   fi
 }
@@ -46,12 +46,27 @@ if [ "$CMD" = "build-linux" ]; then
   exit 0
 fi
 
-if [ "$CMD" = "release" ]; then
+if [ "$CMD" = "release-macos" ]; then
   # https://scriptingosx.com/2021/07/notarize-a-command-line-tool-with-notarytool/
   checkVar "$DEV_CERTIFICATE" DEV_CERTIFICATE 
   checkVar "$DEV_APP_CERTIFICATE" DEV_APP_CERTIFICATE
   checkVar "$DEV_IDENTIFIER" DEV_IDENTIFIER
   checkVar "$DEV_CREDENTIAL_PROFILE" DEV_CREDENTIAL_PROFILE
+
+    # Check if xcode-select is pointing to Nix
+  XCODE_PATH=$(xcode-select -p 2>/dev/null)
+  if [ $? -eq 0 ] && echo "$XCODE_PATH" | grep -q '/nix/store'; then
+    echo "ERROR: xcode-select is pointing to a Nix path: $XCODE_PATH" >&2
+    echo "" >&2
+    echo "The notarytool requires native macOS SDKs, not Nix versions." >&2
+    echo "Please exit your nix-shell and run this script in a normal terminal." >&2
+    echo "" >&2
+    echo "If you're not in a nix-shell, reset xcode-select with:" >&2
+    echo "  sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer" >&2
+    echo "  # or" >&2
+    echo "  sudo xcode-select --switch /Library/Developer/CommandLineTools" >&2
+    exit 1
+  fi
 
   binaries="nix-infra nix-infra-machine-mcp nix-infra-cluster-mcp"
   
@@ -60,11 +75,18 @@ if [ "$CMD" = "release" ]; then
   echo "******************************************************"
   echo
 
+  # Check that binaries exist
+  for target in $binaries; do
+    if [ ! -f "bin/$target" ]; then
+      echo "You have not yet built $target, please run '$0 build-macos' and retry the release." >&2
+      exit 1
+    fi
+  done
+
   for target in $binaries; do
     PKG="bin/$target-installer"
     VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
 
-    [ -f "bin/$target" ] && rm -f "bin/$target"
     [ -f "bin/$target.zip" ] && rm -f "bin/$target.zip"
     [ -d "bin/$target-installer" ] && rm -rf "bin/$target-installer"
 

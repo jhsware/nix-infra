@@ -1,7 +1,7 @@
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:nix_infra/ssh.dart';
 import 'mcp_tool.dart';
-import 'systemctl/systemctl_command_parser.dart';
+import 'utils/systemctl_command_parser.dart';
 
 class SystemCtl extends McpTool {
   static const description = 'Query systemd unit status and information (read-only commands only).';

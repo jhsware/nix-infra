@@ -1,5 +1,5 @@
 import 'package:test/test.dart';
-import '../../bin/mcp_server/remote_command/bash_command_parser.dart';
+import '../../bin/mcp_server/utils/bash_command_parser.dart';
 
 void main() {
   group('BashCommandParser', () {

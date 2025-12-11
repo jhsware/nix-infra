@@ -1,5 +1,5 @@
 import 'package:test/test.dart';
-import '../../bin/mcp_server/systemctl/systemctl_command_parser.dart';
+import '../../bin/mcp_server/utils/systemctl_command_parser.dart';
 
 void main() {
   group('SystemctlCommandParser', () {

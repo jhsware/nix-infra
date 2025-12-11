@@ -8,6 +8,7 @@ import 'mcp_server/filesystem.dart';
 import 'mcp_server/journalctl.dart';
 import 'mcp_server/systemctl.dart';
 import 'mcp_server/test_runner.dart';
+import 'mcp_server/system_stats.dart';
 import 'package:nix_infra/helpers.dart';
 import 'mcp_server/utils.dart';
 
@@ -156,6 +157,21 @@ void main() async {
     description: TestRunner.description,
     inputSchemaProperties: TestRunner.inputSchemaProperties,
     callback: testRunner.callback,
+  );
+
+  // *** SystemStats ***
+
+  final systemStats = SystemStats(
+    workingDir: workingDir,
+    sshKeyName: sshKeyName,
+    hcloudToken: hcloudToken,
+  );
+
+  server.tool(
+    "system-stats",
+    description: SystemStats.description,
+    inputSchemaProperties: SystemStats.inputSchemaProperties,
+    callback: systemStats.callback,
   );
 
   server.connect(StdioServerTransport());

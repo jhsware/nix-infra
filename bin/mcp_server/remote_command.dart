@@ -1,7 +1,7 @@
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
 import 'package:nix_infra/ssh.dart';
-import 'remote_command/bash_command_parser.dart';
+import 'utils/bash_command_parser.dart';
 
 class RemoteCommand extends McpTool {
   static const description =

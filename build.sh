@@ -54,7 +54,7 @@ if [ "$CMD" = "release-macos" ]; then
   checkVar "$DEV_CREDENTIAL_PROFILE" DEV_CREDENTIAL_PROFILE
 
     # Check if xcode-select is pointing to Nix
-  XCODE_PATH=$(xcode-select -p 2>/dev/null)
+  XCODE_PATH=$(which xcode-select)
   if [ $? -eq 0 ] && echo "$XCODE_PATH" | grep -q '/nix/store'; then
     echo "ERROR: xcode-select is pointing to a Nix path: $XCODE_PATH" >&2
     echo "" >&2

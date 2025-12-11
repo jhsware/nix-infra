@@ -34,6 +34,8 @@ checkVar() {
 if [ "$CMD" = "build-macos" ]; then
   dart pub get --enforce-lockfile
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
+  dart compile exe --verbosity error --target-os macos -o bin/nix-infra-machine-mcp bin/nix_infra_machine_mcp.dart
+  dart compile exe --verbosity error --target-os macos -o bin/nix-infra-cluster-mcp bin/nix_infra_cluster_mcp.dart
 fi
 
 if [ "$CMD" = "build-linux" ]; then
@@ -51,42 +53,48 @@ if [ "$CMD" = "release" ]; then
   checkVar "$DEV_IDENTIFIER" DEV_IDENTIFIER
   checkVar "$DEV_CREDENTIAL_PROFILE" DEV_CREDENTIAL_PROFILE
 
-  PKG="bin/nix-infra-installer"
-  VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
+  binaries="nix-infra nix-infra-machine-mcp nix-infra-cluster-mcp"
+  
+  echo "******************************************************"
+  echo "Releasing: $binaries"
+  echo "******************************************************"
+  echo
 
-  [ -f "bin/nix-infra" ] && rm -f bin/nix-infra
-  [ -f "bin/nix-infra.zip" ] && rm -f bin/nix-infra.zip
-  [ -d "bin/nix-infra-installer" ] && rm -rf bin/nix-infra-installer
+  for target in $binaries; do
+    PKG="bin/$target-installer"
+    VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
 
-  dart pub get --enforce-lockfile
-  dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
+    [ -f "bin/$target" ] && rm -f "bin/$target"
+    [ -f "bin/$target.zip" ] && rm -f "bin/$target.zip"
+    [ -d "bin/$target-installer" ] && rm -rf "bin/$target-installer"
 
-  mkdir "$PKG"
-  cp bin/nix-infra $PKG/
+    mkdir "$PKG"
+    cp "bin/$target" "$PKG/"
 
-  # Sign the application with hardened runtime
-  # https://lessons.livecode.com/m/4071/l/1122100-codesigning-and-notarizing-your-lc-standalone-for-distribution-outside-the-mac-appstore
-  codesign --deep --force --verify --verbose --timestamp --options runtime \
-    --sign "$DEV_APP_CERTIFICATE" \
-    --entitlements "bin/entitlements.plist" \
-    $PKG/nix-infra
+    # Sign the application with hardened runtime
+    # https://lessons.livecode.com/m/4071/l/1122100-codesigning-and-notarizing-your-lc-standalone-for-distribution-outside-the-mac-appstore
+    codesign --deep --force --verify --verbose --timestamp --options runtime \
+      --sign "$DEV_APP_CERTIFICATE" \
+      --entitlements "bin/entitlements.plist" \
+      "$PKG/$target"
 
-  # Create package
-  pkgbuild --root "$PKG" \
-         --identifier "$DEV_IDENTIFIER" \
-         --version "$VERSION" \
-         --install-location "/usr/local/bin" \
-         --sign "$DEV_CERTIFICATE" \
-         "$PKG.pkg"
+    # Create package
+    pkgbuild --root "$PKG" \
+          --identifier "$DEV_IDENTIFIER" \
+          --version "$VERSION" \
+          --install-location "/usr/local/bin" \
+          --sign "$DEV_CERTIFICATE" \
+          "$PKG.pkg"
 
-  # Notarize
-  xcrun notarytool submit "$PKG.pkg" \
-    --keychain-profile "$DEV_CREDENTIAL_PROFILE" \
-    --wait
+    # Notarize
+    xcrun notarytool submit "$PKG.pkg" \
+      --keychain-profile "$DEV_CREDENTIAL_PROFILE" \
+      --wait
 
-  # Staple the notarization ticket
-  # https://stackoverflow.com/questions/58817903/how-to-download-notarized-files-from-apple
-  xcrun stapler staple "$PKG.pkg"
+    # Staple the notarization ticket
+    # https://stackoverflow.com/questions/58817903/how-to-download-notarized-files-from-apple
+    xcrun stapler staple "$PKG.pkg"
+  done
 fi
 
 if [ "$CMD" = "list-identities" ]; then
@@ -94,7 +102,7 @@ if [ "$CMD" = "list-identities" ]; then
 fi
 
 if [ "$CMD" = "notarytool-log" ]; then
-  xcrun notarytool log $LOG_ID --keychain-profile "$DEV_CREDENTIAL_PROFILE"
+  xcrun notarytool log "$LOG_ID" --keychain-profile "$DEV_CREDENTIAL_PROFILE"
 fi
 
 if [ "$CMD" = "create-keychain-profile" ]; then

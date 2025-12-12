@@ -4,6 +4,8 @@ Create a private PaaS on Hetzner Cloud in minutes. Leverage **NixOS** and **Nix 
 
 **Why nix-infra?** I wanted to test the limits of NixOS when it comes to maintainability and real-world use. There is a future for private PaaS solutions in a world where privacy and cost control are primary concerns—we just need to build it on the right foundation.
 
+> **Experimental:** nix-infra now includes [MCP server support](#mcp-server-experimental) for AI-assisted infrastructure management. Query node status, inspect logs, and manage your fleet through natural language conversations with Claude or other MCP-compatible AI assistants. This is an early experiment in making Linux system administration more accessible and efficient.
+
 **Benefits:**
 
 - **Low and predictable cost** — runs on Hetzner Cloud
@@ -247,6 +249,49 @@ state ingress {
 **Workers:** Stateless application containers run on worker nodes.
 
 **Ingress:** The ingress node exposes the cluster to the internet via an Nginx reverse proxy.
+
+## MCP Server (Experimental)
+
+nix-infra includes experimental [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers that enable AI assistants like Claude to query and manage your infrastructure through natural conversation.
+
+The vision is to provide an assistant that is more natural and efficient to use than complex GUI environments, while leveraging well-known Linux system administration tools available on the server by default. Instead of memorising command syntax or navigating dashboards, you can ask questions like "What's the health status of my service nodes?" or "Show me the recent logs for nginx".
+
+### Two MCP Servers
+
+- **nix-infra-cluster-mcp** — For HA clusters with etcd control plane
+- **nix-infra-machine-mcp** — For standalone machines or fleets
+
+### Available Tools
+
+| Tool | Description | Cluster | Machine |
+|------|-------------|:-------:|:-------:|
+| `list-available-nodes` | List all nodes with Hetzner ID, name, and IP | ✓ | ✓ |
+| `system-stats` | Query system health, disk I/O, memory, network, and processes | ✓ | ✓ |
+| `systemctl` | Query systemd unit status (read-only) | ✓ | ✓ |
+| `journalctl` | Query systemd journal logs (read-only) | ✓ | ✓ |
+| `remote-command` | Execute whitelisted commands over SSH | ✓ | ✓ |
+| `configuration-files` | Read local configuration files | ✓ | ✓ |
+| `test-runner` | Run tests on existing test cluster | ✓ | ✓ |
+| `etcd` | Query the etcd control plane (read-only) | ✓ | — |
+
+### Safety Measures
+
+The MCP servers implement several layers of protection:
+
+- **Command parsing and validation** — All commands are parsed and inspected before execution
+- **Read-only restrictions** — Tools like `systemctl`, `journalctl`, and `etcd` only allow read operations
+- **Whitelists and blacklists** — Remote commands are filtered against allowed/blocked command lists
+- **Path restrictions** — Filesystem operations are confined to the project directory with no absolute paths or hidden files
+
+### Security Considerations
+
+> ⚠️ **Be mindful of prompt injection.** The MCP executes shell commands on your infrastructure. While safety measures are in place, this is inherently a challenging security problem.
+>
+> **Assume you can destroy your environment at any time and prepare accordingly.** Maintain backups and ensure you can restore your infrastructure.
+
+### Usage
+
+The cluster templates include a `./cli claude` command that launches Claude with the MCP server configured. See the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) or [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) repositories for setup instructions.
 
 ## Secrets
 

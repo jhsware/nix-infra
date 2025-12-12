@@ -4,15 +4,21 @@
 
 A [draft release](https://github.com/jhsware/nix-infra/releases) with a linux binary is created
 
-4. Run the macOS release command 
+4. Buld the macOS binaries
 
 ```sh
-./build.sh release --env=./.env
+./build.sh build-macos --env=./.env
 ```
 
-5. Upload the signed installer to the draft release and:
+5. Run the macOS release command 
+
+```sh
+./build.sh release-macos --env=./.env
+```
+
+6. Upload the signed installer to the draft release and:
 - add a tag
 - title should be same as tag
 - add description
 
-6. Publish the release
+7. Publish the release

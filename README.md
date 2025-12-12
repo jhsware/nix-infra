@@ -1,126 +1,102 @@
 # nix-infra
 
-There is a future for private PaaS-solutions in a world where privacy and cost-control are primary concerns. We just needs to build it on the right foundation.
+Create a private PaaS on Hetzner Cloud in minutes. Leverage **NixOS** and **Nix Packages** to build a reproducible and auditable private cloud for your projects.
 
-Create a private PaaS on Hetzner Cloud in minutes using nix-infra. Leverage **NixOS** and **Nix Packages** to build a reproducable and auditable private cloud for your projects.
+**Why nix-infra?** I wanted to test the limits of NixOS when it comes to maintainability and real-world use. There is a future for private PaaS solutions in a world where privacy and cost control are primary concerns—we just need to build it on the right foundation.
 
-Why did I build this? I wanted to test the limits of NixOS when it comes to maintainability and real world use.
+**Benefits:**
 
-- low and predictable cost -- runs on Hetzner Cloud
-- reproducable and auditable -- 100% configuration in code
-- privacy -- all data within your private walled garden
-- easy to debug -- zero blackbox services
-- extendable -- install anything than runs on NixOS or as an OCI-container
-- customise in any way you like
+- **Low and predictable cost** — runs on Hetzner Cloud
+- **Reproducible and auditable** — 100% configuration in code
+- **Privacy** — all data within your private walled garden
+- **Easy to debug** — zero blackbox services
+- **Extensible** — install anything that runs on NixOS or as an OCI container
+- **Customisable** — modify and share modules to build your perfect private PaaS
 
-You can easily share and extend modules to build the perfect private PaaS.
+Low system requirements for each cluster node make virtual machine isolation per service/application cost-effective.
 
-Low system requirements for each cluster node makes virtual machine isolation per service/application cost effective.
+**Features:**
 
-Features:
-- runs NixOS as host OS
-- uses Systemd credentials to secure secrets
-- fault tolerant service mesh (with HAProxy + Etcd + Confd)
-- private encrypted overlay network (with flanneld + wireguard)
-- supports provisioning nodes in multiple data centers
-- run apps in OCI-containers with podman
+- NixOS as host OS
+- Systemd credentials for secure secrets management
+- Fault-tolerant service mesh (HAProxy + etcd + confd)
+- Private encrypted overlay network (Flanneld + WireGuard)
+- Multi-datacenter node provisioning
+- OCI container support with Podman
 
-Limitations:
-- NixOS doesn't support SELinux
-  - UPDATE: https://tristanxr.com/post/selinux-on-nixos/
+**Limitations:**
+
+- NixOS doesn't officially support SELinux (though [experimental work is underway](https://tristanxr.com/post/selinux-on-nixos/))
 - nix-infra currently only supports Hetzner Cloud
-- the code is the primary documentation
+- The code is the primary documentation
 
-Room for improvement:
-- hardening with AppArmor [major]
-- encryption of config folder at rest [medium]
-- rotating secrets [medium]
-- virtual tpm for systemd-credentials (not supported by Hetzner cloud)
-- visualise cluster health [major]
+**Room for improvement:**
+
+- Hardening with AppArmor [major]
+- Encryption of config folder at rest [medium]
+- Rotating secrets [medium]
+- Virtual TPM for systemd-credentials (not supported by Hetzner Cloud)
+- Cluster health visualisation [major]
 
 Apple discusses privacy in a post about [Private Cloud Compute](https://security.apple.com/blog/private-cloud-compute/).
 
 ## Getting Started
 
-You are recommended to install Nix on your machine and work in a nix-shell. If you don't know how to install Nix, try the [Determinate Systems Nix installer](https://github.com/DeterminateSystems/nix-installer), it has uninstall support and automatic garbage collection.
+### Prerequisites
 
-1. [Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary
+Install Nix on your machine to work in a nix-shell. If you don't have Nix installed, try the [Determinate Systems Nix installer](https://github.com/DeterminateSystems/nix-installer)—it has uninstall support and automatic garbage collection.
 
-Clone this repo and run `nix-shell` to ensure you get [the right version](https://github.com/jhsware/nix-infra/blob/main/nix/hcloud.nix) of the `hcloud` tool.
+[Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary. Clone this repo and run `nix-shell` to ensure you get [the right version](https://github.com/jhsware/nix-infra/blob/main/nix/hcloud.nix) of the `hcloud` tool.
 
+### Choose Your Setup
 
-### Option 1: Create a cluster setup
-2. Use the [nix-infra-test](https://github.com/jhsware/nix-infra-test) or [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) cluster templates
+**Option 1: High-availability cluster**
 
-### Option 2: Create a fleet of standalone machines
-2. Use the [nix-infra-test-machine](https://github.com/jhsware/nix-infra-test-machine) standalone machines template (contains a cli-script as a starter for you to customise)
+Use the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) template for a fault-tolerant multi-node cluster with service mesh and overlay networking.
 
-You will find instructions in the each repo. Basically you will download and run a test script that automates the installation of the cluster. Or, you can clone the repo and create your own bespoke automation scripts inspired by the test script.
+**Option 2: Standalone machines**
 
-### Test Script Options
+Use the [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) template for managing individual machines or fleets without cluster orchestration.
 
-To build without immediately tearing down the cluster:
+Each repo contains detailed instructions. You can either run the provided test script to automate installation, or clone the repo and create custom automation scripts.
 
+## Building From Source
+
+1. Install Nix (choose one):
+   - https://nixos.org/download/
+   - https://github.com/DeterminateSystems/nix-installer (supports uninstall)
+
+2. Clone the repo:
 ```sh
-$ ./test-nix-infra-with-apps.sh --env=.env --no-teardown
-# -- or --
-$ ./test-nix-infra-ha-base.sh --env=.env --no-teardown
+git clone git@github.com:jhsware/nix-infra.git
 ```
 
-Useful commands to explore the running test cluster (check the bash script for more):
-
+3. Build using the build script:
 ```sh
-$ ./test-nix-infra-with-apps.sh etcd --env=.env "get /cluster --prefix"
-$ ./test-nix-infra-with-apps.sh cmd --env=.env --target=ingress001 "uptime"
-$ ./test-nix-infra-with-apps.sh ssh --env=.env ingress001
-# -- or --
-$ ./test-nix-infra-ha-base.sh etcd --env=.env "get /cluster --prefix"
-$ ./test-nix-infra-ha-base.sh cmd --env=.env --target=ingress001 "uptime"
-$ ./test-nix-infra-ha-base.sh ssh --env=.env ingress001
-
-```
-
-To tear down the cluster:
-
-```sh
-$ ./test-nix-infra-with-apps.sh --env=.env teardown
-# -- or --
-$ ./test-nix-infra-ha-base.sh --env=.env teardown
-```
-
-## Build `nix-infra` From Source
-1. Install nix to build nix-infra (choose one)
-- https://nixos.org/download/
-- https://github.com/DeterminateSystems/nix-installer (supports uninstall)
-
-2. Clone the repo
-```sh
-$ git clone git@github.com:jhsware/nix-infra.git
-```
-
-3. Build nix-infra using the build script
-```sh
-$ cd nix-infra; ./build.sh
-# ouput: bin/nix-infra
+cd nix-infra && ./build.sh
+# output: bin/nix-infra
 ```
 
 ## Creating a Cluster
-Configuration of your cluster using the **Nix** language.
 
-Add remote actions written in **Bash** that can be run on cluster nodes.
+Configure your cluster using the **Nix** language. Add remote actions written in **Bash** that can be run on cluster nodes.
+
+### Quick Start
 
 1. Clone a cluster template
 2. Run `nix-infra init` to create the cluster configuration folder
-3. Create a `.env` file
-4. Add the created ssh-key to the ssh agent (probably: `ssh-add`)
-5. Provision nodes `nix-infra provision`
-6. Initialise control plane `nix-infra init-ctrl``
-7. Initialise cluster nodes `nix-infra init-node`
-8. Configure apps (apps consist of app_module and node specific configuration)
-9. Deploy apps `nix-infra deploy`
+3. Create a `.env` file with your Hetzner API token
+4. Add the created SSH key to the ssh agent (`ssh-add`)
+5. Provision nodes: `nix-infra provision`
+6. Initialise control plane: `nix-infra init-ctrl`
+7. Initialise cluster nodes: `nix-infra init-node`
+8. Configure apps (apps consist of app_module and node-specific configuration)
+9. Deploy apps: `nix-infra deploy`
 
-### Cluster Setup
-To create similar clusters you create a cluster template and fork it for each cluster.
+### Cluster Setup Patterns
+
+**Fork a template for each cluster:**
+
 ```mermaid
 stateDiagram
 direction LR
@@ -131,7 +107,8 @@ Template --> Cluster_1
 Template --> Cluster_2
 ```
 
-To share apps you copy them to your cluster repo.
+**Share apps between clusters by copying modules:**
+
 ```mermaid
 stateDiagram-v2
 direction LR
@@ -140,10 +117,11 @@ Cluster_1: Cluster 1
 Cluster_2: Cluster 2
 Template --> Cluster_1
 Template --> Cluster_2
-Cluster_1 --> Cluster_2 : copy<br>app_modules/monogdb.nix<br>app_modules/keydb.nix
+Cluster_1 --> Cluster_2 : copy<br>app_modules/mongodb.nix<br>app_modules/keydb.nix
 ```
 
-To create an exact copy of cluster, use the same cluster repo but different .env-files.
+**Create exact copies using the same repo with different .env files:**
+
 ```mermaid
 stateDiagram-v2
 direction LR
@@ -154,14 +132,14 @@ note left of Cluster_1 : .env-a
 note left of Cluster_1 : .env-b
 ```
 
-### Cluster Configuration
-The configuration files are related according to the diagram below. These are the files you would normally configure
-once you cluster is up and running:
+### Configuration Files
 
-- `nodes/[node_name].nix` -- install and configure apps on each node
-- `app_modules/[module_name].nix` -- configure apps available on the cluster
+The main configuration files you'll work with once your cluster is running:
 
-When you add new files to app_modules you need to import them in `app_modules/default.nix`.
+- `nodes/[node_name].nix` — install and configure apps on each node
+- `app_modules/[module_name].nix` — define apps available on the cluster
+
+When you add new files to app_modules, import them in `app_modules/default.nix`.
 
 ```mermaid
 stateDiagram-v2
@@ -192,13 +170,11 @@ state generated {
   hardwareConfiguration
   networking
 }
-
-
 ```
 
 ### Cluster Provisioning
 
-Provisioning of nodes, deployment of configurations and container images is done through the nix-infra CLI. The overlay network and service mesh is configured via the etcd-database of the control plane (ctrl).
+Node provisioning, configuration deployment, and container image management are handled through the nix-infra CLI. The overlay network and service mesh are configured via the etcd database on the control plane.
 
 ```mermaid
 stateDiagram-v2
@@ -221,15 +197,11 @@ state cluster_node {
   systemd
   flanneld
 }
-
 ```
 
-### Nix Packages and Container Images
-The registry node contains a package cache and registry which allows you to
-provide private packages and caching.
+### Package Cache and Container Registry
 
-The registry node also contains a container image registry where you push
-your private application images.
+The registry node contains a package cache and container image registry for distributing private packages and application images.
 
 ```mermaid
 stateDiagram
@@ -239,9 +211,9 @@ registry --> worker : img/pkg
 registry --> ingress : img/pkg
 ```
 
-### Service Overview
-The cluster has a simple topology with three layers. Only the ingress layer
-is exposed to the outside world.
+### Service Topology
+
+The cluster has three layers. Only the ingress layer is exposed to the outside world.
 
 ```mermaid
 stateDiagram
@@ -270,99 +242,21 @@ state ingress {
 }
 ```
 
-#### Services
-Stateful services such as DBs run on the service nodes.
+**Services:** Stateful services such as databases run on service nodes.
 
-#### Workers
-Worker nodes that run your stateless application containers.
+**Workers:** Stateless application containers run on worker nodes.
 
-#### Ingress
-The ingress node exposes the cluster to the internet via an Nginx reverse proxy.
-
-## Development Notes
-Testing:
-```sh
-scripts/end-to-end-tests/test-nix-infra-ha-cluster.sh --env=./.env
-scripts/end-to-end-tests/test-nix-infra-test.sh --env=./.env
-```
-
-## etcd data model
-
-```JavaScript
-/cluster/frontends
-    [app_name]/
-      instances/
-        [node_name]={
-          "node": "[node_name]",
-          "ipv4": "123.23.23.0",
-          "port": 123
-        }
-      meta_data={
-        publish: { ”port”: 5001 } // Used by HA proxy to expose service on worker nodes
-        env_prefix: "[PREFIX]"
-        env: { "PROTOCOL", "HOST", "PORT", "PATH" }
-      }
-/cluster/backends
-    [app_name]/
-      instances/
-        [node_name]={
-          "node": "[node_name]",
-          "ipv4": "123.23.23.0",
-          "port": 123
-        }
-      meta_data={
-        publish: { ”port”: 5001 } // Used by HA proxy to expose service on worker nodes
-        env_prefix: "[PREFIX]"
-        env: { "PROTOCOL", "HOST", "PORT", "PATH" }
-      }
-/cluster/services
-    [app_name]/
-      instances/
-        [node_name]={
-          "node": "[node_name]",
-          "ipv4": "123.23.23.0",
-          "port": 123
-        }
-      meta_data={
-        publish: { ”port”: 5001 } // Used by HA proxy to expose service on worker nodes
-        env_prefix: "[PREFIX]"
-        env: { "PROTOCOL", "HOST", "PORT", "PATH" }
-      }
-
-/cluster/nodes
-    [node_name]={
-      "name": "[node_name]",
-      "ipv4": "123.23.23.9",
-      "services": ["services", "frontends", "backends"] // Service types to access
-    }
-```
-### Node Lifecycle
-
-1. Provision node
-2. Initialise node
-3. Resister node
-4. Unregister node
-5. Destroy node
-
-### App Lifecycle
-
-CONSIDER: We might want to provide some kind of CI/CD-pipeline
-
-1. Register app
-2. Deploy app to node
-3. Register app instance
-4. Unregister app instance
-5. Remove app from node
-6. Unregister app
+**Ingress:** The ingress node exposes the cluster to the internet via an Nginx reverse proxy.
 
 ## Secrets
 
-Secrets are created either:
-- by storing the result of an action (i.e. when you create a user in a db), or
-- by explicitly storing a provided secret (i.e. an external API-key)
+Secrets are created either by storing the result of an action (e.g., when creating a database user) or by explicitly storing a provided secret (e.g., an external API key).
 
 ```sh
+# Store action output as a secret
 nix-infra [...] action [...] --store-as-secret="[secret-name]"
+
+# Store a provided secret
 nix-infra [...] store-secret [...] --secret="[your-secret]" --store-as-secret="[secret-name]"
 ```
 
@@ -390,17 +284,94 @@ ssh --> systemd_credentials : encrypt
 
 cli_deploy --> systemd
 systemd --> application : decrypt
-
 ```
 
+## Development
+
+### Testing
+
+```sh
+scripts/end-to-end-tests/test-nix-infra-ha-cluster.sh --env=./.env
+scripts/end-to-end-tests/test-nix-infra-test.sh --env=./.env
+```
+
+### etcd Data Model
+
+```javascript
+/cluster/frontends
+    [app_name]/
+      instances/
+        [node_name]={
+          "node": "[node_name]",
+          "ipv4": "123.23.23.0",
+          "port": 123
+        }
+      meta_data={
+        publish: { "port": 5001 },    // HAProxy uses this to expose service on worker nodes
+        env_prefix: "[PREFIX]",
+        env: { "PROTOCOL", "HOST", "PORT", "PATH" }
+      }
+
+/cluster/backends
+    [app_name]/
+      instances/
+        [node_name]={
+          "node": "[node_name]",
+          "ipv4": "123.23.23.0",
+          "port": 123
+        }
+      meta_data={
+        publish: { "port": 5001 },
+        env_prefix: "[PREFIX]",
+        env: { "PROTOCOL", "HOST", "PORT", "PATH" }
+      }
+
+/cluster/services
+    [app_name]/
+      instances/
+        [node_name]={
+          "node": "[node_name]",
+          "ipv4": "123.23.23.0",
+          "port": 123
+        }
+      meta_data={
+        publish: { "port": 5001 },
+        env_prefix: "[PREFIX]",
+        env: { "PROTOCOL", "HOST", "PORT", "PATH" }
+      }
+
+/cluster/nodes
+    [node_name]={
+      "name": "[node_name]",
+      "ipv4": "123.23.23.9",
+      "services": ["services", "frontends", "backends"]  // Service types to access
+    }
+```
+
+### Node Lifecycle
+
+1. Provision node
+2. Initialise node
+3. Register node
+4. Unregister node
+5. Destroy node
+
+### App Lifecycle
+
+1. Register app
+2. Deploy app to node
+3. Register app instance
+4. Unregister app instance
+5. Remove app from node
+6. Unregister app
 
 ## Internal Developer Notes
 
 ### Releasing
+
 1. Update version in pubspec.yaml
 
-2. Build macOS binary
-
+2. Build macOS binary:
 ```sh
 ./build.sh build-macos --env=.env
 ```
@@ -415,31 +386,29 @@ systemd --> application : decrypt
 
 7. Publish release
 
-### NOTES:
+### References
 
-TODO: Investigate secret rotation
-  - https://partial.solutions/2024/understanding-systemd-credentials.html
-TODO: Automated builds
-  - https://blog.thestateofme.com/2023/05/17/multi-architecture-automated-builds-for-dart-binaries/
+**Secret rotation:**
+- https://partial.solutions/2024/understanding-systemd-credentials.html
 
-TODO: Font
-  - https://www.dafont.com/aristotelica.font?text=nix-infra
-  - https://fonts.google.com/specimen/Comfortaa?preview.text=nix-infra&categoryFilters=Sans+Serif:%2FSans%2FRounded
+**Automated builds:**
+- https://blog.thestateofme.com/2023/05/17/multi-architecture-automated-builds-for-dart-binaries/
 
-DONE: Investigate using systemd credentials 
-  - https://dee.underscore.world/blog/systemd-credentials-nixos-containers/
+**Fonts:**
+- https://www.dafont.com/aristotelica.font?text=nix-infra
+- https://fonts.google.com/specimen/Comfortaa?preview.text=nix-infra
 
-INVESTIGATE: Securing systemd services
-  - https://documentation.suse.com/smart/security/pdf/systemd-securing_en.pdf
+**Systemd credentials:**
+- https://dee.underscore.world/blog/systemd-credentials-nixos-containers/
 
-INVESTIGATE: Tuning kernel and HAProxy
-  - https://medium.com/@pawilon/tuning-your-linux-kernel-and-haproxy-instance-for-high-loads-1a2105ea553e
+**Securing systemd services:**
+- https://documentation.suse.com/smart/security/pdf/systemd-securing_en.pdf
 
-DONE: Investigate Nixos secrets management
-  - https://nixos.wiki/wiki/Comparison_of_secret_managing_schemes
-  - secrix appears to have systemd integration
+**Tuning kernel and HAProxy:**
+- https://medium.com/@pawilon/tuning-your-linux-kernel-and-haproxy-instance-for-high-loads-1a2105ea553e
 
-DONE: Investigate using agenix for secrets
-  - https://nixos.wiki/wiki/Agenix
-  - https://github.com/ryantm/agenix
-  - https://github.com/FiloSottile/age
+**NixOS secrets management:**
+- https://nixos.wiki/wiki/Comparison_of_secret_managing_schemes
+- https://nixos.wiki/wiki/Agenix
+- https://github.com/ryantm/agenix
+- https://github.com/FiloSottile/age

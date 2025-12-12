@@ -46,9 +46,7 @@ Apple discusses privacy in a post about [Private Cloud Compute](https://security
 
 ### Prerequisites
 
-Install Nix on your machine to work in a nix-shell. If you don't have Nix installed, try the [Determinate Systems Nix installer](https://github.com/DeterminateSystems/nix-installer)—it has uninstall support and automatic garbage collection.
-
-[Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary. Clone this repo and run `nix-shell` to ensure you get [the right version](https://github.com/jhsware/nix-infra/blob/main/nix/hcloud.nix) of the `hcloud` tool.
+[Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary.
 
 ### Choose Your Setup
 

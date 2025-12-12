@@ -37,6 +37,7 @@ class PublishImageCommand extends Command {
       ..addOption('file', mandatory: true, help: 'Image file path')
       ..addOption('image-name', mandatory: true, help: 'Name for the image')
       ..addOption('image-tag', mandatory: true, help: 'Tag for the image, probably version')
+      ..addFlag('use-localhost', help: 'Registry is listening to localhost on target node', defaultsTo: false)
       ..addFlag('batch',
           help: 'Run non-interactively using environment variables', defaultsTo: false);
   }
@@ -55,6 +56,7 @@ class PublishImageCommand extends Command {
     final String fileName = argResults!['file'];
     final String imageName = argResults!['image-name'];
     final String imageTag = argResults!['image-tag'];
+    final bool useLocalhost = argResults!['use-localhost'];
 
     areYouSure('Are you sure you want to publish this image?', batch);
 
@@ -63,7 +65,7 @@ class PublishImageCommand extends Command {
     final cluster = await hcloud.getServers();
 
     await publishImageToRegistry(workingDir, cluster, nodes.first,
-        file: fileName, name: imageName, tag: imageTag, debug: debug);
+        file: fileName, name: imageName, tag: imageTag, useLocalhost: useLocalhost, debug: debug);
   }
 }
 

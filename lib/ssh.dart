@@ -80,6 +80,7 @@ Future<String> runActionScriptOverSsh(
   }
 
   Map<String, String> nodeSubstitutions = Map.from(substitutions);
+  nodeSubstitutions['localhost.hostname'] = target.name;
   nodeSubstitutions['localhost.ipv4'] = target.ipAddr;
   nodeSubstitutions['localhost.overlayIp'] =
       substitutions['${target.name}.overlayIp'] ??
@@ -111,6 +112,7 @@ Future<String> runActionScriptOverSsh(
 
   await sftpSend(sftp, script.path, '/root/action.sh');
 
+  echoDebug('$envVarsToRemote bash /root/action.sh $cmd');
   final res = await sshClient.run(
     // '$envVarsToRemote bash -s < /root/action.sh -- $cmd',
     '$envVarsToRemote bash /root/action.sh $cmd',
@@ -234,10 +236,10 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
   });
 
   await shell.done;
-  
+
   stdin.echoMode = true;
   stdin.lineMode = true;
-  
+
   shell.close();
   sshClient.close();
 }

@@ -50,6 +50,7 @@ Future<void> deployMachine(
         substitutions: {
           'sshKey': authorizedKey,
           'nodeName': node.name,
+          'nixVersion': nixVersion,
         });
 
     await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',
@@ -122,6 +123,7 @@ Future<void> deployClusterNode(
         substitutions: {
           'sshKey': authorizedKey,
           'nodeName': node.name,
+          'nixVersion': nixVersion,
         });
 
     await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',
@@ -169,6 +171,8 @@ Future<void> deployAppsOnNode(
   required String secretsPwd,
   bool debug = false,
   bool overlayNetwork = true,
+  // If we are running a test, we add a test directory that contains separate node configurations
+  Directory? testDir,
 }) async {
   // Create list of variable substitutions
   final substitutions = Map.fromEntries(
@@ -193,13 +197,15 @@ Future<void> deployAppsOnNode(
     final sftp = await sshClient.sftp();
 
     Map<String, String> nodeSubstitutions = Map.from(substitutions);
+    nodeSubstitutions['localhost.hostname'] = node.name;
     nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
     nodeSubstitutions['localhost.overlayIp'] =
         substitutions['${node.name}.overlayIp'] ??
             '-- overlayIp not found in etcd --';
 
     final expectedSecrets = <String>[];
-    final nodeConfigFile = File('${workingDir.path}/nodes/${node.name}.nix');
+    final nodeConfigFile = File(
+        '${testDir == null ? workingDir.path : testDir.path}/nodes/${node.name}.nix');
     if (nodeConfigFile.existsSync()) {
       await sftpSend(
         sftp,

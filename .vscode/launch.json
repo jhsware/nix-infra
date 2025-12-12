@@ -5,6 +5,52 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Bash-Debug (run-tests.sh)",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/TEST_NIX_INFRA/__test__/run-tests.sh",
+      "args": [
+        "action",
+        "--target=service002",
+        "mariadb",
+        "status"
+      ]
+    },
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "env": {
+        "TEMPLATE_REPO": "../nix-infra-ha-cluster"
+      },
+      "name": "Bash-Debug (test-nix-infra-ha-base.sh)",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/scripts/test-nix-infra-ha-base.sh",
+      "args": [
+        "create",
+        "--branch=nixos-native-services",
+        "--env=.env-test-ha",
+        "--no-teardown"
+      ]
+    },
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "env": {
+        "TEMPLATE_REPO": "../nix-infra-ha-cluster"
+      },
+      "name": "Bash-Debug (test-nix-infra-ha-mongodb.sh)",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/scripts/test-nix-infra-ha-mongodb.sh",
+      "args": [
+        "create",
+        "--branch=nixos-native-services",
+        "--env=.env-test-ha",
+        "--no-teardown"
+      ]
+    },
+
+    {
       "name": "init",
       "request": "launch",
       "type": "dart",
@@ -13,9 +59,7 @@
       "args": [
         "init",
         "--batch",
-        "-d",
-        "../TEST_INFRA",
-        "--env=./.env-test",
+        "-d", "./TEST_NIX_INFRA",
         "--debug",
         "--batch"
       ]
@@ -27,17 +71,29 @@
       "toolArgs": ["--verbosity=error"],
       "program": "bin/nix_infra.dart",
       "args": [
-        "provision",
+        "cluster", "provision",
         "--batch",
-        "-d",
-        "../TEST_INFRA",
-        "--env=./.env-test",
-        "--nixos-version=$NIXOS_VERSION",
-        "--ssh-key=$SSH_KEY",
+        "-d", "./TEST_NIX_INFRA",
+        "--nixos-version=25.05",
+        "--ssh-key=nixinfra",
         "--location=hel1",
         "--machine-type=cpx21",
-        "--node-names=etcd001 etcd002 etcd003",
+        "--node-names=etcd001",
         "--placement-group=ctrl-plane"
+      ]
+    },
+    {
+      "name": "destroy",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster", "destroy",
+        "--batch",
+        "-d", "./TEST_NIX_INFRA",
+        "--target=etcd001",
+        "--ctrl-nodes=etcd001",
       ]
     },
     {
@@ -47,10 +103,8 @@
       "toolArgs": ["--verbosity=error"],
       "program": "bin/nix_infra.dart",
       "args": [
-        "action",
-        "-d",
-        "../TEST_INFRA",
-        "--env=./.env",
+        "cluster", "action",
+        "-d", "./TEST_NIX_INFRA",
         "--debug",
         "--batch",
         "--target=service001",
@@ -59,5 +113,60 @@
         "--env-vars=NODE_1=[%%service001.overlayIp%%],NODE_2=[%%service002.overlayIp%%],NODE_3=[%%service003.overlayIp%%]",
       ]
     }, 
+    {
+      "name": "deploy-apps",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster",
+        "deploy-apps",
+        "-d", "./TEST_INFRA_HA",
+        "--debug",
+        "--batch",
+        "--target=worker001",
+      ]
+    },
+    {
+      "name": "init-node",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster",
+        "init-node",
+        "-d", "./TEST_NIX_INFRA",
+        "--batch",
+        "--debug",
+        "--nixos-version=24.11",
+        "--target=worker001",
+        "--node-module=node_types/cluster_node.nix",
+        "--service-group=backends",
+        "--ctrl-nodes=etcd001",
+        
+      ]
+    },
+    {
+      "name": "update-node",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--verbosity=error"],
+      "program": "bin/nix_infra.dart",
+      "args": [
+        "cluster",
+        "update-node",
+        "-d", "./TEST_NIX_INFRA",
+        "--batch",
+        "--debug",
+        "--nixos-version=24.11",
+        "--target=worker001",
+        "--node-module=node_types/cluster_node.nix",
+        "--test-dir=TEST_INFRA_HA/__test__/mariadb",
+        "--ctrl-nodes=etcd001",
+        
+      ]
+    },
   ]
 }

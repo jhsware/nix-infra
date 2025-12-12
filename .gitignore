@@ -1,9 +1,8 @@
 # https://dart.dev/guides/libraries/private-files
 # Created by `dart pub`
-bin/nix-infra
+bin/nix-infra*
 .dart_tool/
 .env
 .env-*
-nix-infra-installer.pkg
-bin/nix-infra-installer
-nix-infra-macos.pkg
+*.log
+TEST_NIX_INFRA/

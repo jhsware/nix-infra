@@ -55,7 +55,7 @@ fi
 
 source $SCRIPT_DIR/check.sh
 cmd () { # Override the local declaration
-  $NIX_INFRA cluster cmd -d $WORK_DIR --target="$1" "$2"
+  $NIX_INFRA cluster cmd -d "$WORK_DIR" --target="$1" "$2"
 }
 
 testCluster() {
@@ -63,15 +63,15 @@ testCluster() {
 }
 
 tearDownCluster() {
-  $NIX_INFRA destroy -d $WORK_DIR --batch \
+  $NIX_INFRA destroy -d "$WORK_DIR" --batch \
       --target="$CLUSTER_NODES" \
       --ctrl-nodes="$CTRL"
 
-  $NIX_INFRA destroy -d $WORK_DIR --batch \
+  $NIX_INFRA destroy -d "$WORK_DIR" --batch \
       --target="$CTRL" \
       --ctrl-nodes="$CTRL"
 
-  $NIX_INFRA remove-ssh-key -d $WORK_DIR --batch --ssh-key-name="$SSH_KEY"
+  $NIX_INFRA remove-ssh-key -d "$WORK_DIR" --batch --ssh-key-name="$SSH_KEY"
 }
 
 if [ "$CMD" = "teardown" ]; then
@@ -123,26 +123,26 @@ cleanupOnFail() {
   fi
 }
 
-$NIX_INFRA init -d $WORK_DIR --batch
+$NIX_INFRA init -d "$WORK_DIR" --batch
 
 # We need to add the ssh-key for it to work for some reason
 ssh-add $WORK_DIR/ssh/$SSH_KEY
 
 echoLog "Starting..."
 for i in {1..5}; do
-  _start=`date +%s`
-  $NIX_INFRA provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
-      --nixos-version=$NIXOS_VERSION \
+  _start=$(date +%s)
+  $NIX_INFRA provision -d "$WORK_DIR" --batch --env="$WORK_DIR/.env" \
+      --nixos-version="$NIXOS_VERSION" \
       --ssh-key=$SSH_KEY \
       --location=hel1 \
       --machine-type=cpx21 \
       --node-names="$CTRL $CLUSTER_NODES"
   res=$?
-  _provision=`date +%s`
+  _provision=$(date +%s)
   if [ $res -ne 0 ]; then
     echoLog "ERROR: Provisioning failed! Cleaning up..."
   else
-    echoLog "SUCCESS: $(printTime $_start $_provision)"
+    echoLog "SUCCESS: $(printTime _start _provision)"
   fi
   tearDownCluster
   sleep 60

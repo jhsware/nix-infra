@@ -126,7 +126,8 @@ Future<bool> sftpExists(
 
 Future<String> getSshKeyAsPem(Directory workingDir, String name) async {
   // return File('${Platform.environment['HOME']}/.ssh/$name').readAsString();
-  return File('${workingDir.path}/ssh/$name').readAsString();
+  final sshKey = await File('${workingDir.path}/ssh/$name').readAsString();
+  return sshKey.trim();
 }
 
 String fileName(File file) {

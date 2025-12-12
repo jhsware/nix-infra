@@ -8,6 +8,7 @@ import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/types.dart';
 import 'package:nix_infra/hcloud.dart';
+import 'etcd.dart';
 import 'shared.dart';
 import 'utils.dart';
 
@@ -35,16 +36,16 @@ class ClusterCommand extends Command {
     addSubcommand(DestroyCommand());
     addSubcommand(DeployAppsCommand());
     addSubcommand(GCCommand());
-    addSubcommand(UpgradeCommand());
+    addSubcommand(UpgradeNixOsCommand());
     addSubcommand(RollbackCommand());
     addSubcommand(SSHCommand());
     addSubcommand(CmdCommand());
     addSubcommand(PortForwardCommand());
     addSubcommand(ActionCommand(overlayNetwork: true));
-    
+
     addSubcommand(UploadCommand());
-    
-    // addSubcommand(EtcdCommand());
+
+    addSubcommand(EtcdCommand());
   }
 }
 
@@ -368,6 +369,7 @@ class DeployAppsCommand extends Command {
     argParser
       ..addFlag('batch', defaultsTo: false)
       ..addFlag('rebuild', defaultsTo: false)
+      ..addOption('test-dir', mandatory: false)
       ..addOption('target', mandatory: true);
   }
 
@@ -376,6 +378,8 @@ class DeployAppsCommand extends Command {
     final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
+    final testDir = argResults!['test-dir'] != null ?
+        await getWorkingDirectory(argResults!['test-dir']) : null;
 
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
@@ -393,7 +397,6 @@ class DeployAppsCommand extends Command {
     final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
     final nodes = await hcloud.getServers(only: targets);
     final cluster = await hcloud.getServers();
-
     await deployAppsOnNode(
       workingDir,
       cluster,
@@ -401,8 +404,8 @@ class DeployAppsCommand extends Command {
       secretsPwd: secretsPwd,
       debug: debug,
       overlayNetwork: true,
+      testDir: testDir,
     );
-
     if (rebuild) {
       await nixosRebuild(workingDir, nodes);
       // I don't believe this is needed for app updates, it should

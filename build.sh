@@ -1,7 +1,8 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i bash
+set -e
 
-if [[ "build-macos build-linux release list-identities create-keychain-profile notarytool-log" == *"$1"* ]]; then
+if [[ "build-macos build-linux release-macos list-identities create-keychain-profile notarytool-log" == *"$1"* ]]; then
   CMD="$1"
 fi
 
@@ -24,7 +25,7 @@ done
 
 checkVar() {
   if [ -z "$1" ]; then
-    echo "Missing env-var $2"
+    echo "Missing env-var $2" >&2
     exit 1
   fi
 }
@@ -33,6 +34,8 @@ checkVar() {
 if [ "$CMD" = "build-macos" ]; then
   dart pub get --enforce-lockfile
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
+  dart compile exe --verbosity error --target-os macos -o bin/nix-infra-machine-mcp bin/nix_infra_machine_mcp.dart
+  dart compile exe --verbosity error --target-os macos -o bin/nix-infra-cluster-mcp bin/nix_infra_cluster_mcp.dart
 fi
 
 if [ "$CMD" = "build-linux" ]; then
@@ -43,46 +46,77 @@ if [ "$CMD" = "build-linux" ]; then
   exit 0
 fi
 
-if [ "$CMD" = "release" ]; then
+if [ "$CMD" = "release-macos" ]; then
   # https://scriptingosx.com/2021/07/notarize-a-command-line-tool-with-notarytool/
-  checkVar $DEV_CERTIFICATE DEV_CERTIFICATE 
+  checkVar "$DEV_CERTIFICATE" DEV_CERTIFICATE 
+  checkVar "$DEV_APP_CERTIFICATE" DEV_APP_CERTIFICATE
+  checkVar "$DEV_IDENTIFIER" DEV_IDENTIFIER
+  checkVar "$DEV_CREDENTIAL_PROFILE" DEV_CREDENTIAL_PROFILE
+
+    # Check if xcode-select is pointing to Nix
+  XCODE_PATH=$(which xcode-select)
+  if [ $? -eq 0 ] && echo "$XCODE_PATH" | grep -q '/nix/store'; then
+    echo "ERROR: xcode-select is pointing to a Nix path: $XCODE_PATH" >&2
+    echo "" >&2
+    echo "The notarytool requires native macOS SDKs, not Nix versions." >&2
+    echo "Please exit your nix-shell and run this script in a normal terminal." >&2
+    echo "" >&2
+    echo "If you're not in a nix-shell, reset xcode-select with:" >&2
+    echo "  sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer" >&2
+    echo "  # or" >&2
+    echo "  sudo xcode-select --switch /Library/Developer/CommandLineTools" >&2
+    exit 1
+  fi
+
+  binaries="nix-infra nix-infra-machine-mcp nix-infra-cluster-mcp"
   
-  PKG="bin/nix-infra-installer"
-  VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
+  echo "******************************************************"
+  echo "Releasing: $binaries"
+  echo "******************************************************"
+  echo
 
-  [ -f "bin/nix-infra" ] && rm -f bin/nix-infra
-  [ -f "bin/nix-infra.zip" ] && rm -f bin/nix-infra.zip
-  [ -d "bin/nix-infra-installer" ] && rm -rf bin/nix-infra-installer
+  # Check that binaries exist
+  for target in $binaries; do
+    if [ ! -f "bin/$target" ]; then
+      echo "You have not yet built $target, please run '$0 build-macos' and retry the release." >&2
+      exit 1
+    fi
+  done
 
-  dart pub get --enforce-lockfile
-  dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
+  for target in $binaries; do
+    PKG="bin/$target-installer"
+    VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
 
-  mkdir "$PKG"
-  cp bin/nix-infra $PKG/
+    [ -f "bin/$target.zip" ] && rm -f "bin/$target.zip"
+    [ -d "bin/$target-installer" ] && rm -rf "bin/$target-installer"
 
-  # Sign the application with hardened runtime
-  # https://lessons.livecode.com/m/4071/l/1122100-codesigning-and-notarizing-your-lc-standalone-for-distribution-outside-the-mac-appstore
-  codesign --deep --force --verify --verbose --timestamp --options runtime \
-    --sign "$DEV_APP_CERTIFICATE" \
-    --entitlements "bin/entitlements.plist" \
-    $PKG/nix-infra
+    mkdir "$PKG"
+    cp "bin/$target" "$PKG/"
 
-  # Create package
-  pkgbuild --root "$PKG" \
-         --identifier "$DEV_IDENTIFIER" \
-         --version "$VERSION" \
-         --install-location "/usr/local/bin" \
-         --sign "$DEV_CERTIFICATE" \
-         "$PKG.pkg"
+    # Sign the application with hardened runtime
+    # https://lessons.livecode.com/m/4071/l/1122100-codesigning-and-notarizing-your-lc-standalone-for-distribution-outside-the-mac-appstore
+    codesign --deep --force --verify --verbose --timestamp --options runtime \
+      --sign "$DEV_APP_CERTIFICATE" \
+      --entitlements "bin/entitlements.plist" \
+      "$PKG/$target"
 
-  # Notarize
-  xcrun notarytool submit "$PKG.pkg" \
-    --keychain-profile "$DEV_CREDENTIAL_PROFILE" \
-    --wait
+    # Create package
+    pkgbuild --root "$PKG" \
+          --identifier "$DEV_IDENTIFIER" \
+          --version "$VERSION" \
+          --install-location "/usr/local/bin" \
+          --sign "$DEV_CERTIFICATE" \
+          "$PKG.pkg"
 
-  # Staple the notarization ticket
-  # https://stackoverflow.com/questions/58817903/how-to-download-notarized-files-from-apple
-  xcrun stapler staple "$PKG.pkg"
+    # Notarize
+    xcrun notarytool submit "$PKG.pkg" \
+      --keychain-profile "$DEV_CREDENTIAL_PROFILE" \
+      --wait
+
+    # Staple the notarization ticket
+    # https://stackoverflow.com/questions/58817903/how-to-download-notarized-files-from-apple
+    xcrun stapler staple "$PKG.pkg"
+  done
 fi
 
 if [ "$CMD" = "list-identities" ]; then
@@ -90,7 +124,7 @@ if [ "$CMD" = "list-identities" ]; then
 fi
 
 if [ "$CMD" = "notarytool-log" ]; then
-  xcrun notarytool log $LOG_ID --keychain-profile "$DEV_CREDENTIAL_PROFILE"
+  xcrun notarytool log "$LOG_ID" --keychain-profile "$DEV_CREDENTIAL_PROFILE"
 fi
 
 if [ "$CMD" = "create-keychain-profile" ]; then

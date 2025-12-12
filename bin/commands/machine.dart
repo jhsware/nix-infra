@@ -30,7 +30,7 @@ class FleetCommand extends Command {
     addSubcommand(DestroyCommand());
     addSubcommand(DeployAppsCommand());
     addSubcommand(GCCommand());
-    addSubcommand(UpgradeCommand());
+    addSubcommand(UpgradeNixOsCommand());
     addSubcommand(RollbackCommand());
     addSubcommand(SSHCommand());
     addSubcommand(CmdCommand());
@@ -100,6 +100,7 @@ class UpdateCommand extends Command {
     argParser.addOption('target', mandatory: true);
     argParser.addOption('node-module', mandatory: true);
     argParser.addOption('nixos-version', mandatory: true);
+    argParser.addFlag('rebuild', defaultsTo: true);
   }
 
   @override

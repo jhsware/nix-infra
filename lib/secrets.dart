@@ -34,7 +34,6 @@ Future<void> saveSecret(Directory workingDir, String secretsPassword,
     {bool debug = false}) async {
   final secretsDir = Directory('${workingDir.path}/secrets');
 
-
   if (!secretsDir.existsSync()) {
     echo('Create secrets dir');
     final shell = Shell(
@@ -75,7 +74,7 @@ Future<String> readSecret(
   final secretFile = File('${secretsDir.path}/$secretNamespace');
   if (!secretFile.existsSync()) {
     throw Exception(
-        'Secret file "$secretNamespace" not found in "${secretsDir.path}"');
+        'Secret file "$secretNamespace" not found at "${secretsDir.path}"');
   }
 
   final shell = Shell(
@@ -128,7 +127,7 @@ Future<void> syncSecrets(
   bool debug = false,
   bool overlayNetwork = true,
 }) async {
-    // Create list of variable substitutions
+  // Create list of variable substitutions
   final substitutions = Map.fromEntries(
       cluster.map((node) => MapEntry('${node.name}.ipv4', node.ipAddr)));
 
@@ -138,12 +137,13 @@ Future<void> syncSecrets(
       substitutions['${entry.key}.overlayIp'] = entry.value;
     }
   }
-  
+
   Map<String, String> nodeSubstitutions = Map.from(substitutions);
-    nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
-    nodeSubstitutions['localhost.overlayIp'] =
-        substitutions['${node.name}.overlayIp'] ??
-            '-- overlayIp not found in etcd --';
+  nodeSubstitutions['localhost.hostname'] = node.name;
+  nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
+  nodeSubstitutions['localhost.overlayIp'] =
+      substitutions['${node.name}.overlayIp'] ??
+          '-- overlayIp not found in etcd --';
 
   final sftp = await sshClient.sftp();
   await sftpMkDir(sftp, '/root/secrets');
@@ -153,16 +153,20 @@ Future<void> syncSecrets(
     if (debug) echoDebug('Expected secrets: $expectedSecrets');
     // Deploy secrets to target node
     for (final secretName in expectedSecrets) {
-      final secret = await readSecret(workingDir, secretsPwd, secretName);
-      final newSecret =
-        substitute(secret, substitutions, expectedSecrets: expectedSecrets);
-      await deploySecretOnRemote(
-        workingDir,
-        secretName,
-        newSecret,
-        node,
-        sshClient: sshClient,
-      );
+      try {
+        final secret = await readSecret(workingDir, secretsPwd, secretName);
+        final newSecret =
+            substitute(secret, substitutions, expectedSecrets: expectedSecrets);
+        await deploySecretOnRemote(
+          workingDir,
+          secretName,
+          newSecret,
+          node,
+          sshClient: sshClient,
+        );
+      } catch (err) {
+        echo("WARNING! Secret $secretName does not exist in project, skipping");
+      }
     }
   }
 

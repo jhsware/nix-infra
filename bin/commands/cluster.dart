@@ -7,7 +7,7 @@ import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/types.dart';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'etcd.dart';
 import 'shared.dart';
 import 'utils.dart';
@@ -72,16 +72,15 @@ class InitCtrlCommand extends Command {
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
     final String clusterUuid = argResults!['cluster-uuid'];
 
     areYouSure('Are you sure you want to init a control plane?', batch);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
         readPassword(ReadPasswordEnum.caIntermediate, batch);
@@ -142,16 +141,15 @@ class UpdateCtrlCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
     final String clusterUuid = argResults!['cluster-uuid'];
 
     areYouSure('Are you sure you want to update the control plane?', batch);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     await deployControlNode(
       workingDir,
@@ -191,7 +189,6 @@ class InitNodeCommand extends Command {
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
@@ -213,8 +210,8 @@ class InitNodeCommand extends Command {
     final certCompany = env['CERT_COMPANY'] ?? 'unknown';
 
     // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
 
     await generateCerts(
       workingDir,
@@ -232,8 +229,8 @@ class InitNodeCommand extends Command {
     await deployEtcdCertsOnClusterNode(workingDir, nodes, [CertType.tls],
         debug: debug);
 
-    final ctrlNodes = await hcloud.getServers(only: ctrlNodeNames);
-    final cluster = await hcloud.getServers();
+    final ctrlNodes = await provider.getServers(only: ctrlNodeNames);
+    final cluster = await provider.getServers();
 
     await deployClusterNode(
       workingDir,
@@ -277,7 +274,6 @@ class UpdateNodeCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
@@ -290,11 +286,11 @@ class UpdateNodeCommand extends Command {
     areYouSure('Are you sure you want to update the nodes?', batch);
 
     // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
 
-    final ctrlNodes = await hcloud.getServers(only: ctrlNodeNames);
-    final cluster = await hcloud.getServers();
+    final ctrlNodes = await provider.getServers(only: ctrlNodeNames);
+    final cluster = await provider.getServers();
 
     await deployClusterNode(
       workingDir,
@@ -335,20 +331,27 @@ class DestroyCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
+    final String hcloudToken = env['HCLOUD_TOKEN'] ?? '';
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to destroy these nodes?', batch);
 
-    // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final ctrlNodes = await hcloud.getServers(only: ctrlNodeNames);
-    final nodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final ctrlNodes = await provider.getServers(only: ctrlNodeNames);
+    final nodes = await provider.getServers(only: targets);
 
     await unregisterClusterNode(workingDir, nodes, ctrlNodes: ctrlNodes)
         .catchError((_) {});
+
+    // Check if provider supports destroying servers
+    if (!provider.supportsDestroyServer) {
+      echo('WARNING: The ${provider.providerName} provider does not support destroying servers.');
+      echo('For self-hosted servers, remove them manually from servers.yaml instead.');
+      echo('Node unregistered from cluster successfully.');
+      return;
+    }
 
     await destroyNodes(
       workingDir,
@@ -384,7 +387,6 @@ class DeployAppsCommand extends Command {
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final bool rebuild = argResults!['rebuild'];
 
@@ -394,9 +396,9 @@ class DeployAppsCommand extends Command {
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
     // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
-    final cluster = await hcloud.getServers();
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
+    final cluster = await provider.getServers();
     await deployAppsOnNode(
       workingDir,
       cluster,
@@ -436,15 +438,14 @@ class PortForwardCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final localPort = int.parse(argResults!['local-port']);
     final remotePort = int.parse(argResults!['remote-port']);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final cluster = await hcloud.getServers();
-    final nodes = await hcloud.getServers(only: targets);
+    final cluster = await provider.getServers();
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Node not found in cluster: $targets');
       exit(2);
@@ -480,14 +481,13 @@ class PortForwardCommand extends Command {
 //     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
 //     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-//     final String hcloudToken = env['HCLOUD_TOKEN']!;
 //     final List<String> ctrlNodeNames =
 //         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
 //     final String cmd = argResults!.rest.join(' ');
 
-//     final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+//     final provider = await getProvider(workingDir, env, sshKeyName);
 
-//     final ctrlNodes = await hcloud.getServers(only: ctrlNodeNames);
+//     final ctrlNodes = await provider.getServers(only: ctrlNodeNames);
 //     if (ctrlNodes.isEmpty) {
 //       echo('ERROR! Nodes not found in cluster: $ctrlNodeNames');
 //       exit(2);

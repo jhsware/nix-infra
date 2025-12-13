@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:nix_infra/cluster_node.dart';
 import 'package:nix_infra/control_node.dart';
 import 'package:nix_infra/docker_registry.dart';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/secrets.dart';
@@ -215,12 +215,18 @@ Future<void> legacyCommands(List<String> arguments) async {
       exit(0);
   }
 
-  if (env['HCLOUD_TOKEN'] == null) {
-    echo('ERROR! env var HCLOUD_TOKEN not found');
+  // Get provider - will auto-detect based on configuration
+  late InfrastructureProvider provider;
+  try {
+    provider = await ProviderFactory.autoDetect(
+      workingDir: workingDir,
+      env: env,
+      sshKeyName: sshKeyName,
+    );
+  } catch (e) {
+    echo('ERROR! $e');
     exit(2);
   }
-
-  final hcloud = HetznerCloud(token: env['HCLOUD_TOKEN']!, sshKey: sshKeyName);
 
   // ---- COMMANDS that require cloud stuff ----
   switch (argResults.command?.name) {

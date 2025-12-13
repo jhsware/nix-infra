@@ -18,6 +18,7 @@ dependencies:
   process_run: ^0.14.2
   cli_script: ^1.0.0
   ansi_escapes: ^1.1.0
+  yaml: ^3.1.2
   # path: ^1.8.0
 
 dev_dependencies:

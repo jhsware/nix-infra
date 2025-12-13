@@ -1,11 +1,12 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/types.dart';
 import './utils.dart';
+import './shared.dart';
 
 Future<Iterable<String>> runEtcdCtlCommand(
     Directory workingDir, String cmd, ClusterNode node) async {
@@ -63,7 +64,6 @@ class EtcdctlCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String? cmd = argResults?.rest.join(' ');
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');
 
@@ -72,8 +72,8 @@ class EtcdctlCommand extends Command {
       exit(2);
     }
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     if (ctrlNodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
@@ -101,12 +101,11 @@ class ListNodesCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     if (ctrlNodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
@@ -135,12 +134,11 @@ class ListServicesCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     if (ctrlNodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
@@ -169,12 +167,11 @@ class ListBackendsCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     if (ctrlNodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
@@ -203,12 +200,11 @@ class ListFrontendsCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     if (ctrlNodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
@@ -237,12 +233,11 @@ class ShowNetworkCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final ctrlNodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final ctrlNodes = await provider.getServers(only: targets);
 
     if (ctrlNodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');

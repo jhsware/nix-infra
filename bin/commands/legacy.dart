@@ -231,22 +231,27 @@ Future<void> legacyCommands(List<String> arguments) async {
   // ---- COMMANDS that require cloud stuff ----
   switch (argResults.command?.name) {
     case 'provision':
+      if (!provider.supportsCreateServer) {
+        echo('ERROR! The ${provider.providerName} provider does not support creating servers.');
+        echo('For self-hosted servers, add them manually to servers.yaml instead.');
+        exit(2);
+      }
+
       final createdNodeNames = await createNodes(
           workingDir, argResults.command!['node-names'].split(' '),
-          hcloudToken: env['HCLOUD_TOKEN']!,
+          provider: provider,
           sshKeyName: env['SSH_KEY'] ?? argResults.command!['ssh-key'],
           location: argResults.command!['location'],
           machineType: argResults.command!['machine-type'],
           placementGroup: argResults.command!['placement-group']);
-      final createdServers = await hcloud.getServers(only: createdNodeNames);
+      final createdServers = await provider.getServers(only: createdNodeNames);
 
       await clearKnownHosts(createdServers);
 
       await waitForServers(
         workingDir,
         createdServers,
-        hcloudToken: env['HCLOUD_TOKEN']!,
-        sshKeyName: sshKeyName,
+        provider: provider,
       );
 
       await waitForSsh(createdServers);
@@ -288,19 +293,26 @@ Future<void> legacyCommands(List<String> arguments) async {
       break;
     case 'destroy':
       final targets = argResults.command!['target'].split(' ');
-      final nodes = await hcloud.getServers(only: targets);
+      final nodes = await provider.getServers(only: targets);
       // TODO: Fix this! Perhaps set etcd node IPs as env vars on each host?
       final tmp = argResults.command!['ctrl-nodes'].split(' ');
-      final ctrlNodes = await hcloud.getServers(only: tmp);
+      final ctrlNodes = await provider.getServers(only: tmp);
 
       try {
         await unregisterClusterNode(workingDir, nodes, ctrlNodes: ctrlNodes);
       } catch (_) {}
+
+      if (!provider.supportsDestroyServer) {
+        echo('WARNING: The ${provider.providerName} provider does not support destroying servers.');
+        echo('For self-hosted servers, remove them manually from servers.yaml instead.');
+        echo('Node unregistered from cluster successfully.');
+        exit(0);
+      }
+
       await destroyNodes(
         workingDir,
         nodes,
-        hcloudToken: env['HCLOUD_TOKEN']!,
-        sshKeyName: sshKeyName,
+        provider: provider,
       );
       exit(0);
     case 'init-machine':
@@ -309,7 +321,7 @@ Future<void> legacyCommands(List<String> arguments) async {
           env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final nodes = await provider.getServers(only: nodeNames);
       final nodeType = argResults.command!['node-module'];
       await deployMachine(
         workingDir,
@@ -326,7 +338,7 @@ Future<void> legacyCommands(List<String> arguments) async {
           env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final nodes = await provider.getServers(only: nodeNames);
       await deployMachine(
         workingDir,
         nodes,
@@ -344,7 +356,7 @@ Future<void> legacyCommands(List<String> arguments) async {
       areYouSure('Are you sure you want to init a control plane?', batch);
 
       final tmp = argResults.command!['target'].split(' ');
-      final ctrlNodes = await hcloud.getServers(only: tmp);
+      final ctrlNodes = await provider.getServers(only: tmp);
 
       final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
           readPassword(ReadPasswordEnum.caIntermediate, batch);
@@ -386,7 +398,7 @@ Future<void> legacyCommands(List<String> arguments) async {
       areYouSure('Are you sure you want to update the control plane?', batch);
 
       final tmp = argResults.command!['target'].split(' ');
-      final ctrlNodes = await hcloud.getServers(only: tmp);
+      final ctrlNodes = await provider.getServers(only: tmp);
 
       await deployControlNode(
         workingDir,
@@ -416,7 +428,7 @@ Future<void> legacyCommands(List<String> arguments) async {
 
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final nodes = await provider.getServers(only: nodeNames);
 
       await generateCerts(
         workingDir,
@@ -435,8 +447,8 @@ Future<void> legacyCommands(List<String> arguments) async {
           debug: debug);
 
       final tmp = argResults.command!['ctrl-nodes'].split(' ');
-      final ctrlNodes = await hcloud.getServers(only: tmp);
-      final cluster = await hcloud.getServers();
+      final ctrlNodes = await provider.getServers(only: tmp);
+      final cluster = await provider.getServers();
 
       final nodeType = argResults.command!['node-module'];
       final serviceGroups = argResults.command!['service-group']?.split(" ");
@@ -466,11 +478,11 @@ Future<void> legacyCommands(List<String> arguments) async {
 
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final nodes = await provider.getServers(only: nodeNames);
 
       final tmp = argResults.command!['ctrl-nodes'].split(' ');
-      final ctrlNodes = await hcloud.getServers(only: tmp);
-      final cluster = await hcloud.getServers();
+      final ctrlNodes = await provider.getServers(only: tmp);
+      final cluster = await provider.getServers();
 
       await deployClusterNode(
         workingDir,
@@ -490,8 +502,8 @@ Future<void> legacyCommands(List<String> arguments) async {
       exit(0);
     case 'publish-image':
       final nodeNames = argResults.command!['target'].split(' ');
-      final cluster = await hcloud.getServers();
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final cluster = await provider.getServers();
+      final nodes = await provider.getServers(only: nodeNames);
       await publishImageToRegistry(workingDir, cluster, nodes.first,
           file: argResults.command!['file'],
           name: argResults.command!['image-name'],
@@ -499,8 +511,8 @@ Future<void> legacyCommands(List<String> arguments) async {
       exit(0);
     case 'list-images':
       final nodeNames = argResults.command!['target'].split(' ');
-      final cluster = await hcloud.getServers();
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final cluster = await provider.getServers();
+      final nodes = await provider.getServers(only: nodeNames);
       await listImagesInRegistry(workingDir, cluster, nodes.first);
       exit(0);
     case 'deploy-apps':
@@ -513,8 +525,8 @@ Future<void> legacyCommands(List<String> arguments) async {
 
       final nodeNames = argResults.command!['target'].split(' ');
       // Allow passing multiple node names
-      final nodes = await hcloud.getServers(only: nodeNames);
-      final cluster = await hcloud.getServers();
+      final nodes = await provider.getServers(only: nodeNames);
+      final cluster = await provider.getServers();
 
       await deployAppsOnNode(
         workingDir,
@@ -542,8 +554,8 @@ Future<void> legacyCommands(List<String> arguments) async {
       final name = argResults.command!['target'] as String;
       final localPort = int.parse(argResults.command!['local-port']);
       final remotePort = int.parse(argResults.command!['remote-port']);
-      final cluster = await hcloud.getServers();
-      final nodes = await hcloud.getServers(only: [name]);
+      final cluster = await provider.getServers();
+      final nodes = await provider.getServers(only: [name]);
       if (nodes.isEmpty) {
         echo('ERROR! Node not found in cluster: $name');
         exit(2);
@@ -553,7 +565,7 @@ Future<void> legacyCommands(List<String> arguments) async {
       break;
     case 'ssh':
       final name = argResults.command!['target'] as String;
-      final nodes = await hcloud.getServers(only: [name]);
+      final nodes = await provider.getServers(only: [name]);
       if (nodes.isEmpty) {
         echo('ERROR! Node not found in cluster: $name');
         exit(2);
@@ -563,11 +575,11 @@ Future<void> legacyCommands(List<String> arguments) async {
       exit(0);
     case 'remove-ssh-key':
       final sshKeyToRemove = argResults.command!['ssh-key-name'];
-      await hcloud.removeSshKeyFromCloudProvider(workingDir, sshKeyToRemove);
+      await provider.removeSshKeyFromCloudProvider(workingDir, sshKeyToRemove);
       exit(0);
     case 'cmd':
       final nodeNames = argResults.command!['target'].split(' ');
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final nodes = await provider.getServers(only: nodeNames);
       if (nodes.isEmpty) {
         echo('ERROR! Nodes not found in cluster: $nodeNames');
         exit(2);
@@ -584,7 +596,7 @@ Future<void> legacyCommands(List<String> arguments) async {
       exit(0);
     case 'etcd':
       final ctrl = argResults.command!['ctrl-nodes'].split(' ');
-      final ctrlNodes = await hcloud.getServers(only: ctrl);
+      final ctrlNodes = await provider.getServers(only: ctrl);
       if (ctrlNodes.isEmpty) {
         echo('ERROR! Nodes not found in cluster: $ctrl');
         exit(2);
@@ -606,9 +618,9 @@ Future<void> legacyCommands(List<String> arguments) async {
       echo(outp.join('\n'));
       exit(0);
     case 'action':
-      final cluster = await hcloud.getServers();
+      final cluster = await provider.getServers();
       final nodeNames = argResults.command!['target'].split(' ');
-      final nodes = await hcloud.getServers(only: nodeNames);
+      final nodes = await provider.getServers(only: nodeNames);
       if (nodes.isEmpty) {
         echo('ERROR! Nodes not found in cluster: $nodeNames');
         exit(2);

@@ -29,7 +29,7 @@ class SystemCtl extends McpTool {
   SystemCtl({
     required super.workingDir,
     required super.sshKeyName,
-    required super.hcloudToken,
+    required super.provider,
   });
 
   Future<CallToolResult> callback({args, extra}) async {
@@ -81,7 +81,7 @@ class SystemCtl extends McpTool {
     }
 
     final tmpTargets = target.split(',');
-    final nodes = await hcloud.getServers(only: tmpTargets);
+    final nodes = await provider.getServers(only: tmpTargets);
     
     final Iterable<Future<String>> futures = nodes
         .toList()

@@ -1,6 +1,7 @@
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/docker_registry.dart';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/providers/providers.dart';
+import 'shared.dart';
 import 'utils.dart';
 
 class RegistryCommand extends Command {
@@ -51,7 +52,6 @@ class PublishImageCommand extends Command {
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final bool debug = parent?.argResults!['debug'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = parent?.argResults!['target'].split(' ');
     final String fileName = argResults!['file'];
     final String imageName = argResults!['image-name'];
@@ -60,9 +60,9 @@ class PublishImageCommand extends Command {
 
     areYouSure('Are you sure you want to publish this image?', batch);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
-    final cluster = await hcloud.getServers();
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
+    final cluster = await provider.getServers();
 
     await publishImageToRegistry(workingDir, cluster, nodes.first,
         file: fileName, name: imageName, tag: imageTag, useLocalhost: useLocalhost, debug: debug);
@@ -85,14 +85,13 @@ class ListImagesCommand extends Command {
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = parent?.argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to publish this image?', batch);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
-    final cluster = await hcloud.getServers();
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
+    final cluster = await provider.getServers();
 
     await listImagesInRegistry(workingDir, cluster, nodes.first);
   }

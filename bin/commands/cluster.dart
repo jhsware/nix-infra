@@ -331,7 +331,6 @@ class DestroyCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN'] ?? '';
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
@@ -356,8 +355,7 @@ class DestroyCommand extends Command {
     await destroyNodes(
       workingDir,
       nodes,
-      hcloudToken: hcloudToken,
-      sshKeyName: sshKeyName,
+      provider: provider,
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'mcp_server/calculate.dart';
 import 'mcp_server/remote_command.dart';
 import 'mcp_server/available_nodes.dart';
@@ -16,15 +17,22 @@ void main() async {
   final env = await loadEnv('.env', workingDir);
 
   final sshKeyName = env['SSH_KEY'];
-  final hcloudToken = env['HCLOUD_TOKEN'];
 
   if (sshKeyName == null) {
     echo('ERROR! env-var SSH_KEY is missing');
     exit(2);
   }
 
-  if (hcloudToken == null) {
-    echo('ERROR! env-var HCLOUD_TOKEN is missing');
+  // Use ProviderFactory to create the appropriate provider
+  late final InfrastructureProvider provider;
+  try {
+    provider = await ProviderFactory.autoDetect(
+      workingDir: workingDir,
+      env: env,
+      sshKeyName: sshKeyName,
+    );
+  } catch (e) {
+    echo('ERROR! $e');
     exit(2);
   }
 
@@ -43,7 +51,7 @@ void main() async {
   final calculate = Calculate(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(
@@ -58,7 +66,7 @@ void main() async {
   final remoteCommand = RemoteCommand(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(
@@ -73,7 +81,7 @@ void main() async {
   final listClusterNodes = ListAvailableNodes(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(
@@ -88,7 +96,7 @@ void main() async {
   final journalCtl = JournalCtl(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(
@@ -103,7 +111,7 @@ void main() async {
   final systemCtl = SystemCtl(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(
@@ -118,7 +126,7 @@ void main() async {
   final filesystem = FileSystem(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(
@@ -133,7 +141,7 @@ void main() async {
   final testRunner = TestRunner(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(
@@ -148,7 +156,7 @@ void main() async {
   final systemStats = SystemStats(
     workingDir: workingDir,
     sshKeyName: sshKeyName,
-    hcloudToken: hcloudToken,
+    provider: provider,
   );
 
   server.tool(

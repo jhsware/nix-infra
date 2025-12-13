@@ -29,7 +29,7 @@ read-files -- read the content of several files provided as comma separated list
   FileSystem({
     required super.workingDir,
     required super.sshKeyName,
-    required super.hcloudToken,
+    required super.provider,
   });
 
   Future<CallToolResult> callback({args, extra}) async {

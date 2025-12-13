@@ -23,8 +23,28 @@ class ClusterNode {
   String ipAddr;
   String username = 'root';
   String sshKeyName;
+  
+  /// Optional absolute path to the SSH key file.
+  /// If set, this takes precedence over constructing path from sshKeyName.
+  /// This is useful for self-hosted servers where keys may be stored
+  /// in non-standard locations.
+  String? sshKeyPath;
 
-  ClusterNode(this.name, this.ipAddr, this.id, this.sshKeyName);
+  ClusterNode(this.name, this.ipAddr, this.id, this.sshKeyName, {this.sshKeyPath});
+  
+  /// Get the effective SSH key path, resolving relative to workingDir if needed.
+  String getEffectiveSshKeyPath(String workingDirPath) {
+    if (sshKeyPath != null) {
+      // If sshKeyPath is absolute, use it directly
+      if (sshKeyPath!.startsWith('/')) {
+        return sshKeyPath!;
+      }
+      // Otherwise resolve relative to working directory
+      return '$workingDirPath/$sshKeyPath';
+    }
+    // Fall back to standard location
+    return '$workingDirPath/ssh/$sshKeyName';
+  }
 }
 
 enum CertType {

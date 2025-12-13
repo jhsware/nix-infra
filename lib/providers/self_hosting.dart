@@ -128,16 +128,6 @@ class SelfHosting implements InfrastructureProvider {
   @override
   bool get supportsPlacementGroups => false;
 
-  /// Resolve an SSH key path from the configuration.
-  /// 
-  /// If the path is relative, it will be resolved relative to the working directory.
-  String _resolveSshKeyPath(String sshKeyPath) {
-    if (sshKeyPath.startsWith('/')) {
-      return sshKeyPath;
-    }
-    return '${_workingDir.path}/$sshKeyPath';
-  }
-
   /// Extract the SSH key name from a path.
   /// 
   /// For example: ./ssh/my-key -> my-key
@@ -163,6 +153,9 @@ class SelfHosting implements InfrastructureProvider {
         config.ipAddr,
         config.name.hashCode, // Use name hash as ID
         sshKeyName,
+        // Store the original path from config - ClusterNode.getEffectiveSshKeyPath
+        // will resolve it relative to workingDir if needed
+        sshKeyPath: config.sshKeyPath,
       );
       // Set custom username if specified
       if (config.username != null) {
@@ -226,7 +219,7 @@ class SelfHosting implements InfrastructureProvider {
     
     for (final server in _servers.values) {
       try {
-        final sshKeyPath = _resolveSshKeyPath(server.sshKeyPath);
+        final sshKeyPath = _resolveSshKeyPathInternal(server.sshKeyPath);
         final keyFile = File(sshKeyPath);
         
         if (!await keyFile.exists()) {
@@ -243,5 +236,13 @@ class SelfHosting implements InfrastructureProvider {
     }
     
     return results;
+  }
+  
+  /// Internal helper to resolve SSH key path.
+  String _resolveSshKeyPathInternal(String sshKeyPath) {
+    if (sshKeyPath.startsWith('/')) {
+      return sshKeyPath;
+    }
+    return '${_workingDir.path}/$sshKeyPath';
   }
 }

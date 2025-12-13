@@ -12,14 +12,14 @@ Future<String> runCommandOverSsh(
     Directory workingDir, ClusterNode node, String cmd) async {
   final sshClient = SSHClient(
     await SSHSocket.connect(node.ipAddr, 22),
-    username: 'root',
+    username: node.username,
     // algorithms: SSHAlgorithms(
     //   kex: const [SSHKexType.x25519],
     //   cipher: const [SSHCipherType.aes256ctr, ],
     //   // mac: const [SSHMacType.hmacSha1],
     // ),
     identities: [
-      ...SSHKeyPair.fromPem(await getSshKeyAsPem(workingDir, node.sshKeyName))
+      ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
     ],
   );
 
@@ -181,10 +181,10 @@ Future<SSHSocket> waitAndGetSshConnection(ClusterNode node,
 
 Future<SSHClient> getSshClient(
     Directory workingDir, ClusterNode node, connection) async {
-  final nodePemFile = await getSshKeyAsPem(workingDir, node.sshKeyName);
+  final nodePemFile = await getSshKeyAsPemFromNode(workingDir, node);
   final sshClient = SSHClient(
     connection,
-    username: 'root',
+    username: node.username,
     identities: [...SSHKeyPair.fromPem(nodePemFile)],
   );
   return sshClient;
@@ -208,14 +208,14 @@ Future<SSHSession> getSshShell(
 Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
   final sshClient = SSHClient(
     await SSHSocket.connect(node.ipAddr, 22),
-    username: 'root',
+    username: node.username,
     // algorithms: SSHAlgorithms(
     //   kex: const [SSHKexType.x25519],
     //   cipher: const [SSHCipherType.aes256ctr, ],
     //   // mac: const [SSHMacType.hmacSha1],
     // ),
     identities: [
-      ...SSHKeyPair.fromPem(await getSshKeyAsPem(workingDir, node.sshKeyName))
+      ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
     ],
   );
 

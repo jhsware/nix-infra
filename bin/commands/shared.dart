@@ -53,7 +53,6 @@ class ProvisionCommand extends Command {
     final bool debug = parent?.argResults!['debug'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY']!;
     final List<String> nodeNames = argResults!['node-names'].split(' ');
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String location = argResults!['location'];
     final String machineType = argResults!['machine-type'];
     final String? placementGroup = argResults!['placement-group'];
@@ -69,7 +68,7 @@ class ProvisionCommand extends Command {
     }
 
     final createdNodeNames = await createNodes(workingDir, nodeNames,
-        hcloudToken: hcloudToken,
+        provider: provider,
         sshKeyName: sshKeyName,
         location: location,
         machineType: machineType,
@@ -82,8 +81,7 @@ class ProvisionCommand extends Command {
     await waitForServers(
       workingDir,
       createdServers,
-      hcloudToken: hcloudToken,
-      sshKeyName: sshKeyName,
+      provider: provider,
     );
 
     await waitForSsh(createdServers);

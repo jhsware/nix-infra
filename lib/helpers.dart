@@ -124,9 +124,23 @@ Future<bool> sftpExists(
   }
 }
 
+/// Get SSH key as PEM string by key name.
+/// 
+/// Looks for the key in ${workingDir.path}/ssh/$name
+/// For more flexible path handling, use [getSshKeyAsPemFromNode] instead.
 Future<String> getSshKeyAsPem(Directory workingDir, String name) async {
   // return File('${Platform.environment['HOME']}/.ssh/$name').readAsString();
   final sshKey = await File('${workingDir.path}/ssh/$name').readAsString();
+  return sshKey.trim();
+}
+
+/// Get SSH key as PEM string from a ClusterNode.
+/// 
+/// This method respects the node's sshKeyPath if set, allowing for
+/// keys stored in non-standard locations (e.g., self-hosted servers).
+Future<String> getSshKeyAsPemFromNode(Directory workingDir, ClusterNode node) async {
+  final keyPath = node.getEffectiveSshKeyPath(workingDir.path);
+  final sshKey = await File(keyPath).readAsString();
   return sshKey.trim();
 }
 

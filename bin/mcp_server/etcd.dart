@@ -24,7 +24,7 @@ class ControlPlaneEtcd extends McpTool {
   ControlPlaneEtcd({
     required super.workingDir,
     required super.sshKeyName,
-    required super.hcloudToken,
+    required super.provider,
   });
 
   Future<CallToolResult> callback({args, extra}) async {
@@ -56,7 +56,7 @@ class ControlPlaneEtcd extends McpTool {
       );
     }
 
-    final nodes = await hcloud.getServers(only: [target]);
+    final nodes = await provider.getServers(only: [target]);
     
     if (nodes.isEmpty) {
       return CallToolResult.fromContent(

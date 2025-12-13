@@ -32,7 +32,7 @@ Operations:
   SystemStats({
     required super.workingDir,
     required super.sshKeyName,
-    required super.hcloudToken,
+    required super.provider,
   });
 
   Future<CallToolResult> callback({args, extra}) async {
@@ -79,7 +79,7 @@ Operations:
     }
 
     final tmpTargets = target.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
-    final nodes = await hcloud.getServers(only: tmpTargets);
+    final nodes = await provider.getServers(only: tmpTargets);
     
     if (nodes.isEmpty) {
       return CallToolResult.fromContent(

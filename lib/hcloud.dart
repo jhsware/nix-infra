@@ -1,13 +1,23 @@
-/// @deprecated Use `package:nix_infra/providers/hcloud.dart` instead.
-/// 
-/// This file is kept for backward compatibility and simply re-exports
-/// the HetznerCloud class from its new location in the providers directory.
-/// 
-/// To migrate:
-/// - Replace `import 'package:nix_infra/hcloud.dart'`
-/// - With `import 'package:nix_infra/providers/hcloud.dart'`
-/// 
-/// Or use the unified providers library:
-/// `import 'package:nix_infra/providers/providers.dart'`
-@Deprecated('Use package:nix_infra/providers/hcloud.dart instead')
+// =============================================================================
+// THIS FILE IS DEPRECATED AND SCHEDULED FOR REMOVAL
+// =============================================================================
+//
+// Please update your imports:
+//
+// Instead of:  import 'package:nix_infra/hcloud.dart'
+// Use:         import 'package:nix_infra/providers/providers.dart'
+//
+// The HetznerCloud class and all provider functionality has been moved to
+// lib/providers/ with a proper abstraction layer.
+//
+// Migration:
+// - Use ProviderFactory.autoDetect() to get the appropriate provider
+// - Use InfrastructureProvider interface for provider-agnostic code
+// - For HetznerCloud-specific features, type-check: if (provider is HetznerCloud)
+//
+// This file is kept temporarily for backward compatibility with legacy.dart.
+// It will be removed in a future version.
+// =============================================================================
+
+@Deprecated('Use package:nix_infra/providers/providers.dart instead')
 export 'providers/hcloud.dart';

@@ -19,7 +19,7 @@ class RemoteCommand extends McpTool {
   RemoteCommand({
     required super.workingDir,
     required super.sshKeyName,
-    required super.hcloudToken,
+    required super.provider,
   });
 
   Future<CallToolResult> callback({args, extra}) async {
@@ -27,7 +27,7 @@ class RemoteCommand extends McpTool {
     final command = args!['command'];
 
     final tmpTargets = target.split(',');
-    final nodes = await hcloud.getServers(only: tmpTargets);
+    final nodes = await provider.getServers(only: tmpTargets);
 
     List<String> error = [];
     List<ParsedCommand> parsed = BashCommandParser.parseCommands(command);

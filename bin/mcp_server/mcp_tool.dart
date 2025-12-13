@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 
 /// Abstract base class defining the interface for MCP tools
@@ -12,13 +12,13 @@ abstract class McpTool {
 
   final Directory workingDir;
   final String sshKeyName;
-  late final HetznerCloud hcloud;
+  final InfrastructureProvider provider;
 
   McpTool({
     required this.workingDir,
-    required hcloudToken,
+    required this.provider,
     required this.sshKeyName,
-  }) : hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+  });
   
   /// Callback method that executes the tool's functionality
   /// 

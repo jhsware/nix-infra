@@ -1,6 +1,6 @@
 # nix-infra
 
-Create a private PaaS on Hetzner Cloud in minutes. Leverage **NixOS** and **Nix Packages** to build a reproducible and auditable private cloud for your projects.
+Create a private PaaS on Hetzner Cloud or your own servers in minutes. Leverage **NixOS** and **Nix Packages** to build a reproducible and auditable private cloud for your projects.
 
 **Why nix-infra?** I wanted to test the limits of NixOS when it comes to maintainability and real-world use. There is a future for private PaaS solutions in a world where privacy and cost control are primary concerns—we just need to build it on the right foundation.
 
@@ -29,7 +29,6 @@ Low system requirements for each cluster node make virtual machine isolation per
 **Limitations:**
 
 - NixOS doesn't officially support SELinux (though [experimental work is underway](https://tristanxr.com/post/selinux-on-nixos/))
-- nix-infra currently only supports Hetzner Cloud
 - The code is the primary documentation
 
 **Room for improvement:**
@@ -59,6 +58,79 @@ Use the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) 
 Use the [nix-infra-test-machine](https://github.com/jhsware/nix-infra-test-machine) template for managing individual machines or fleets without cluster orchestration.
 
 Each repo contains detailed instructions. You can either run the provided test script to automate installation, or clone the repo and create custom automation scripts.
+
+## Infrastructure Providers
+
+nix-infra supports two infrastructure providers:
+
+### Hetzner Cloud (Default)
+
+The default provider creates and manages servers on Hetzner Cloud. Set your API token in the `.env` file:
+
+```sh
+HCLOUD_TOKEN=your-hetzner-api-token
+```
+
+With Hetzner Cloud, nix-infra can:
+- Provision new servers
+- Destroy servers
+- Use placement groups for high availability
+- Manage SSH keys in the cloud
+
+### Self-Hosted Servers
+
+For existing servers, bare metal machines, or other cloud providers, use the self-hosting provider. Create a `servers.yaml` file in your working directory:
+
+```yaml
+servers:
+  web-server-1:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/web-server-key
+    description: Primary web server
+    username: admin  # Optional, defaults to 'root'
+    metadata:        # Optional, for your own use
+      location: rack-1
+      environment: production
+
+  db-server-1:
+    ip: 192.168.1.20
+    ssh_key: /absolute/path/to/db-key
+    description: Primary database server
+
+  worker-1:
+    ip: 10.0.0.5
+    ssh_key: ./ssh/worker-key
+```
+
+**Required fields:**
+- `ip` — Server IP address
+- `ssh_key` — Path to SSH private key (relative to working directory or absolute)
+
+**Optional fields:**
+- `description` — Human-readable server description
+- `username` — SSH username (defaults to `root`)
+- `metadata` — Key-value pairs for your own organisation
+
+**Provider auto-detection:**
+
+nix-infra automatically selects the provider based on your configuration:
+
+1. If `servers.yaml` exists → Self-Hosting provider
+2. If `HCLOUD_TOKEN` is set → Hetzner Cloud provider
+3. Otherwise → Error
+
+**Limitations of self-hosted servers:**
+
+The self-hosting provider does not support:
+- `provision` command (add servers manually to `servers.yaml`)
+- `destroy` command (remove servers manually from `servers.yaml`)
+- Placement groups
+
+All other commands work normally: `init-node`, `deploy`, `ssh`, `cmd`, `action`, etc.
+
+**Mixed environments:**
+
+You can migrate between providers or use self-hosted servers alongside Hetzner Cloud by maintaining both configurations. The provider is selected per-project based on the presence of `servers.yaml`.
 
 ## Building From Source
 

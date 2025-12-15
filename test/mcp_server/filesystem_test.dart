@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
@@ -420,6 +421,409 @@ void main() {
         expect(text, contains('$testDirName/allowed.txt:'));
         expect(text, contains('allowed'));
         expect(text, contains('Not allowed for: outside/path.txt'));
+      });
+    });
+
+    group('searchText', () {
+      test('finds simple text pattern', () async {
+        await File('${testDir.path}/file1.txt').writeAsString('''
+Line one
+Line two with target word
+Line three
+''');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'target',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches, isNotEmpty);
+        expect(matches.length, 1);
+        expect(matches[0]['file'], contains('file1.txt'));
+        expect(matches[0]['line'], 2);
+        expect(matches[0]['content'], contains('target'));
+      });
+
+      test('finds multiple matches in single file', () async {
+        await File('${testDir.path}/multi.txt').writeAsString('''
+First match here
+No hit here
+Second match here
+Third match here
+''');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'match',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 3);
+      });
+
+      test('finds matches across multiple files', () async {
+        await File('${testDir.path}/a.txt').writeAsString('match in file a');
+        await File('${testDir.path}/b.txt').writeAsString('match in file b');
+        await File('${testDir.path}/c.txt').writeAsString('no hit here');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'match',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 2);
+
+        final files = matches.map((m) => m['file']).toList();
+        expect(files.any((f) => f.contains('a.txt')), isTrue);
+        expect(files.any((f) => f.contains('b.txt')), isTrue);
+      });
+
+      test('searches recursively in subdirectories', () async {
+        await Directory('${testDir.path}/sub/deep').create(recursive: true);
+        await File('${testDir.path}/root.txt').writeAsString('match at root');
+        await File('${testDir.path}/sub/middle.txt')
+            .writeAsString('match in middle');
+        await File('${testDir.path}/sub/deep/bottom.txt')
+            .writeAsString('match at bottom');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'match',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 3);
+      });
+
+      test('supports regex patterns', () async {
+        await File('${testDir.path}/regex.txt').writeAsString('''
+foo123bar
+foo456bar
+fooxyzbar
+foobar
+''');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'foo[0-9]+bar',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 2);
+      });
+
+      test('supports case-insensitive search', () async {
+        await File('${testDir.path}/case.txt').writeAsString('''
+HELLO world
+hello WORLD
+HeLLo WoRLd
+goodbye
+''');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'hello',
+            'case-sensitive': false,
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 3);
+      });
+
+      test('case-sensitive by default', () async {
+        await File('${testDir.path}/case.txt').writeAsString('''
+HELLO
+hello
+Hello
+''');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'hello',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 1);
+      });
+
+      test('filters by file pattern', () async {
+        await File('${testDir.path}/code.dart').writeAsString('match in dart');
+        await File('${testDir.path}/code.txt').writeAsString('match in txt');
+        await File('${testDir.path}/code.js').writeAsString('match in js');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'match',
+            'file-pattern': '*.dart',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 1);
+        expect(matches[0]['file'], contains('.dart'));
+      });
+
+      test('returns empty array when no matches', () async {
+        await File('${testDir.path}/file.txt').writeAsString('no hits here');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'nonexistent',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches, isEmpty);
+      });
+
+      test('skips hidden files', () async {
+        await File('${testDir.path}/visible.txt').writeAsString('match visible');
+        await File('${testDir.path}/.hidden').writeAsString('match hidden');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'match',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 1);
+        expect(matches[0]['file'], contains('visible.txt'));
+      });
+
+      test('skips hidden directories', () async {
+        await Directory('${testDir.path}/.hidden_dir').create();
+        await File('${testDir.path}/visible.txt').writeAsString('match visible');
+        await File('${testDir.path}/.hidden_dir/file.txt')
+            .writeAsString('match hidden');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'match',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 1);
+        expect(matches[0]['file'], contains('visible.txt'));
+      });
+
+      test('returns error when pattern is missing', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Error'));
+        expect(text, contains('pattern is required'));
+      });
+
+      test('returns error when pattern is empty', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': '',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Error'));
+        expect(text, contains('pattern is required'));
+      });
+
+      test('returns error for invalid regex pattern', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': '[invalid',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Error'));
+        expect(text, contains('Invalid regex'));
+      });
+
+      test('rejects absolute paths', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': '/absolute/path',
+            'pattern': 'test',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Error'));
+        expect(text, contains('No absolute paths allowed'));
+      });
+
+      test('rejects hidden directory paths', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': '$testDirName/.hidden',
+            'pattern': 'test',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Error'));
+        expect(text, contains('No hidden files or directories allowed'));
+      });
+
+      test('rejects paths outside allowed directories', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': 'some/other/path',
+            'pattern': 'test',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Error'));
+        expect(text, contains('Not allowed for'));
+      });
+
+      test('returns error for non-existent directory', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': '$testDirName/nonexistent',
+            'pattern': 'test',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Error'));
+        expect(text, contains('Directory not found'));
+      });
+
+      test('returns correct line numbers', () async {
+        await File('${testDir.path}/lines.txt').writeAsString('''
+Line 1
+Line 2
+Target on line 3
+Line 4
+Another target on line 5
+Line 6
+''');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'target',
+            'case-sensitive': false,
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 2);
+
+        // Sort by line number for consistent testing
+        matches.sort((a, b) => (a['line'] as int).compareTo(b['line'] as int));
+
+        expect(matches[0]['line'], 3);
+        expect(matches[1]['line'], 5);
+      });
+
+      test('handles unicode content', () async {
+        await File('${testDir.path}/unicode.txt').writeAsString('''
+Hello 你好
+World 世界
+Match 匹配
+''');
+
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': '匹配',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches.length, 1);
+        expect(matches[0]['content'], contains('匹配'));
+      });
+
+      test('handles empty directory', () async {
+        final result = await fs.callback(
+          args: {
+            'operation': 'search-text',
+            'path': testDirName,
+            'pattern': 'anything',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        final matches = jsonDecode(text) as List;
+
+        expect(matches, isEmpty);
       });
     });
 

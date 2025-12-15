@@ -189,6 +189,7 @@ class DeployAppsCommand extends Command {
 
   DeployAppsCommand() {
     argParser.addFlag('batch', defaultsTo: false);
+    argParser.addOption('test-dir', mandatory: false);
     argParser.addOption('target', mandatory: true);
     argParser.addFlag('rebuild', defaultsTo: true);
   }
@@ -198,6 +199,8 @@ class DeployAppsCommand extends Command {
     final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
+    final testDir = argResults!['test-dir'] != null ?
+        await getWorkingDirectory(argResults!['test-dir']) : null;
 
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
@@ -222,6 +225,7 @@ class DeployAppsCommand extends Command {
       secretsPwd: secretsPwd,
       debug: debug,
       overlayNetwork: false,
+      testDir: testDir,
     );
 
     if (rebuild) {

@@ -2,7 +2,7 @@
 
 Create a private PaaS on Hetzner Cloud or your own servers in minutes. Leverage **NixOS** and **Nix Packages** to build a reproducible and auditable private cloud for your projects.
 
-**Why nix-infra?** I wanted to test the limits of NixOS when it comes to maintainability and real-world use. There is a future for private PaaS solutions in a world where privacy and cost control are primary concerns—we just need to build it on the right foundation.
+**Why nix-infra?** You want to move away from click-ops and embrace infrastructure-as-code and reproducability. You want to avoid vendor lock-in and unpredictable cloud bills. There is a future for private PaaS solutions in a world where privacy and cost control are primary concerns, we just need to build it on a robust foundation.
 
 > **Experimental:** nix-infra now includes [MCP server support](#mcp-server-experimental) for AI-assisted infrastructure management. Query node status, inspect logs, and manage your fleet through natural language conversations with Claude or other MCP-compatible AI assistants. This is an early experiment in making Linux system administration more accessible and efficient.
 
@@ -46,6 +46,8 @@ Apple discusses privacy in a post about [Private Cloud Compute](https://security
 ### Prerequisites
 
 [Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary.
+
+You need SSH and OpenSSL installed.
 
 ### Choose Your Setup
 

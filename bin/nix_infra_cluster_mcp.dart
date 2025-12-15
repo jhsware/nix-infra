@@ -143,6 +143,16 @@ void main() async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    allowedPaths: [
+      "${workingDir.absolute.path}/__test__",
+      "${workingDir.absolute.path}/app_modules",
+      "${workingDir.absolute.path}/modules",
+      "${workingDir.absolute.path}/node_types",
+      "${workingDir.absolute.path}/nodes",
+      "${workingDir.absolute.path}/cli",
+      "${workingDir.absolute.path}/configuration.nix",
+      "${workingDir.absolute.path}/flake.nix",
+    ],
   );
 
   server.tool(
@@ -150,21 +160,6 @@ void main() async {
     description: FileSystem.description,
     inputSchemaProperties: FileSystem.inputSchemaProperties,
     callback: filesystem.callback,
-  );
-
-  // *** Filesystem ***
-
-  final testRunner = TestRunner(
-    workingDir: workingDir,
-    sshKeyName: sshKeyName,
-    provider: provider,
-  );
-
-  server.tool(
-    "test-runner",
-    description: TestRunner.description,
-    inputSchemaProperties: TestRunner.inputSchemaProperties,
-    callback: testRunner.callback,
   );
 
   // *** SystemStats ***

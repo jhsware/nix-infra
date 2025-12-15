@@ -26,10 +26,13 @@ read-files -- read the content of several files provided as comma separated list
     },
   };
 
+  final List<String> allowedPaths;
+
   FileSystem({
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    required this.allowedPaths,
   });
 
   Future<CallToolResult> callback({args, extra}) async {
@@ -64,7 +67,12 @@ read-files -- read the content of several files provided as comma separated list
       return 'No absolute paths allowed';
     }
 
-    final directory = Directory(getAbsolutePath(path));
+    final dirPath = getAbsolutePath(path);
+    if (!isAllowedPath(allowedPaths, dirPath)) {
+      return 'Not allowed for: $dirPath';
+    }
+
+    final directory = Directory(dirPath);
     if (!await directory.exists()) {
       return 'Directory not found: $path';
     }
@@ -102,9 +110,13 @@ read-files -- read the content of several files provided as comma separated list
     }
 
     final filePath = getAbsolutePath(path);
+    if (!isAllowedPath(allowedPaths, filePath)) {
+      return 'Not allowed for: $path';
+    }
+
     final file = File(filePath);
     if (!await file.exists()) {
-      return 'File not found: $filePath';
+      return 'File not found: $path';
     }
 
     return await file.readAsString();
@@ -116,15 +128,24 @@ read-files -- read the content of several files provided as comma separated list
     for (final path in paths) {
       if (path.toString().startsWith('/')) {
         outp.add('$path: No absolute paths allowed');
+        continue;
       }
 
       if (path.split('/').any((s) => s.startsWith('.'))) {
         outp.add('$path: No hidden files or directories allowed');
+        continue;
       }
 
-      final file = File(getAbsolutePath(path));
+      final filePath = getAbsolutePath(path);
+      if (!isAllowedPath(allowedPaths, filePath)) {
+        outp.add('Not allowed for: $path');
+        continue;
+      }
+
+      final file = File(filePath);
       if (!await file.exists()) {
-        outp.add('$path: File not found');
+        outp.add('File not found: $path');
+        continue;
       }
 
       outp.addAll(['$path:', await file.readAsString()]);
@@ -142,4 +163,8 @@ String getAbsolutePath(String path) {
 
 bool isHiddenPath(String path) {
   return path.split('/').last.startsWith('.');
+}
+
+bool isAllowedPath(List<String> allowedPaths, String path) {
+  return allowedPaths.any((String root) => path.startsWith(root));
 }

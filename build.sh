@@ -36,6 +36,7 @@ if [ "$CMD" = "build-macos" ]; then
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra-machine-mcp bin/nix_infra_machine_mcp.dart
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra-cluster-mcp bin/nix_infra_cluster_mcp.dart
+  dart compile exe --verbosity error --target-os macos -o bin/nix-infra-cluster-mcp bin/nix_infra_dev_mcp.dart
 fi
 
 if [ "$CMD" = "build-linux" ]; then
@@ -68,7 +69,7 @@ if [ "$CMD" = "release-macos" ]; then
     exit 1
   fi
 
-  binaries="nix-infra nix-infra-machine-mcp nix-infra-cluster-mcp"
+  binaries="nix-infra nix-infra-machine-mcp nix-infra-cluster-mcp nix-infra-dev-mcp"
   
   echo "******************************************************"
   echo "Releasing: $binaries"

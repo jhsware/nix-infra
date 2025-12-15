@@ -34,50 +34,109 @@ reset -- reset test cluster
     final operation = args!['operation'];
     final testName = args!['test-name'] ?? '.';
 
-    String result = 'No operation specified';
+    Stream<String> resultStream;
 
     switch (operation) {
       case 'run':
-        result = await runTest(name: testName);
+        resultStream = runTest(name: testName);
         break;
       case 'reset':
-        result = await resetTestCluster();
+        resultStream = resetTestCluster();
         break;
+      default:
+        return CallToolResult.fromContent(
+          content: [
+            TextContent(
+              text: 'No operation specified',
+            ),
+          ],
+        );
     }
 
-    return CallToolResult.fromContent(
-      content: [
-        TextContent(
-          text: result,
-        ),
-      ],
-    );
+    // Collect streamed chunks and return as a single result
+    // Each chunk is added as a separate TextContent for MCP streaming support
+    final List<Content> contentChunks = [];
+    await for (final chunk in resultStream) {
+      contentChunks.add(TextContent(text: chunk));
+    }
+
+    if (contentChunks.isEmpty) {
+      contentChunks.add(TextContent(text: ''));
+    }
+
+    return CallToolResult.fromContent(content: contentChunks);
   }
 
-  Future<String> runTest({required String name}) async {
+  Stream<String> runTest({required String name}) async* {
     if (name.toString().contains('/')) {
-      return 'No "/" allowed';
+      yield 'No "/" allowed';
+      return;
     }
 
     final directory = Directory(getAbsolutePath('__test__/$name'));
     if (!await directory.exists()) {
-      return 'Test not found: $name (${directory.absolute.path})';
+      yield 'Test not found: $name (${directory.absolute.path})';
+      return;
     }
 
-    final Iterable<String> res =
-        await runCommand(workingDir, '__test__/run-tests.sh run $name');
-
-    return res.join('\n');
+    yield* streamCommand(workingDir, '__test__/run-tests.sh run $name');
   }
 
-  Future<String> resetTestCluster() async {
-    final Iterable<String> res =
-        await runCommand(workingDir, '__test__/run-tests.sh reset');
-
-    return res.join('\n');
+  Stream<String> resetTestCluster() async* {
+    yield* streamCommand(workingDir, '__test__/run-tests.sh reset');
   }
 }
 
+/// Streams command output as it becomes available.
+/// Each chunk is yielded as soon as it is received from the process.
+/// Uses Process.start directly for true streaming behavior.
+Stream<String> streamCommand(Directory workingDir, String cmd) {
+  final controller = StreamController<String>();
+
+  // Start the process asynchronously
+  Process.start(
+    '/bin/sh',
+    ['-c', cmd],
+    workingDirectory: workingDir.path,
+    runInShell: false,
+  ).then((process) {
+    // Stream stdout
+    process.stdout.transform(utf8.decoder).listen(
+      (data) {
+        controller.add(data);
+      },
+      onError: (error) {
+        controller.add('STDOUT ERROR: $error');
+      },
+    );
+
+    // Stream stderr
+    process.stderr.transform(utf8.decoder).listen(
+      (data) {
+        controller.add(data);
+      },
+      onError: (error) {
+        controller.add('STDERR ERROR: $error');
+      },
+    );
+
+    // Close controller when process exits
+    process.exitCode.then((exitCode) {
+      if (exitCode != 0) {
+        controller.add('Process exited with code: $exitCode');
+      }
+      controller.close();
+    });
+  }).catchError((error) {
+    controller.add('Failed to start process: $error');
+    controller.close();
+  });
+
+  return controller.stream;
+}
+
+/// Runs a command and collects all output before returning.
+/// Kept for reference - use streamCommand for streaming output.
 Future<List<String>> runCommand(Directory workingDir, String cmd) async {
   final List<String> outp = [];
   final controller = StreamController<List<int>>();

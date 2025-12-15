@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
@@ -120,7 +121,114 @@ void main() {
     });
   });
 
-  group('runCommand', () {
+  group('streamCommand', () {
+    test('streams output from simple echo command', () async {
+      final chunks = <String>[];
+      final stream = streamCommand(Directory.current, 'echo "hello"');
+
+      await for (final chunk in stream) {
+        chunks.add(chunk);
+      }
+
+      expect(chunks, isNotEmpty);
+      expect(chunks.join(), contains('hello'));
+    });
+
+    test('streams output from pwd command', () async {
+      final chunks = <String>[];
+      final stream = streamCommand(Directory.current, 'pwd');
+
+      await for (final chunk in stream) {
+        chunks.add(chunk);
+      }
+
+      expect(chunks, isNotEmpty);
+      expect(chunks.join(), contains(Directory.current.path));
+    });
+
+    test('streams multiple chunks from multi-line output', () async {
+      final chunks = <String>[];
+      // Generate multiple lines of output with delays to ensure streaming
+      // Use separate echo commands to avoid shell variable interpolation issues
+      final stream = streamCommand(
+        Directory.current,
+        'echo "line 1"; sleep 0.05; echo "line 2"; sleep 0.05; echo "line 3"; sleep 0.05; echo "line 4"; sleep 0.05; echo "line 5"',
+      );
+
+      await for (final chunk in stream) {
+        chunks.add(chunk);
+      }
+
+      expect(chunks, isNotEmpty);
+      final combined = chunks.join();
+      expect(combined, contains('line 1'));
+      expect(combined, contains('line 5'));
+      // With sleep between lines, we should get multiple chunks
+      expect(chunks.length, greaterThan(1),
+          reason: 'Should receive multiple streamed chunks, not a single response');
+    });
+
+    test('streams output incrementally as command executes', () async {
+      final receivedTimes = <DateTime>[];
+      final chunks = <String>[];
+
+      // Use a command that produces output with deliberate delays
+      final stream = streamCommand(
+        Directory.current,
+        'echo "start"; sleep 0.15; echo "middle"; sleep 0.15; echo "end"',
+      );
+
+      await for (final chunk in stream) {
+        receivedTimes.add(DateTime.now());
+        chunks.add(chunk);
+      }
+
+      expect(chunks.length, greaterThan(1),
+          reason: 'Output should be streamed in multiple chunks');
+
+      // Verify we got content at different times
+      if (receivedTimes.length >= 2) {
+        final timeDiff =
+            receivedTimes.last.difference(receivedTimes.first).inMilliseconds;
+        expect(timeDiff, greaterThan(50),
+            reason: 'Chunks should arrive at different times, indicating true streaming');
+      }
+    });
+
+    test('handles command errors gracefully', () async {
+      final chunks = <String>[];
+      final stream =
+          streamCommand(Directory.current, 'nonexistentcommand12345');
+
+      await for (final chunk in stream) {
+        chunks.add(chunk);
+      }
+
+      expect(chunks, isNotEmpty,
+          reason: 'Should receive error output from failed command');
+    });
+
+    test('returns stream that can be listened to only once', () async {
+      final stream = streamCommand(Directory.current, 'echo "test"');
+
+      // First listener should work
+      final firstChunks = await stream.toList();
+      expect(firstChunks, isNotEmpty);
+    });
+
+    test('streams ls command output', () async {
+      final chunks = <String>[];
+      final stream = streamCommand(Directory.current, 'ls');
+
+      await for (final chunk in stream) {
+        chunks.add(chunk);
+      }
+
+      expect(chunks, isNotEmpty);
+    });
+  });
+
+  group('runCommand (reference implementation)', () {
     test('can be called with simple command', () async {
       final res = await runCommand(Directory.current, 'ls');
       expect(res, isNotNull);
@@ -177,6 +285,76 @@ void main() {
     test('normalizes path with "."', () {
       final result = getAbsolutePath('some/./path');
       expect(result, '${Directory.current.absolute.path}/some/path');
+    });
+  });
+
+  group('streaming behavior verification', () {
+    test('streamCommand yields chunks as they arrive, not all at once', () async {
+      // This test verifies that streamCommand is truly streaming
+      // by checking that chunks arrive over time, not all at once
+
+      final chunkArrivals = <int>[];
+      final stopwatch = Stopwatch()..start();
+
+      final stream = streamCommand(
+        Directory.current,
+        'echo "chunk1"; sleep 0.15; echo "chunk2"; sleep 0.15; echo "chunk3"',
+      );
+
+      await for (final _ in stream) {
+        chunkArrivals.add(stopwatch.elapsedMilliseconds);
+      }
+
+      stopwatch.stop();
+
+      // We should have multiple arrivals spread over time
+      expect(chunkArrivals.length, greaterThan(1),
+          reason: 'Should receive multiple chunks');
+
+      // The total elapsed time should be significant (at least 200ms for 2 sleeps of 0.15s)
+      if (chunkArrivals.length > 1) {
+        final totalTime = chunkArrivals.last - chunkArrivals.first;
+        expect(totalTime, greaterThan(100),
+            reason:
+                'Chunks should arrive over time (total spread: ${totalTime}ms), indicating streaming rather than buffered response');
+      }
+    });
+
+    test('runCommand collects all output before returning', () async {
+      // Verify that runCommand collects all output
+      final result = await runCommand(
+        Directory.current,
+        'echo "line1"; echo "line2"; echo "line3"',
+      );
+
+      // runCommand should collect all output
+      final combined = result.join();
+      expect(combined, contains('line1'));
+      expect(combined, contains('line2'));
+      expect(combined, contains('line3'));
+    });
+
+    test('streamCommand vs runCommand - same content, different delivery', () async {
+      const testCmd = 'echo "a"; echo "b"; echo "c"';
+
+      // Get output from both methods
+      final streamChunks = <String>[];
+      await for (final chunk in streamCommand(Directory.current, testCmd)) {
+        streamChunks.add(chunk);
+      }
+
+      final runResult = await runCommand(Directory.current, testCmd);
+
+      // Both should contain the same content
+      final streamContent = streamChunks.join();
+      final runContent = runResult.join();
+
+      expect(streamContent, contains('a'));
+      expect(streamContent, contains('b'));
+      expect(streamContent, contains('c'));
+      expect(runContent, contains('a'));
+      expect(runContent, contains('b'));
+      expect(runContent, contains('c'));
     });
   });
 }

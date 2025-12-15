@@ -31,12 +31,11 @@ edit-file -- edit the content of a file
     },
     'startLine': {
       'type': 'integer',
-      'description': '''
-Optional starting line number (1-indexed) for edit-file operation:
-- If not provided: overwrites the entire file with content
-- If provided without endLine: inserts content at this line, pushing existing content down
-- If provided with endLine: replaces lines from startLine to endLine (inclusive) with content
-'''
+      'description':
+        'Optional starting line number (1-indexed) for edit-file operation:'
+        '- If not provided: overwrites the entire file with content'
+        '- If provided without endLine: inserts content at this line, pushing existing content down'
+        '- If provided with endLine: replaces lines from startLine to endLine (inclusive) with content'
     },
     'endLine': {
       'type': 'integer',

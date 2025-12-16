@@ -75,6 +75,16 @@ void main() {
         expect(tmp.type, 'text');
       });
 
+      test('run returns error when test-name is missing', () async {
+        final CallToolResult result = await testRunner.callback(
+          args: {
+            'operation': 'run',
+          },
+        );
+        final text = (result.content.first as TextContent).text;
+        expect(text, 'Missing test-name parameter');
+      });
+
       test('run returns error for test with slash in name', () async {
         final CallToolResult result = await testRunner.callback(
           args: {
@@ -103,10 +113,43 @@ void main() {
         final CallToolResult result = await testRunner.callback(
           args: {
             'operation': 'reset',
+            'test-name': 'fake-test',
           },
         );
         final tmp = result.content.first;
         expect(tmp.type, 'text');
+      });
+
+      test('reset returns error when test-name is missing', () async {
+        final CallToolResult result = await testRunner.callback(
+          args: {
+            'operation': 'reset',
+          },
+        );
+        final text = (result.content.first as TextContent).text;
+        expect(text, 'Missing test-name parameter');
+      });
+
+      test('reset returns error for test with slash in name', () async {
+        final CallToolResult result = await testRunner.callback(
+          args: {
+            'operation': 'reset',
+            'test-name': 'invalid/test',
+          },
+        );
+        final text = (result.content.first as TextContent).text;
+        expect(text, 'No "/" allowed');
+      });
+
+      test('reset returns error for non-existent test', () async {
+        final CallToolResult result = await testRunner.callback(
+          args: {
+            'operation': 'reset',
+            'test-name': 'non-existent-test-xyz',
+          },
+        );
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Test not found'));
       });
     });
 
@@ -150,10 +193,19 @@ void main() {
       final chunks = <String>[];
       // Generate multiple lines of output with delays to ensure streaming
       // Use separate echo commands to avoid shell variable interpolation issues
-      final stream = streamCommand(
-        Directory.current,
-        'echo "line 1"; sleep 0.05; echo "line 2"; sleep 0.05; echo "line 3"; sleep 0.05; echo "line 4"; sleep 0.05; echo "line 5"',
-      );
+      // ouput to stderr to avoid buffering so each command gets it's own chunk
+      final script = '''
+        echo line 1 >&2
+        sleep 0.01
+        echo line 2 >&2
+        sleep 0.01
+        echo line 3 >&2
+        sleep 0.01
+        echo line 4 >&2
+        sleep 0.01
+        echo line 5 >&2
+      ''';
+      final stream = streamCommand(Directory.current, script);
 
       await for (final chunk in stream) {
         chunks.add(chunk);
@@ -165,7 +217,8 @@ void main() {
       expect(combined, contains('line 5'));
       // With sleep between lines, we should get multiple chunks
       expect(chunks.length, greaterThan(1),
-          reason: 'Should receive multiple streamed chunks, not a single response');
+          reason:
+              'Should receive multiple streamed chunks, not a single response');
     });
 
     test('streams output incrementally as command executes', () async {
@@ -173,26 +226,30 @@ void main() {
       final chunks = <String>[];
 
       // Use a command that produces output with deliberate delays
-      final stream = streamCommand(
-        Directory.current,
-        'echo "start"; sleep 0.15; echo "middle"; sleep 0.15; echo "end"',
-      );
+      final script = '''
+        echo start >&2
+        sleep 0.01
+        echo middle >&2
+        sleep 0.01
+        echo end >&2
+      ''';
+
+      final stopwatch = Stopwatch()..start();
+      final stream = streamCommand(Directory.current, script);
 
       await for (final chunk in stream) {
         receivedTimes.add(DateTime.now());
         chunks.add(chunk);
       }
+      stopwatch.stop();
 
-      expect(chunks.length, greaterThan(1),
+      expect(chunks.length, equals(3),
           reason: 'Output should be streamed in multiple chunks');
 
       // Verify we got content at different times
-      if (receivedTimes.length >= 2) {
-        final timeDiff =
-            receivedTimes.last.difference(receivedTimes.first).inMilliseconds;
-        expect(timeDiff, greaterThan(50),
-            reason: 'Chunks should arrive at different times, indicating true streaming');
-      }
+      expect(stopwatch.elapsedMilliseconds, greaterThan(19),
+          reason:
+              'Chunks should arrive over time (total spread: ${stopwatch.elapsedMilliseconds}ms), indicating streaming rather than buffered response');
     });
 
     test('handles command errors gracefully', () async {
@@ -289,37 +346,6 @@ void main() {
   });
 
   group('streaming behavior verification', () {
-    test('streamCommand yields chunks as they arrive, not all at once', () async {
-      // This test verifies that streamCommand is truly streaming
-      // by checking that chunks arrive over time, not all at once
-
-      final chunkArrivals = <int>[];
-      final stopwatch = Stopwatch()..start();
-
-      final stream = streamCommand(
-        Directory.current,
-        'echo "chunk1"; sleep 0.15; echo "chunk2"; sleep 0.15; echo "chunk3"',
-      );
-
-      await for (final _ in stream) {
-        chunkArrivals.add(stopwatch.elapsedMilliseconds);
-      }
-
-      stopwatch.stop();
-
-      // We should have multiple arrivals spread over time
-      expect(chunkArrivals.length, greaterThan(1),
-          reason: 'Should receive multiple chunks');
-
-      // The total elapsed time should be significant (at least 200ms for 2 sleeps of 0.15s)
-      if (chunkArrivals.length > 1) {
-        final totalTime = chunkArrivals.last - chunkArrivals.first;
-        expect(totalTime, greaterThan(100),
-            reason:
-                'Chunks should arrive over time (total spread: ${totalTime}ms), indicating streaming rather than buffered response');
-      }
-    });
-
     test('runCommand collects all output before returning', () async {
       // Verify that runCommand collects all output
       final result = await runCommand(
@@ -334,7 +360,8 @@ void main() {
       expect(combined, contains('line3'));
     });
 
-    test('streamCommand vs runCommand - same content, different delivery', () async {
+    test('streamCommand vs runCommand - same content, different delivery',
+        () async {
       const testCmd = 'echo "a"; echo "b"; echo "c"';
 
       // Get output from both methods

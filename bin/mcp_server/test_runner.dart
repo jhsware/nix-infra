@@ -14,14 +14,17 @@ class TestRunner extends McpTool {
       'type': 'string',
       'description': '''
 run -- run test
-reset -- reset test cluster
+reset -- reset test cluster (requires test-name)
 ''',
       'enum': [
         'run',
         'reset',
       ],
     },
-    'test-name': {'type': 'string', 'description': 'name of test'},
+    'test-name': {
+      'type': 'string',
+      'description': 'name of test (required for both run and reset)'
+    },
   };
 
   TestRunner({
@@ -32,16 +35,26 @@ reset -- reset test cluster
 
   Future<CallToolResult> callback({args, extra}) async {
     final operation = args!['operation'];
-    final testName = args!['test-name'] ?? '.';
+    final testName = args!['test-name'];
 
     Stream<String> resultStream;
 
     switch (operation) {
       case 'run':
+        if (testName == null || testName.isEmpty) {
+          return CallToolResult.fromContent(
+            content: [TextContent(text: 'Missing test-name parameter')],
+          );
+        }
         resultStream = runTest(name: testName);
         break;
       case 'reset':
-        resultStream = resetTestCluster();
+        if (testName == null || testName.isEmpty) {
+          return CallToolResult.fromContent(
+            content: [TextContent(text: 'Missing test-name parameter')],
+          );
+        }
+        resultStream = resetTestCluster(name: testName);
         break;
       default:
         return CallToolResult.fromContent(
@@ -82,8 +95,19 @@ reset -- reset test cluster
     yield* streamCommand(workingDir, '__test__/run-tests.sh run $name');
   }
 
-  Stream<String> resetTestCluster() async* {
-    yield* streamCommand(workingDir, '__test__/run-tests.sh reset');
+  Stream<String> resetTestCluster({required String name}) async* {
+    if (name.toString().contains('/')) {
+      yield 'No "/" allowed';
+      return;
+    }
+
+    final directory = Directory(getAbsolutePath('__test__/$name'));
+    if (!await directory.exists()) {
+      yield 'Test not found: $name (${directory.absolute.path})';
+      return;
+    }
+
+    yield* streamCommand(workingDir, '__test__/run-tests.sh reset $name');
   }
 }
 
@@ -100,13 +124,32 @@ Stream<String> streamCommand(Directory workingDir, String cmd) {
     workingDirectory: workingDir.path,
     runInShell: false,
   ).then((process) {
+    // Track when both streams are done
+    var stdoutDone = false;
+    var stderrDone = false;
+
+    void checkClose() {
+      if (stdoutDone && stderrDone) {
+        process.exitCode.then((exitCode) {
+          if (exitCode != 0) {
+            controller.add('Process exited with code: $exitCode\n');
+          }
+          controller.close();
+        });
+      }
+    }
+
     // Stream stdout
     process.stdout.transform(utf8.decoder).listen(
       (data) {
         controller.add(data);
       },
       onError: (error) {
-        controller.add('STDOUT ERROR: $error');
+        controller.add('STDOUT ERROR: $error\n');
+      },
+      onDone: () {
+        stdoutDone = true;
+        checkClose();
       },
     );
 
@@ -116,19 +159,15 @@ Stream<String> streamCommand(Directory workingDir, String cmd) {
         controller.add(data);
       },
       onError: (error) {
-        controller.add('STDERR ERROR: $error');
+        controller.add('STDERR ERROR: $error\n');
+      },
+      onDone: () {
+        stderrDone = true;
+        checkClose();
       },
     );
-
-    // Close controller when process exits
-    process.exitCode.then((exitCode) {
-      if (exitCode != 0) {
-        controller.add('Process exited with code: $exitCode');
-      }
-      controller.close();
-    });
   }).catchError((error) {
-    controller.add('Failed to start process: $error');
+    controller.add('Failed to start process: $error\n');
     controller.close();
   });
 

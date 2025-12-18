@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart';
-import 'package:process_run/shell.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
 

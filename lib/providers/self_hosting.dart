@@ -141,6 +141,18 @@ class SelfHosting implements InfrastructureProvider {
     var servers = _servers.values;
     
     if (only != null) {
+      // Check if any requested servers don't exist
+      final availableNames = _servers.keys.toSet();
+      final requestedNames = only.toSet();
+      final missingServers = requestedNames.difference(availableNames);
+      
+      if (missingServers.isNotEmpty) {
+        throw Exception(
+          'Server(s) not found in servers.yaml: ${missingServers.join(", ")}\n'
+          'Available servers: ${availableNames.join(", ")}'
+        );
+      }
+      
       servers = servers.where((s) => only.contains(s.name));
     }
 

@@ -31,6 +31,16 @@ void main(List<String> arguments) async {
   } catch (err) {
     if (err is FormatException) {
       await legacyCommands(arguments);
+    } else if (err is Exception) {
+      // Handle regular exceptions (from SSH, providers, etc.)
+      // Extract just the message without "Exception:" prefix and stack trace
+      final message = err.toString().replaceFirst('Exception: ', '');
+      echo('ERROR: $message');
+      exit(1);
+    } else {
+      // Handle any other errors
+      echo('ERROR: ${err.toString()}');
+      exit(1);
     }
   }
   exit(0);

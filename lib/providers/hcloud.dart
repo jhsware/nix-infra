@@ -108,7 +108,20 @@ class HetznerCloud implements InfrastructureProvider {
       totalEntries = body['meta']['pagination']['total_entries'];
       servers.addAll(body['servers']);
     }
+    
     if (only != null) {
+      // Check if any requested servers don't exist
+      final availableNames = servers.map((s) => s['name'] as String).toSet();
+      final requestedNames = only.toSet();
+      final missingServers = requestedNames.difference(availableNames);
+      
+      if (missingServers.isNotEmpty) {
+        throw Exception(
+          'Server(s) not found in Hetzner Cloud: ${missingServers.join(", ")}\n'
+          'Available servers: ${availableNames.join(", ")}'
+        );
+      }
+      
       servers = servers.where((node) => only.contains(node['name'])).toList();
     }
 

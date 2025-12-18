@@ -36,7 +36,7 @@ if [ "$CMD" = "build-macos" ]; then
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra bin/nix_infra.dart
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra-machine-mcp bin/nix_infra_machine_mcp.dart
   dart compile exe --verbosity error --target-os macos -o bin/nix-infra-cluster-mcp bin/nix_infra_cluster_mcp.dart
-  dart compile exe --verbosity error --target-os macos -o bin/nix-infra-cluster-mcp bin/nix_infra_dev_mcp.dart
+  dart compile exe --verbosity error --target-os macos -o bin/nix-infra-dev-mcp bin/nix_infra_dev_mcp.dart
 fi
 
 if [ "$CMD" = "build-linux" ]; then
@@ -54,7 +54,7 @@ if [ "$CMD" = "release-macos" ]; then
   checkVar "$DEV_IDENTIFIER" DEV_IDENTIFIER
   checkVar "$DEV_CREDENTIAL_PROFILE" DEV_CREDENTIAL_PROFILE
 
-    # Check if xcode-select is pointing to Nix
+  # Check if xcode-select is pointing to Nix
   XCODE_PATH=$(which xcode-select)
   if [ $? -eq 0 ] && echo "$XCODE_PATH" | grep -q '/nix/store'; then
     echo "ERROR: xcode-select is pointing to a Nix path: $XCODE_PATH" >&2
@@ -84,14 +84,17 @@ if [ "$CMD" = "release-macos" ]; then
     fi
   done
 
+  PKG="bin/nix-infra-installer"
+  VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
+
+  # Clean up previous build artifacts
+  [ -d "$PKG" ] && rm -rf "$PKG"
+  [ -f "$PKG.pkg" ] && rm -f "$PKG.pkg"
+
+  mkdir "$PKG"
+
+  # Sign and stage all binaries
   for target in $binaries; do
-    PKG="bin/$target-installer"
-    VERSION=$(grep -E '^version: ' pubspec.yaml | awk '{print $2}')
-
-    [ -f "bin/$target.zip" ] && rm -f "bin/$target.zip"
-    [ -d "bin/$target-installer" ] && rm -rf "bin/$target-installer"
-
-    mkdir "$PKG"
     cp "bin/$target" "$PKG/"
 
     # Sign the application with hardened runtime
@@ -100,24 +103,23 @@ if [ "$CMD" = "release-macos" ]; then
       --sign "$DEV_APP_CERTIFICATE" \
       --entitlements "bin/entitlements.plist" \
       "$PKG/$target"
-
-    # Create package
-    pkgbuild --root "$PKG" \
-          --identifier "$DEV_IDENTIFIER" \
-          --version "$VERSION" \
-          --install-location "/usr/local/bin" \
-          --sign "$DEV_CERTIFICATE" \
-          "$PKG.pkg"
-
-    # Notarize
-    xcrun notarytool submit "$PKG.pkg" \
-      --keychain-profile "$DEV_CREDENTIAL_PROFILE" \
-      --wait
-
-    # Staple the notarization ticket
-    # https://stackoverflow.com/questions/58817903/how-to-download-notarized-files-from-apple
-    xcrun stapler staple "$PKG.pkg"
   done
+
+  # Create single package containing all binaries
+  pkgbuild --root "$PKG" \
+        --identifier "$DEV_IDENTIFIER" \
+        --version "$VERSION" \
+        --install-location "/usr/local/bin" \
+        --sign "$DEV_CERTIFICATE" \
+        "$PKG.pkg"
+
+  # Notarize
+  xcrun notarytool submit "$PKG.pkg" \
+    --keychain-profile "$DEV_CREDENTIAL_PROFILE" \
+    --wait
+
+  # Staple the notarization ticket
+  xcrun stapler staple "$PKG.pkg"
 fi
 
 if [ "$CMD" = "list-identities" ]; then

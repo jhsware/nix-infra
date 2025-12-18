@@ -4,6 +4,7 @@ import 'package:nix_infra/providers/providers.dart';
 import 'mcp_server/calculate.dart';
 import 'mcp_server/filesystem.dart';
 import 'mcp_server/filesystem_edit.dart';
+import 'mcp_server/test_environment.dart';
 import 'mcp_server/test_runner.dart';
 import 'package:nix_infra/helpers.dart';
 import 'mcp_server/utils.dart';
@@ -68,9 +69,8 @@ void main() async {
       "${workingDir.absolute.path}/app_modules",
       "${workingDir.absolute.path}/modules",
       "${workingDir.absolute.path}/node_types",
-      "${workingDir.absolute.path}/cli",
       "${workingDir.absolute.path}/configuration.nix",
-      "${workingDir.absolute.path}/flake.nix",
+      "${workingDir.absolute.path}/configuration.nix",
     ],
   );
 
@@ -111,6 +111,19 @@ void main() async {
     description: TestRunner.description,
     inputSchemaProperties: TestRunner.inputSchemaProperties,
     callback: testRunner.callback,
+  );
+
+  final testEnvronment = TestEnvironment(
+    workingDir: workingDir,
+    sshKeyName: sshKeyName,
+    provider: provider,
+  );
+
+  server.tool(
+    "test-environment",
+    description: TestEnvironment.description,
+    inputSchemaProperties: TestEnvironment.inputSchemaProperties,
+    callback: testEnvronment.callback,
   );
 
   server.connect(StdioServerTransport());

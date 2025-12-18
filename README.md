@@ -57,7 +57,7 @@ Use the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) 
 
 **Option 2: Standalone machines**
 
-Use the [nix-infra-test-machine](https://github.com/jhsware/nix-infra-test-machine) template for managing individual machines or fleets without cluster orchestration.
+Use the [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) template for managing individual machines or fleets without cluster orchestration.
 
 Each repo contains detailed instructions. You can either run the provided test script to automate installation, or clone the repo and create custom automation scripts.
 

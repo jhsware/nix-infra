@@ -17,10 +17,9 @@ jobs:
       - name: Install dependencies
         run: dart pub get --enforce-lockfile
 
-      # - run: dart format --output=none --set-exit-if-changed .
-      # - run: dart analyze
-      # - name: Run tests
-      #   run: dart test
+      
+      - name: Run tests
+        run: dart test
 
       - name: Compile nix-infra executable
         run: dart compile exe --verbosity error --target-os linux -o bin/nix-infra bin/nix_infra.dart

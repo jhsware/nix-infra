@@ -195,7 +195,7 @@ void main() {
     });
 
     group('readFile', () {
-      test('reads file content', () async {
+      test('reads file content with line numbers', () async {
         final testContent = 'Hello, World!\nThis is a test.';
         await File('${testDir.path}/test.txt').writeAsString(testContent);
 
@@ -207,7 +207,7 @@ void main() {
         );
 
         final text = (result.content.first as TextContent).text;
-        expect(text, testContent);
+        expect(text, 'L1: Hello, World!\nL2: This is a test.');
       });
 
       test('reads file with unicode content', () async {
@@ -222,7 +222,7 @@ void main() {
         );
 
         final text = (result.content.first as TextContent).text;
-        expect(text, testContent);
+        expect(text, 'L1: Hej! 你好 🎉 émoji');
       });
 
       test('reads empty file', () async {
@@ -252,7 +252,7 @@ void main() {
         );
 
         final text = (result.content.first as TextContent).text;
-        expect(text, 'nested content');
+        expect(text, 'L1: nested content');
       });
 
       test('returns error for non-existent file', () async {
@@ -338,11 +338,11 @@ void main() {
 
         final text = (result.content.first as TextContent).text;
         expect(text, contains('$testDirName/file1.txt:'));
-        expect(text, contains('Content 1'));
+        expect(text, contains('L1: Content 1'));
         expect(text, contains('$testDirName/file2.txt:'));
-        expect(text, contains('Content 2'));
+        expect(text, contains('L1: Content 2'));
         expect(text, contains('$testDirName/file3.txt:'));
-        expect(text, contains('Content 3'));
+        expect(text, contains('L1: Content 3'));
       });
 
       test('reads single file via read-files', () async {
@@ -357,7 +357,7 @@ void main() {
 
         final text = (result.content.first as TextContent).text;
         expect(text, contains('$testDirName/single.txt:'));
-        expect(text, contains('Single content'));
+        expect(text, contains('L1: Single content'));
       });
 
       test('handles mix of existing and non-existing files', () async {
@@ -372,7 +372,7 @@ void main() {
 
         final text = (result.content.first as TextContent).text;
         expect(text, contains('$testDirName/exists.txt:'));
-        expect(text, contains('I exist'));
+        expect(text, contains('L1: I exist'));
         expect(text, contains('File not found: $testDirName/not_exists.txt'));
       });
 
@@ -419,7 +419,7 @@ void main() {
 
         final text = (result.content.first as TextContent).text;
         expect(text, contains('$testDirName/allowed.txt:'));
-        expect(text, contains('allowed'));
+        expect(text, contains('L1: allowed'));
         expect(text, contains('Not allowed for: outside/path.txt'));
       });
     });

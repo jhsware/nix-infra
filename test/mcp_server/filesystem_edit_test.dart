@@ -205,6 +205,39 @@ void main() {
         expect(await file.readAsString(), 'Nested content');
       });
 
+      test('strips line numbers from content when creating file', () async {
+        final result = await fsEdit.callback(
+          args: {
+            'operation': 'create-file',
+            'path': testFilePath,
+            'content': 'L1: Line one\nL2: Line two\nL3: Line three',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, 'Created file: $testFilePath');
+
+        final file = File('${testDir.path}/test_file.txt');
+        expect(await file.exists(), isTrue);
+        expect(await file.readAsString(), 'Line one\nLine two\nLine three');
+      });
+
+      test('handles content without line numbers when creating file', () async {
+        final result = await fsEdit.callback(
+          args: {
+            'operation': 'create-file',
+            'path': testFilePath,
+            'content': 'No line numbers here\nJust plain text',
+          },
+        );
+
+        final text = (result.content.first as TextContent).text;
+        expect(text, 'Created file: $testFilePath');
+
+        final file = File('${testDir.path}/test_file.txt');
+        expect(await file.readAsString(), 'No line numbers here\nJust plain text');
+      });
+
       test('returns error for existing file', () async {
         final file = File('${testDir.path}/test_file.txt');
         await file.create();
@@ -783,6 +816,82 @@ void main() {
 
           expect(
               await file.readAsString(), 'Line 1\nHej! 你好 🎉 émoji\nLine 3');
+        });
+      });
+
+      group('line number stripping', () {
+        test('strips line numbers when editing file (overwrite mode)', () async {
+          final file = File('${testDir.path}/test_file.txt');
+          await file.writeAsString('Line 1\nLine 2\nLine 3');
+
+          final result = await fsEdit.callback(
+            args: {
+              'operation': 'edit-file',
+              'path': testFilePath,
+              'content': 'L1: New line one\nL2: New line two',
+            },
+          );
+
+          final text = (result.content.first as TextContent).text;
+          expect(text, contains('Success'));
+          expect(await file.readAsString(), 'New line one\nNew line two');
+        });
+
+        test('strips line numbers when inserting at line', () async {
+          final file = File('${testDir.path}/test_file.txt');
+          await file.writeAsString('Line 1\nLine 3');
+
+          final result = await fsEdit.callback(
+            args: {
+              'operation': 'edit-file',
+              'path': testFilePath,
+              'content': 'L1: Inserted line',
+              'startLine': 2,
+            },
+          );
+
+          final text = (result.content.first as TextContent).text;
+          expect(text, contains('Success'));
+          expect(await file.readAsString(), 'Line 1\nInserted line\nLine 3');
+        });
+
+        test('strips line numbers when replacing line range', () async {
+          final file = File('${testDir.path}/test_file.txt');
+          await file.writeAsString('Line 1\nLine 2\nLine 3\nLine 4');
+
+          final result = await fsEdit.callback(
+            args: {
+              'operation': 'edit-file',
+              'path': testFilePath,
+              'content': 'L1: Replacement A\nL2: Replacement B',
+              'startLine': 2,
+              'endLine': 3,
+            },
+          );
+
+          final text = (result.content.first as TextContent).text;
+          expect(text, contains('Success'));
+          expect(await file.readAsString(),
+              'Line 1\nReplacement A\nReplacement B\nLine 4');
+        });
+
+        test('handles mixed content with and without line numbers', () async {
+          final file = File('${testDir.path}/test_file.txt');
+          await file.writeAsString('Line 1\nLine 2');
+
+          final result = await fsEdit.callback(
+            args: {
+              'operation': 'edit-file',
+              'path': testFilePath,
+              'content': 'L1: Has line number\nNo line number\nL3: Also has line number',
+              'startLine': 2,
+            },
+          );
+
+          final text = (result.content.first as TextContent).text;
+          expect(text, contains('Success'));
+          expect(await file.readAsString(),
+              'Line 1\nHas line number\nNo line number\nAlso has line number\nLine 2');
         });
       });
     });

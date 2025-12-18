@@ -138,8 +138,9 @@ edit-file -- edit the content of a file
     await file.create(recursive: true);
 
     if (content != null) {
-      // New files should be written as composed by client
-      await file.writeAsString(content);
+      // Strip line numbers if present, then write
+      final cleanContent = stripLineNumbers(content);
+      await file.writeAsString(cleanContent);
     }
 
     return 'Created file: $path';
@@ -214,7 +215,9 @@ edit-file -- edit the content of a file
     final normalizedExistingContent = normalizeLineEndings(existingContent);
     final existingContentLines = normalizedExistingContent.split('\n');
 
-    final normalizedNewContent = normalizeLineEndings(content);
+    // Strip line numbers from content if present
+    final cleanContent = stripLineNumbers(content);
+    final normalizedNewContent = normalizeLineEndings(cleanContent);
     final newContentLines = normalizedNewContent.split('\n');
 
     String resultContent;

@@ -149,7 +149,8 @@ class FileSystem extends McpTool {
     }
 
     final content = await file.readAsString();
-    return normalizeLineEndings(content);
+    final normalized = normalizeLineEndings(content);
+    return addLineNumbers(normalized);
   }
 
   Future<String> readFiles({required List<String> paths}) async {
@@ -179,7 +180,8 @@ class FileSystem extends McpTool {
       }
 
       final content = await file.readAsString();
-      outp.addAll(['$path:', normalizeLineEndings(content)]);
+      final normalized = normalizeLineEndings(content);
+      outp.addAll(['$path:', addLineNumbers(normalized)]);
     }
 
     return outp.join('\n');

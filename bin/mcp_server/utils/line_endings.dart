@@ -57,3 +57,49 @@ String applyLineEndings(String content, LineEndingStyle style) {
       return content;
   }
 }
+
+/// Add line numbers to content
+/// 
+/// Adds "L#: " prefix to each line where # is the line number (1-indexed)
+String addLineNumbers(String content) {
+  if (content.isEmpty) {
+    return content;
+  }
+  
+  final lines = content.split('\n');
+  final numberedLines = <String>[];
+  
+  for (var i = 0; i < lines.length; i++) {
+    numberedLines.add('L${i + 1}: ${lines[i]}');
+  }
+  
+  return numberedLines.join('\n');
+}
+
+/// Strip line numbers from content
+/// 
+/// Removes "L#: " prefix from each line if present
+/// Returns the content unchanged if no line numbers are detected
+String stripLineNumbers(String content) {
+  if (content.isEmpty) {
+    return content;
+  }
+  
+  final lines = content.split('\n');
+  final strippedLines = <String>[];
+  
+  // Regex to match "L<number>: " at the start of a line
+  final lineNumberPattern = RegExp(r'^L\d+: ');
+  
+  for (final line in lines) {
+    if (lineNumberPattern.hasMatch(line)) {
+      // Strip the line number prefix
+      strippedLines.add(line.replaceFirst(lineNumberPattern, ''));
+    } else {
+      // Keep the line as-is if no line number prefix
+      strippedLines.add(line);
+    }
+  }
+  
+  return strippedLines.join('\n');
+}

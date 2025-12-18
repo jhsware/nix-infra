@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'filesystem.dart';
 import 'mcp_tool.dart';
+import 'utils/line_endings.dart';
 
 class FileSystemEdit extends McpTool {
   static const description = 'Read configuration of cluster project.';
@@ -32,10 +33,10 @@ edit-file -- edit the content of a file
     'startLine': {
       'type': 'integer',
       'description':
-        'Optional starting line number (1-indexed) for edit-file operation:'
-        '- If not provided: overwrites the entire file with content'
-        '- If provided without endLine: inserts content at this line, pushing existing content down'
-        '- If provided with endLine: replaces lines from startLine to endLine (inclusive) with content'
+          'Optional starting line number (1-indexed) for edit-file operation:'
+              '- If not provided: overwrites the entire file with content'
+              '- If provided without endLine: inserts content at this line, pushing existing content down'
+              '- If provided with endLine: replaces lines from startLine to endLine (inclusive) with content'
     },
     'endLine': {
       'type': 'integer',
@@ -137,6 +138,7 @@ edit-file -- edit the content of a file
     await file.create(recursive: true);
 
     if (content != null) {
+      // New files should be written as composed by client
       await file.writeAsString(content);
     }
 
@@ -202,58 +204,71 @@ edit-file -- edit the content of a file
       return 'Error: endLine must be >= startLine';
     }
 
-    // Read existing file content
+    // Read existing file content and detect line ending style
     final existingContent = await file.readAsString();
-    final lines = existingContent.split('\n');
-    final newContentLines = content.split('\n');
+
+    final lineEndingStyle = existingContent != ""
+        ? detectLineEndings(existingContent)
+        : detectLineEndings(content);
+
+    final normalizedExistingContent = normalizeLineEndings(existingContent);
+    final existingContentLines = normalizedExistingContent.split('\n');
+
+    final normalizedNewContent = normalizeLineEndings(content);
+    final newContentLines = normalizedNewContent.split('\n');
 
     String resultContent;
     String operationDescription;
 
     if (startLine == null) {
-      // Mode 1: Overwrite entire file
-      resultContent = content;
+      // Mode 1: Overwrite entire file and maintain lin
+      resultContent = normalizedNewContent;
       operationDescription = 'Overwrote entire file';
     } else if (endLine == null) {
       // Mode 2: Insert at line (push existing content down)
       final insertIndex = startLine - 1; // Convert to 0-indexed
 
-      if (insertIndex > lines.length) {
+      if (insertIndex > existingContentLines.length) {
         // If inserting beyond the file, pad with empty lines
-        final padding = List.filled(insertIndex - lines.length, '');
-        lines.addAll(padding);
+        final padding =
+            List.filled(insertIndex - existingContentLines.length, '');
+        existingContentLines.addAll(padding);
       }
 
-      lines.insertAll(insertIndex, newContentLines);
-      resultContent = lines.join('\n');
+      existingContentLines.insertAll(insertIndex, newContentLines);
+      resultContent = existingContentLines.join('\n');
       operationDescription =
           'Inserted ${newContentLines.length} line(s) at line $startLine';
     } else {
       // Mode 3: Replace line range (startLine to endLine inclusive)
       final startIndex = startLine - 1; // Convert to 0-indexed
-      final endIndex = endLine; // endLine is inclusive, so we use it directly for removeRange
+      final endIndex =
+          endLine; // endLine is inclusive, so we use it directly for removeRange
 
-      if (startIndex >= lines.length) {
-        return 'Error: startLine ($startLine) exceeds file length (${lines.length} lines)';
+      if (startIndex >= existingContentLines.length) {
+        return 'Error: startLine ($startLine) exceeds file length (${existingContentLines.length} lines)';
       }
 
       // Clamp endIndex to file length
-      final actualEndIndex = endIndex > lines.length ? lines.length : endIndex;
+      final actualEndIndex = endIndex > existingContentLines.length
+          ? existingContentLines.length
+          : endIndex;
 
       // Remove the lines in the range
-      lines.removeRange(startIndex, actualEndIndex);
+      existingContentLines.removeRange(startIndex, actualEndIndex);
 
       // Insert new content at the start position
-      lines.insertAll(startIndex, newContentLines);
+      existingContentLines.insertAll(startIndex, newContentLines);
 
-      resultContent = lines.join('\n');
+      resultContent = existingContentLines.join('\n');
       final replacedCount = actualEndIndex - startIndex;
       operationDescription =
           'Replaced $replacedCount line(s) (lines $startLine-${startIndex + replacedCount}) with ${newContentLines.length} line(s)';
     }
 
-    // Write the result back to the file
-    await file.writeAsString(resultContent);
+    // Apply the original line ending style before writing
+    final finalContent = applyLineEndings(resultContent, lineEndingStyle);
+    await file.writeAsString(finalContent);
 
     return 'Success: $operationDescription in $path';
   }

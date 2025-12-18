@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
+import 'utils/line_endings.dart';
 
 class FileSystem extends McpTool {
   static const description = 'Read configuration of cluster project.';
@@ -148,7 +149,8 @@ class FileSystem extends McpTool {
       return 'File not found: $path';
     }
 
-    return await file.readAsString();
+    final content = await file.readAsString();
+    return normalizeLineEndings(content);
   }
 
   Future<String> readFiles({required List<String> paths}) async {
@@ -177,7 +179,8 @@ class FileSystem extends McpTool {
         continue;
       }
 
-      outp.addAll(['$path:', await file.readAsString()]);
+      final content = await file.readAsString();
+      outp.addAll(['$path:', normalizeLineEndings(content)]);
     }
 
     return outp.join('\n');

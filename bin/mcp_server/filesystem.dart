@@ -12,11 +12,10 @@ class FileSystem extends McpTool {
     'operation': {
       'type': 'string',
       'description':
-        'list-content -- recursively list configuration files and directories in cluster project'
-        'read-file -- read the content of a file at given path'
-        'read-files -- read the content of several files provided as comma separated list of paths'
-        'search-text -- recursively search for text pattern (regex) in files and return matches as JSON'
-    ,
+          'list-content -- recursively list configuration files and directories in cluster project'
+              'read-file -- read the content of a file at given path'
+              'read-files -- read the content of several files provided as comma separated list of paths'
+              'search-text -- recursively search for text pattern (regex) in files and return matches as JSON',
       'enum': [
         'list-content',
         'read-file',

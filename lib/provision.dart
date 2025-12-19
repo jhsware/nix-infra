@@ -3,41 +3,49 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/types.dart';
 import 'package:process_run/shell.dart';
 
+/// Create nodes using the provided infrastructure provider.
+///
+/// This function requires a provider that supports server creation.
+/// For HetznerCloud, it also supports placement groups.
 Future<List<String>> createNodes(
   Directory workingDir,
   List<String> nodeNames, {
-  required String hcloudToken,
+  required InfrastructureProvider provider,
   required String location,
   required String sshKeyName,
   required String machineType,
   String? placementGroup,
 }) async {
-  final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-  await hcloud.addSshKeyToCloudProvider(workingDir, sshKeyName);
+  if (provider.supportsAddSshKey) {
+    await provider.addSshKeyToCloudProvider(workingDir, sshKeyName);
+  }
 
   int? placementGroupId;
-  if (placementGroup != null) {
-    final placementGroups = await hcloud.getPlacementGroups();
-    if (placementGroups.any((el) => el.name == placementGroup)) {
-      final group =
-          placementGroups.firstWhere((el) => el.name == placementGroup);
-      placementGroupId = group.id;
-    } else {
-      final group = await hcloud.createPlacementGroup(placementGroup);
-      placementGroupId = group.id;
+  if (placementGroup != null && provider.supportsPlacementGroups) {
+    // Placement groups are HetznerCloud-specific
+    if (provider is HetznerCloud) {
+      final placementGroups = await provider.getPlacementGroups();
+      if (placementGroups.any((el) => el.name == placementGroup)) {
+        final group =
+            placementGroups.firstWhere((el) => el.name == placementGroup);
+        placementGroupId = group.id;
+      } else {
+        final group = await provider.createPlacementGroup(placementGroup);
+        placementGroupId = group.id;
+      }
     }
   }
 
   echo('************* SPAWNING NODES *************');
   //
-  // 1. Find existing nodes by checking hcloud server list
-  final existingNodes = (await hcloud.getServers()).toList();
+  // 1. Find existing nodes by checking server list
+  final existingNodes = (await provider.getServers()).toList();
   final createdNodes = <String>[];
 
   for (final name in nodeNames) {
@@ -46,7 +54,7 @@ Future<List<String>> createNodes(
       continue;
     } else {
       echo("Node: $name doesn't exist, creating...");
-      await hcloud.createServer(
+      await provider.createServer(
         name,
         machineType,
         location,
@@ -59,18 +67,30 @@ Future<List<String>> createNodes(
   return createdNodes;
 }
 
-Future<void> destroyNodes(Directory workingDir, Iterable<ClusterNode> nodes,
-    {required String hcloudToken, required String sshKeyName}) async {
-  final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+/// Destroy nodes using the provided infrastructure provider.
+///
+/// This function requires a provider that supports server destruction.
+Future<void> destroyNodes(
+  Directory workingDir,
+  Iterable<ClusterNode> nodes, {
+  required InfrastructureProvider provider,
+}) async {
+  if (!provider.supportsDestroyServer) {
+    throw UnsupportedError(
+      '${provider.providerName} does not support destroying servers. '
+      'For self-hosted servers, remove them manually from servers.yaml instead.',
+    );
+  }
+
   echo('************* DESTROYING NODES *************');
   //
-  // 1. Find existing nodes by checking hcloud server list
-  final existingNodes = (await hcloud.getServers()).toList();
+  // 1. Find existing nodes by checking server list
+  final existingNodes = (await provider.getServers()).toList();
 
   final destroying = nodes.map((node) {
     if (existingNodes.any((n) => n.name == node.name)) {
       echo('Node ${node.name} exists, destroying...');
-      return hcloud.destroyServer(node.id);
+      return provider.destroyServer(node.id);
     } else {
       echo('Node ${node.name} does not exist, skipping...');
       return Future.value();
@@ -239,9 +259,22 @@ Future<void> rebootToNixos(Directory workingDir,
   await Future.wait(bootToNixos);
 }
 
-Future<void> waitForServers(Directory workingDir, Iterable<ClusterNode> nodes,
-    {required String hcloudToken, required String sshKeyName}) async {
-  final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+/// Wait for servers to be ready after creation.
+///
+/// This is a HetznerCloud-specific operation that polls the server action status.
+/// For other providers, this function does nothing (assumes servers are ready).
+Future<void> waitForServers(
+  Directory workingDir,
+  Iterable<ClusterNode> nodes, {
+  required InfrastructureProvider provider,
+}) async {
+  // Server action polling is HetznerCloud-specific
+  if (provider is! HetznerCloud) {
+    // For other providers, just wait for SSH to be available
+    return;
+  }
+
+  final hcloud = provider;
   final waitForAll = nodes.map((node) async {
     var maxTries = 100;
     while (maxTries-- > 0) {
@@ -294,9 +327,9 @@ Future<void> nixosRebuild(
   final rebuilders = nodes.map((node) async {
     final sshClient = SSHClient(
       await SSHSocket.connect(node.ipAddr, 22),
-      username: 'root',
+      username: node.username,
       identities: [
-        ...SSHKeyPair.fromPem(await getSshKeyAsPem(workingDir, node.sshKeyName))
+        ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
       ],
     );
 

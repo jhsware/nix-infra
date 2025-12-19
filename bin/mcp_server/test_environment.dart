@@ -2,26 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart';
-import 'package:process_run/shell.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
-import 'utils/shared.dart';
 
-/// Represents an active test session with cached output chunks
-class TestSession {
+/// Represents an active test environment session with cached output chunks
+class TestEnvironmentSession {
   final String id;
   final String operation;
-  final String testName;
   final DateTime startedAt;
   final List<String> chunks = [];
   bool isComplete = false;
   int? exitCode;
   StreamSubscription<String>? _subscription;
 
-  TestSession({
+  TestEnvironmentSession({
     required this.id,
     required this.operation,
-    required this.testName,
   }) : startedAt = DateTime.now();
 
   /// Starts collecting output from the stream
@@ -47,31 +43,31 @@ class TestSession {
   }
 }
 
-/// Manages active test sessions
-class SessionManager {
-  static final SessionManager _instance = SessionManager._internal();
-  factory SessionManager() => _instance;
-  SessionManager._internal();
+/// Manages active test environment sessions
+class TestEnvironmentSessionManager {
+  static final TestEnvironmentSessionManager _instance =
+      TestEnvironmentSessionManager._internal();
+  factory TestEnvironmentSessionManager() => _instance;
+  TestEnvironmentSessionManager._internal();
 
-  final Map<String, TestSession> _sessions = {};
+  final Map<String, TestEnvironmentSession> _sessions = {};
   int _sessionCounter = 0;
 
   /// Creates a new session and returns its ID
-  String createSession(String operation, String testName) {
+  String createSession(String operation) {
     _sessionCounter++;
     final id =
-        'session_${_sessionCounter}_${DateTime.now().millisecondsSinceEpoch}';
-    final session = TestSession(
+        'env_session_${_sessionCounter}_${DateTime.now().millisecondsSinceEpoch}';
+    final session = TestEnvironmentSession(
       id: id,
       operation: operation,
-      testName: testName,
     );
     _sessions[id] = session;
     return id;
   }
 
   /// Gets a session by ID
-  TestSession? getSession(String id) => _sessions[id];
+  TestEnvironmentSession? getSession(String id) => _sessions[id];
 
   /// Removes a session
   Future<void> removeSession(String id) async {
@@ -83,11 +79,11 @@ class SessionManager {
   }
 
   /// Lists all active sessions
-  List<TestSession> get activeSessions =>
+  List<TestEnvironmentSession> get activeSessions =>
       _sessions.values.where((s) => !s.isComplete).toList();
 
   /// Lists all sessions
-  List<TestSession> get allSessions => _sessions.values.toList();
+  List<TestEnvironmentSession> get allSessions => _sessions.values.toList();
 
   /// Cleans up completed sessions older than the specified duration
   void cleanupOldSessions({Duration maxAge = const Duration(hours: 1)}) {
@@ -98,35 +94,34 @@ class SessionManager {
   }
 }
 
-class TestRunner extends McpTool {
-  static const description = 'Run tests on an existing test cluster.';
+class TestEnvironment extends McpTool {
+  static const description =
+      'Manage test environment for HA cluster testing. Create and destroy test clusters.';
 
   static const Map<String, dynamic> inputSchemaProperties = {
     'operation': {
       'type': 'string',
       'description': '''
-run -- start a test run (returns session_id for polling output)
-reset -- reset test cluster (returns session_id for polling output)
+create -- create a new test environment/cluster (returns session_id for polling output)
+destroy -- destroy the test environment/cluster (returns session_id for polling output)
+status -- check the health status of the test cluster (returns session_id for polling output)
 get_output -- get output chunks from a running or completed session
 list_sessions -- list all active sessions
 cancel -- cancel a running session
 ''',
       'enum': [
-        'run',
-        'reset',
+        'create',
+        'destroy',
+        'status',
         'get_output',
         'list_sessions',
         'cancel',
       ],
     },
-    'test-name': {
-      'type': 'string',
-      'description': 'name of test (required for run and reset operations)'
-    },
     'session_id': {
       'type': 'string',
       'description':
-          'session ID returned from run/reset (required for get_output and cancel)'
+          'session ID returned from create/test (required for get_output and cancel)'
     },
     'chunk_index': {
       'type': 'integer',
@@ -140,9 +135,13 @@ cancel -- cancel a running session
     },
   };
 
-  final SessionManager _sessionManager = SessionManager();
+  /// Path to the test infrastructure directory (current working directory)
+  static String get testInfraPath => getAbsolutePath('.');
 
-  TestRunner({
+  final TestEnvironmentSessionManager _sessionManager =
+      TestEnvironmentSessionManager();
+
+  TestEnvironment({
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
@@ -151,22 +150,17 @@ cancel -- cancel a running session
   @override
   Future<CallToolResult> callback({args, extra}) async {
     final operation = args!['operation'];
-    final testName = args['test-name'];
     final sessionId = args['session_id'];
     final chunkIndex = args['chunk_index'] ?? 0;
     final maxChunks = (args['max_chunks'] ?? 50).clamp(1, 200);
 
-    if (['run', 'reset'].contains(operation)) {
-      if (testName == null || testName.isEmpty) {
-        return callToolText('Missing test-name parameter for $operation');
-      }
-    }
-
     switch (operation) {
-      case 'run':
-        return _startOperation('run', testName);
-      case 'reset':
-        return _startOperation('reset', testName);
+      case 'create':
+        return _startOperation('create');
+      case 'destroy':
+        return _startOperation('destroy');
+      case 'status':
+        return _startOperation('status');
       case 'get_output':
         return _getOutput(sessionId, chunkIndex, maxChunks);
       case 'list_sessions':
@@ -184,43 +178,39 @@ cancel -- cancel a running session
     }
   }
 
-  /// Starts a run or reset operation and returns session info
-  CallToolResult _startOperation(String operation, String? testName) {
-    if (testName == null || testName.isEmpty) {
-      return CallToolResult.fromContent(
-        content: [TextContent(text: 'Missing test-name parameter')],
-      );
-    }
-
-    if (testName.contains('/')) {
-      return CallToolResult.fromContent(
-        content: [TextContent(text: 'No "/" allowed')],
-      );
-    }
-
-    final directory = Directory(getAbsolutePath('__test__/$testName'));
-    if (!directory.existsSync()) {
+  /// Starts a create or destroy operation and returns session info
+  CallToolResult _startOperation(String operation) {
+    final testInfraDir = Directory(testInfraPath);
+    if (!testInfraDir.existsSync()) {
       return CallToolResult.fromContent(
         content: [
           TextContent(
-              text: 'Test not found: $testName (${directory.absolute.path})')
+              text:
+                  'Test infrastructure directory not found: $testInfraPath')
+        ],
+      );
+    }
+
+    final runTestsScript = File('$testInfraPath/__test__/run-tests.sh');
+    if (!runTestsScript.existsSync()) {
+      return CallToolResult.fromContent(
+        content: [
+          TextContent(
+              text:
+                  'run-tests.sh script not found: ${runTestsScript.path}')
         ],
       );
     }
 
     // Create session and start collecting output
-    final sessionId = _sessionManager.createSession(operation, testName);
+    final sessionId = _sessionManager.createSession(operation);
     final session = _sessionManager.getSession(sessionId)!;
 
-    // Start the appropriate command
-    Stream<String> outputStream;
-    if (operation == 'run') {
-      outputStream =
-          streamCommand(workingDir, '__test__/run-tests.sh run $testName');
-    } else {
-      outputStream =
-          streamCommand(workingDir, '__test__/run-tests.sh reset $testName');
-    }
+    // Build the command
+    final cmd = '__test__/run-tests.sh $operation';
+
+    // Start the command
+    final outputStream = _streamCommand(Directory(testInfraPath), cmd);
 
     // Start collecting output in the background
     session.collectOutput(outputStream);
@@ -230,7 +220,7 @@ cancel -- cancel a running session
       'status': 'started',
       'session_id': sessionId,
       'operation': operation,
-      'test_name': testName,
+      'working_directory': testInfraPath,
       'message':
           'Operation started. Use get_output with session_id to retrieve output chunks.',
     };
@@ -274,7 +264,6 @@ cancel -- cancel a running session
     final response = {
       'session_id': sessionId,
       'operation': session.operation,
-      'test_name': session.testName,
       'is_complete': session.isComplete,
       'total_chunks': totalChunks,
       'chunk_index': startIndex,
@@ -310,7 +299,6 @@ cancel -- cancel a running session
         .map((s) => {
               'session_id': s.id,
               'operation': s.operation,
-              'test_name': s.testName,
               'is_complete': s.isComplete,
               'chunks_collected': s.chunks.length,
               'started_at': s.startedAt.toIso8601String(),
@@ -359,130 +347,66 @@ cancel -- cancel a running session
     );
   }
 
-  // Keep the old methods for reference but they're no longer used directly
-  Stream<String> runTest({required String name}) async* {
-    if (name.toString().contains('/')) {
-      yield 'No "/" allowed';
-      return;
-    }
+  /// Streams command output as it becomes available.
+  Stream<String> _streamCommand(Directory workingDir, String cmd) {
+    final controller = StreamController<String>();
 
-    final directory = Directory(getAbsolutePath('__test__/$name'));
-    if (!await directory.exists()) {
-      yield 'Test not found: $name (${directory.absolute.path})';
-      return;
-    }
+    // Start the process asynchronously
+    Process.start(
+      '/bin/sh',
+      ['-c', cmd],
+      workingDirectory: workingDir.path,
+      runInShell: false,
+    ).then((process) {
+      // Track when both streams are done
+      var stdoutDone = false;
+      var stderrDone = false;
 
-    yield* streamCommand(workingDir, '__test__/run-tests.sh run $name');
-  }
-
-  Stream<String> resetTestCluster({required String name}) async* {
-    if (name.toString().contains('/')) {
-      yield 'No "/" allowed';
-      return;
-    }
-
-    final directory = Directory(getAbsolutePath('__test__/$name'));
-    if (!await directory.exists()) {
-      yield 'Test not found: $name (${directory.absolute.path})';
-      return;
-    }
-
-    yield* streamCommand(workingDir, '__test__/run-tests.sh reset $name');
-  }
-}
-
-/// Streams command output as it becomes available.
-/// Each chunk is yielded as soon as it is received from the process.
-/// Uses Process.start directly for true streaming behavior.
-Stream<String> streamCommand(Directory workingDir, String cmd) {
-  final controller = StreamController<String>();
-
-  // Start the process asynchronously
-  Process.start(
-    '/bin/sh',
-    ['-c', cmd],
-    workingDirectory: workingDir.path,
-    runInShell: false,
-  ).then((process) {
-    // Track when both streams are done
-    var stdoutDone = false;
-    var stderrDone = false;
-
-    void checkClose() {
-      if (stdoutDone && stderrDone) {
-        process.exitCode.then((exitCode) {
-          if (exitCode != 0) {
-            controller.add('Process exited with code: $exitCode\n');
-          }
-          controller.close();
-        });
+      void checkClose() {
+        if (stdoutDone && stderrDone) {
+          process.exitCode.then((exitCode) {
+            if (exitCode != 0) {
+              controller.add('Process exited with code: $exitCode\n');
+            }
+            controller.close();
+          });
+        }
       }
-    }
 
-    // Stream stdout
-    process.stdout.transform(utf8.decoder).listen(
-      (data) {
-        controller.add(data);
-      },
-      onError: (error) {
-        controller.add('STDOUT ERROR: $error\n');
-      },
-      onDone: () {
-        stdoutDone = true;
-        checkClose();
-      },
-    );
+      // Stream stdout
+      process.stdout.transform(utf8.decoder).listen(
+        (data) {
+          controller.add(data);
+        },
+        onError: (error) {
+          controller.add('STDOUT ERROR: $error\n');
+        },
+        onDone: () {
+          stdoutDone = true;
+          checkClose();
+        },
+      );
 
-    // Stream stderr
-    process.stderr.transform(utf8.decoder).listen(
-      (data) {
-        controller.add(data);
-      },
-      onError: (error) {
-        controller.add('STDERR ERROR: $error\n');
-      },
-      onDone: () {
-        stderrDone = true;
-        checkClose();
-      },
-    );
-  }).catchError((error) {
-    controller.add('Failed to start process: $error\n');
-    controller.close();
-  });
+      // Stream stderr
+      process.stderr.transform(utf8.decoder).listen(
+        (data) {
+          controller.add(data);
+        },
+        onError: (error) {
+          controller.add('STDERR ERROR: $error\n');
+        },
+        onDone: () {
+          stderrDone = true;
+          checkClose();
+        },
+      );
+    }).catchError((error) {
+      controller.add('Failed to start process: $error\n');
+      controller.close();
+    });
 
-  return controller.stream;
-}
-
-/// Runs a command and collects all output before returning.
-/// Kept for reference - use streamCommand for streaming output.
-Future<List<String>> runCommand(Directory workingDir, String cmd) async {
-  final List<String> outp = [];
-  final controller = StreamController<List<int>>();
-  controller.stream.listen((inp) {
-    final str = utf8.decode(inp);
-    outp.add(str);
-  }, onError: (inp) {
-    final str = utf8.decode(inp);
-    outp.add('ERROR: $str');
-  }, onDone: () {
-    // Do nothing...
-  });
-
-  final shell = Shell(
-    workingDirectory: workingDir.path,
-    runInShell: true,
-    stdout: controller.sink,
-    verbose: true,
-  );
-
-  try {
-    await shell.run(cmd);
-  } on ShellException catch (err) {
-    outp.add(err.message);
+    return controller.stream;
   }
-
-  return outp;
 }
 
 String getAbsolutePath(String path) {

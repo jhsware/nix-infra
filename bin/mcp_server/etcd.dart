@@ -24,12 +24,13 @@ class ControlPlaneEtcd extends McpTool {
   ControlPlaneEtcd({
     required super.workingDir,
     required super.sshKeyName,
-    required super.hcloudToken,
+    required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final target = args!['target'];
-    final query = args!['query'] as String?;
+    final query = args['query'] as String?;
 
     if (query == null || query.trim().isEmpty) {
       return CallToolResult.fromContent(
@@ -56,7 +57,7 @@ class ControlPlaneEtcd extends McpTool {
       );
     }
 
-    final nodes = await hcloud.getServers(only: [target]);
+    final nodes = await provider.getServers(only: [target]);
     
     if (nodes.isEmpty) {
       return CallToolResult.fromContent(

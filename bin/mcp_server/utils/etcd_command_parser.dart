@@ -417,12 +417,10 @@ class EtcdCommandParser {
       '--sort-by',
     };
 
-    int tokenIndex = 0;
     for (final token in tokens) {
       if (expectingOptionValue) {
         options.add(token);
         expectingOptionValue = false;
-        tokenIndex++;
         continue;
       }
 
@@ -446,7 +444,6 @@ class EtcdCommandParser {
         // Everything else is an argument (like key names)
         arguments.add(token);
       }
-      tokenIndex++;
     }
 
     return ParsedEtcdCommand(

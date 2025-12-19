@@ -1,7 +1,11 @@
+# Testing
+
+NOTE: These are currently internal notes and may be out-of-sync.
+
 ## Model Context Protocol Server
 ```sh
-dart run --verbosity=error /Users/jhsware/DEV/nix-infra/bin/nix_infra_mcp.dart
-npx @modelcontextprotocol/inspector dart --verbosity=error /Users/jhsware/DEV/nix-infra/bin/nix_infra_mcp.dart
+dart run --verbosity=error path/to/nix-infra/bin/nix_infra_mcp.dart
+npx @modelcontextprotocol/inspector dart --verbosity=error path/to/nix-infra/bin/nix_infra_mcp.dart
 ../scripts/claude.sh 
 ```
 

@@ -1,14 +1,32 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:dartssh2/dartssh2.dart';
+import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/secrets.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/types.dart';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/providers/providers.dart';
 
 import 'utils.dart';
+
+/// Helper function to get the infrastructure provider.
+///
+/// Uses ProviderFactory.autoDetect to automatically choose between:
+/// - SelfHosting if servers.yaml exists
+/// - HetznerCloud if HCLOUD_TOKEN is set
+Future<InfrastructureProvider> getProvider(
+  Directory workingDir,
+  env,
+  String sshKeyName,
+) async {
+  return await ProviderFactory.autoDetect(
+    workingDir: workingDir,
+    env: env,
+    sshKeyName: sshKeyName,
+  );
+}
 
 class ProvisionCommand extends Command {
   @override
@@ -36,37 +54,43 @@ class ProvisionCommand extends Command {
     final bool debug = parent?.argResults!['debug'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY']!;
     final List<String> nodeNames = argResults!['node-names'].split(' ');
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String location = argResults!['location'];
     final String machineType = argResults!['machine-type'];
     final String? placementGroup = argResults!['placement-group'];
     final String nixOsVersion = argResults!['nixos-version'];
 
+    final provider = await getProvider(workingDir, env, sshKeyName);
+
     final createdNodeNames = await createNodes(workingDir, nodeNames,
-        hcloudToken: hcloudToken,
+        provider: provider,
         sshKeyName: sshKeyName,
         location: location,
         machineType: machineType,
         placementGroup: placementGroup);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final createdServers = await hcloud.getServers(only: createdNodeNames);
+    Iterable<ClusterNode> provisioningServers;
+    if (provider.supportsCreateServer) {
+      provisioningServers = await provider.getServers(only: createdNodeNames);
 
-    await clearKnownHosts(createdServers);
+      await clearKnownHosts(provisioningServers);
 
-    await waitForServers(
-      workingDir,
-      createdServers,
-      hcloudToken: hcloudToken,
-      sshKeyName: sshKeyName,
-    );
+      await waitForServers(
+        workingDir,
+        provisioningServers,
+        provider: provider,
+      );
+    } else {
+      provisioningServers = await provider.getServers(only: nodeNames);
 
-    await waitForSsh(createdServers);
+      await clearKnownHosts(provisioningServers);
+    }
+
+    await waitForSsh(provisioningServers);
 
     echo('Converting to NixOS... $nixOsVersion');
     await installNixos(
       workingDir,
-      createdServers,
+      provisioningServers,
       nixVersion: nixOsVersion,
       sshKeyName: sshKeyName,
       debug: debug,
@@ -74,8 +98,9 @@ class ProvisionCommand extends Command {
     echo('Done!');
 
     int triesLeft = 3;
-    List<ClusterNode> failedConversions =
-        await getServersWithoutNixos(workingDir, createdServers, debug: true);
+    List<ClusterNode> failedConversions = await getServersWithoutNixos(
+        workingDir, provisioningServers,
+        debug: true);
     while (triesLeft-- > 0 && failedConversions.isNotEmpty) {
       echo('WARN! Some nodes are still running Ubuntu, retrying...');
       await installNixos(
@@ -85,8 +110,9 @@ class ProvisionCommand extends Command {
         sshKeyName: sshKeyName,
         debug: debug,
       );
-      failedConversions =
-          await getServersWithoutNixos(workingDir, createdServers, debug: true);
+      failedConversions = await getServersWithoutNixos(
+          workingDir, provisioningServers,
+          debug: true);
     }
 
     if (failedConversions.isNotEmpty) {
@@ -116,12 +142,11 @@ class GCCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final nodes = await hcloud.getServers(only: targets);
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
       exit(2);
@@ -161,14 +186,13 @@ class UpgradeNixOsCommand extends Command {
     final bool batch = argResults!['batch'];
     final String? nixVersion = argResults!['nixos-version'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to upgrade to NixOS $nixVersion?', batch);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final nodes = await hcloud.getServers(only: targets);
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
       exit(2);
@@ -250,14 +274,13 @@ class RollbackCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to rollback?', batch);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final nodes = await hcloud.getServers(only: targets);
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
       exit(2);
@@ -288,13 +311,12 @@ class SSHCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
     final name = argResults!['target'] as String;
-    final nodes = await hcloud.getServers(only: targets);
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Node not found in cluster: $name');
       exit(2);
@@ -323,13 +345,12 @@ class UploadCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final List<String> files = argResults!['file'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final nodes = await hcloud.getServers(only: targets);
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Node(s) not found in cluster: $name');
       exit(2);
@@ -405,12 +426,11 @@ class CmdCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final nodes = await hcloud.getServers(only: targets);
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
       exit(2);
@@ -452,7 +472,6 @@ class ActionCommand extends Command {
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final String appModule = argResults?['app-module'];
     final String cmd = argResults?['cmd'];
@@ -462,10 +481,10 @@ class ActionCommand extends Command {
     final String secretsPwd =
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final cluster = await hcloud.getServers();
-    final nodes = await hcloud.getServers(only: targets);
+    final cluster = await provider.getServers();
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Nodes not found in cluster: $targets');
       exit(2);

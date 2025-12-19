@@ -1,0 +1,33 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.7.1
+          flavor: release
+          architecture: x64
+
+      - name: Install dependencies
+        run: dart pub get --enforce-lockfile
+
+      # - name: Check formatting
+      #   run: dart format --output=none --set-exit-if-changed .
+
+      # - name: Analyze code
+      #   run: dart analyze
+
+      - name: Run tests
+        run: dart test

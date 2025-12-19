@@ -30,13 +30,14 @@ class JournalCtl extends McpTool {
   JournalCtl({
     required super.workingDir,
     required super.sshKeyName,
-    required super.hcloudToken,
+    required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final target = args!['target'];
-    final options = args!['options'] as String?;
-    final matches = args!['matches'] as String?;
+    final options = args['options'] as String?;
+    final matches = args['matches'] as String?;
 
     // Build the command parts for validation
     final cmdParts = <String>[];
@@ -73,7 +74,7 @@ class JournalCtl extends McpTool {
     }
 
     final tmpTargets = target.split(',');
-    final nodes = await hcloud.getServers(only: tmpTargets);
+    final nodes = await provider.getServers(only: tmpTargets);
     
     if (nodes.isEmpty) {
       return CallToolResult.fromContent(

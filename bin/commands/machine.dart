@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/cluster_node.dart';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/ssh.dart';
@@ -63,7 +64,6 @@ class InitMachineCommand extends Command {
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String nodeType = argResults!['node-module'];
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
@@ -74,8 +74,8 @@ class InitMachineCommand extends Command {
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
     // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
 
     await deployMachine(
       workingDir,
@@ -112,7 +112,6 @@ class UpdateCommand extends Command {
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final String nodeType = argResults!['node-module'];
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
@@ -123,8 +122,8 @@ class UpdateCommand extends Command {
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
     // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
     await deployMachine(
       workingDir,
       nodes,
@@ -159,20 +158,26 @@ class DestroyCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to destroy these nodes?', batch);
 
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    
+    // Check if provider supports destroying servers
+    if (!provider.supportsDestroyServer) {
+      echo('WARNING: The ${provider.providerName} provider does not support destroying servers.');
+      echo('For self-hosted servers, remove them manually from servers.yaml instead.');
+      return;
+    }
+
     // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
+    final nodes = await provider.getServers(only: targets);
 
     await destroyNodes(
       workingDir,
       nodes,
-      hcloudToken: hcloudToken,
-      sshKeyName: sshKeyName,
+      provider: provider,
     );
   }
 }
@@ -185,6 +190,7 @@ class DeployAppsCommand extends Command {
 
   DeployAppsCommand() {
     argParser.addFlag('batch', defaultsTo: false);
+    argParser.addOption('test-dir', mandatory: false);
     argParser.addOption('target', mandatory: true);
     argParser.addFlag('rebuild', defaultsTo: true);
   }
@@ -194,11 +200,12 @@ class DeployAppsCommand extends Command {
     final workingDir =
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
+    final testDir = argResults!['test-dir'] != null ?
+        await getWorkingDirectory(argResults!['test-dir']) : null;
 
     final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final bool rebuild = argResults!['rebuild'];
 
@@ -208,9 +215,9 @@ class DeployAppsCommand extends Command {
         env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
 
     // Allow passing multiple node names
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    final nodes = await hcloud.getServers(only: targets);
-    final cluster = await hcloud.getServers();
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    final nodes = await provider.getServers(only: targets);
+    final cluster = await provider.getServers();
 
     await deployAppsOnNode(
       workingDir,
@@ -219,6 +226,7 @@ class DeployAppsCommand extends Command {
       secretsPwd: secretsPwd,
       debug: debug,
       overlayNetwork: false,
+      testDir: testDir,
     );
 
     if (rebuild) {
@@ -250,15 +258,14 @@ class PortForwardCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
     final List<String> targets = argResults!['target'].split(' ');
     final localPort = int.parse(argResults!['local-port']);
     final remotePort = int.parse(argResults!['remote-port']);
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
 
-    final cluster = await hcloud.getServers();
-    final nodes = await hcloud.getServers(only: targets);
+    final cluster = await provider.getServers();
+    final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
       echo('ERROR! Node not found in cluster: $targets');
       exit(2);

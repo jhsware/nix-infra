@@ -1,6 +1,8 @@
 import 'package:args/command_runner.dart';
-import 'package:nix_infra/hcloud.dart';
+import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/ssh.dart';
+import './shared.dart';
 import './utils.dart';
 
 class SshKeyCommand extends Command {
@@ -70,10 +72,9 @@ class AddSshKeyCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = argResults!['name'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    await hcloud.addSshKeyToCloudProvider(workingDir, sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    await provider.addSshKeyToCloudProvider(workingDir, sshKeyName);
   }
 }
 
@@ -95,9 +96,8 @@ class RemoveSshKeyCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String sshKeyName = argResults!['name'];
-    final String hcloudToken = env['HCLOUD_TOKEN']!;
 
-    final hcloud = HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
-    await hcloud.removeSshKeyFromCloudProvider(workingDir, sshKeyName);
+    final provider = await getProvider(workingDir, env, sshKeyName);
+    await provider.removeSshKeyFromCloudProvider(workingDir, sshKeyName);
   }
 }

@@ -1,8 +1,8 @@
 # nix-infra
 
-Create a private PaaS on Hetzner Cloud in minutes. Leverage **NixOS** and **Nix Packages** to build a reproducible and auditable private cloud for your projects.
+Create a private PaaS on Hetzner Cloud or your own servers in minutes. Leverage **NixOS** and **Nix Packages** to build a reproducible and auditable private cloud for your projects.
 
-**Why nix-infra?** I wanted to test the limits of NixOS when it comes to maintainability and real-world use. There is a future for private PaaS solutions in a world where privacy and cost control are primary concerns—we just need to build it on the right foundation.
+**Why nix-infra?** You want to move away from click-ops and embrace infrastructure-as-code and reproducability. You want to avoid vendor lock-in and unpredictable cloud bills. There is a future for private PaaS solutions in a world where privacy and cost control are primary concerns, we just need to build it on a robust foundation.
 
 > **Experimental:** nix-infra now includes [MCP server support](#mcp-server-experimental) for AI-assisted infrastructure management. Query node status, inspect logs, and manage your fleet through natural language conversations with Claude or other MCP-compatible AI assistants. This is an early experiment in making Linux system administration more accessible and efficient.
 
@@ -29,7 +29,6 @@ Low system requirements for each cluster node make virtual machine isolation per
 **Limitations:**
 
 - NixOS doesn't officially support SELinux (though [experimental work is underway](https://tristanxr.com/post/selinux-on-nixos/))
-- nix-infra currently only supports Hetzner Cloud
 - The code is the primary documentation
 
 **Room for improvement:**
@@ -48,6 +47,8 @@ Apple discusses privacy in a post about [Private Cloud Compute](https://security
 
 [Download](https://github.com/jhsware/nix-infra/releases) and install the nix-infra binary.
 
+You need SSH and OpenSSL installed.
+
 ### Choose Your Setup
 
 **Option 1: High-availability cluster**
@@ -56,9 +57,82 @@ Use the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) 
 
 **Option 2: Standalone machines**
 
-Use the [nix-infra-test-machine](https://github.com/jhsware/nix-infra-test-machine) template for managing individual machines or fleets without cluster orchestration.
+Use the [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) template for managing individual machines or fleets without cluster orchestration.
 
 Each repo contains detailed instructions. You can either run the provided test script to automate installation, or clone the repo and create custom automation scripts.
+
+## Infrastructure Providers
+
+nix-infra supports two infrastructure providers:
+
+### Hetzner Cloud (Default)
+
+The default provider creates and manages servers on Hetzner Cloud. Set your API token in the `.env` file:
+
+```sh
+HCLOUD_TOKEN=your-hetzner-api-token
+```
+
+With Hetzner Cloud, nix-infra can:
+- Provision new servers
+- Destroy servers
+- Use placement groups for high availability
+- Manage SSH keys in the cloud
+
+### Self-Hosted Servers
+
+For existing servers, bare metal machines, or other cloud providers, use the self-hosting provider. Create a `servers.yaml` file in your working directory:
+
+```yaml
+servers:
+  web-server-1:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/web-server-key
+    description: Primary web server
+    username: admin  # Optional, defaults to 'root'
+    metadata:        # Optional, for your own use
+      location: rack-1
+      environment: production
+
+  db-server-1:
+    ip: 192.168.1.20
+    ssh_key: /absolute/path/to/db-key
+    description: Primary database server
+
+  worker-1:
+    ip: 10.0.0.5
+    ssh_key: ./ssh/worker-key
+```
+
+**Required fields:**
+- `ip` — Server IP address
+- `ssh_key` — Path to SSH private key (relative to working directory or absolute)
+
+**Optional fields:**
+- `description` — Human-readable server description
+- `username` — SSH username (defaults to `root`)
+- `metadata` — Key-value pairs for your own organisation
+
+**Provider auto-detection:**
+
+nix-infra automatically selects the provider based on your configuration:
+
+1. If `servers.yaml` exists → Self-Hosting provider
+2. If `HCLOUD_TOKEN` is set → Hetzner Cloud provider
+3. Otherwise → Error
+
+**Limitations of self-hosted servers:**
+
+The self-hosting provider does not support:
+- `provision` command (add servers manually to `servers.yaml`)
+- `destroy` command (remove servers manually from `servers.yaml`)
+- Placement groups
+
+All other commands work normally: `init-node`, `deploy`, `ssh`, `cmd`, `action`, etc.
+
+**Mixed environments:**
+
+You can migrate between providers or use self-hosted servers alongside Hetzner Cloud by maintaining both configurations. The provider is selected per-project based on the presence of `servers.yaml`.
 
 ## Building From Source
 
@@ -254,23 +328,60 @@ nix-infra includes experimental [Model Context Protocol (MCP)](https://modelcont
 
 The vision is to provide an assistant that is more natural and efficient to use than complex GUI environments, while leveraging well-known Linux system administration tools available on the server by default. Instead of memorising command syntax or navigating dashboards, you can ask questions like "What's the health status of my service nodes?" or "Show me the recent logs for nginx".
 
-### Two MCP Servers
+### Three MCP Servers
 
 - **nix-infra-cluster-mcp** — For HA clusters with etcd control plane
 - **nix-infra-machine-mcp** — For standalone machines or fleets
+- **nix-infra-dev-mcp** — For project configuration development and testing
 
 ### Available Tools
 
+nix-infra provides two types of MCP servers with different purposes:
+
+- **Infrastructure Management MCPs** (cluster-mcp, machine-mcp) — Query and monitor production infrastructure
+- **Development MCP** (dev-mcp) — Assist with project configuration, testing, and app module development
+
+#### Infrastructure Management MCPs
+
+These MCPs enable AI assistants to query and monitor your running infrastructure without making modifications. They're designed for production environments where you want visibility without risk of accidental changes.
+
 | Tool | Description | Cluster | Machine |
 |------|-------------|:-------:|:-------:|
-| `list-available-nodes` | List all nodes with Hetzner ID, name, and IP | ✓ | ✓ |
+| `list-available-nodes` | List all nodes with ID, name, and IP | ✓ | ✓ |
 | `system-stats` | Query system health, disk I/O, memory, network, and processes | ✓ | ✓ |
 | `systemctl` | Query systemd unit status (read-only) | ✓ | ✓ |
 | `journalctl` | Query systemd journal logs (read-only) | ✓ | ✓ |
 | `remote-command` | Execute whitelisted commands over SSH | ✓ | ✓ |
 | `configuration-files` | Read local configuration files | ✓ | ✓ |
-| `test-runner` | Run tests on existing test cluster | ✓ | ✓ |
 | `etcd` | Query the etcd control plane (read-only) | ✓ | — |
+
+#### Development MCP (nix-infra-dev-mcp)
+
+The development MCP provides AI-assisted project configuration and testing capabilities. Unlike infrastructure MCPs, this MCP can modify files and manage test environments.
+
+| Tool | Description |
+|------|-------------|
+| `read-project-files` | Read configuration files, app modules, and test definitions |
+| `edit-app-module-files` | Modify files in the `app_modules` directory with AI assistance |
+| `test-runner` | Run tests on existing test cluster and iterate on results |
+| `test-environment` | Manage test cluster lifecycle (create, reset, teardown) |
+
+### nix-infra-dev-mcp: Project Configuration Assistant
+
+The dev MCP is designed for developers working on cluster configurations and app modules. It enables AI assistants to help with project development by:
+
+- **Reading project files** — Access configuration files, app modules, and test definitions
+- **Editing app modules** — Modify files in the `app_modules` directory with AI assistance
+- **Running tests** — Execute tests on your test cluster and iterate on results
+- **Managing test environments** — Create, reset, and teardown test clusters
+
+This MCP is particularly useful when:
+- Developing new app modules or services
+- Debugging configuration issues
+- Writing and running integration tests
+- Refactoring cluster configurations
+
+The dev MCP has restricted filesystem access limited to project directories like `__test__`, `app_modules`, `modules`, and `node_types`, ensuring safe AI-assisted development.
 
 ### Safety Measures
 
@@ -289,7 +400,13 @@ The MCP servers implement several layers of protection:
 
 ### Usage
 
-The cluster templates include a `./cli claude` command that launches Claude with the MCP server configured. See the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) or [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) repositories for setup instructions.
+The cluster templates include a `./cli claude` command that launches Claude with the appropriate MCP server configured:
+
+- **For HA clusters** (nix-infra-ha-cluster): Uses `nix-infra-cluster-mcp` for infrastructure management with etcd control plane access
+- **For standalone machines** (nix-infra-machine): Uses `nix-infra-machine-mcp` for fleet management without cluster orchestration
+- **For development**: Both templates support `nix-infra-dev-mcp` for AI-assisted project configuration and testing
+
+See the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) or [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) repositories for detailed setup instructions and usage examples.
 
 ## Secrets
 

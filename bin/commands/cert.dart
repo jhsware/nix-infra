@@ -49,19 +49,19 @@ class CertCommand extends Command {
       env.load([envFile.path]);
     }
 
-    final batch = argResults!['batch'] as bool;
-    final target = argResults!['target'] as String;
-    final certType =
-        argResults!['cert-type'] == 'peer' ? CertType.peer : CertType.tls;
+    // final batch = argResults!['batch'] as bool;
+    // final target = argResults!['target'] as String;
+    // final certType =
+    //     argResults!['cert-type'] == 'peer' ? CertType.peer : CertType.tls;
 
-    final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
-        readPassword(ReadPasswordEnum.caIntermediate, batch);
+    // final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
+    //     readPassword(ReadPasswordEnum.caIntermediate, batch);
 
-    final certEmail =
-        env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
-    final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
-    final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
-    final certCompany = env['CERT_COMPANY'] ?? 'unknown';
+    // final certEmail =
+    //     env['CERT_EMAIL'] ?? readInput('certificate e-mail', batch);
+    // final certCountryCode = env['CERT_COUNTRY_CODE'] ?? 'SE';
+    // final certStateProvince = env['CERT_STATE_PROVINCE'] ?? 'unknown';
+    // final certCompany = env['CERT_COMPANY'] ?? 'unknown';
 
     // Implementation placeholder for certificate generation
     // TODO: Implement after HCloud service is available:

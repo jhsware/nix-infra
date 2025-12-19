@@ -7,7 +7,7 @@ import 'commands/init.dart';
 import 'commands/cluster.dart';
 import 'commands/machine.dart';
 import 'commands/ssh_key.dart';
-import 'commands/cert.dart';
+// import 'commands/cert.dart';
 import 'commands/registry.dart';
 import 'commands/secrets.dart';
 
@@ -18,7 +18,7 @@ void main(List<String> arguments) async {
       ..addCommand(FleetCommand())
       ..addCommand(ClusterCommand())
       ..addCommand(SshKeyCommand())
-      ..addCommand(CertCommand())
+      // ..addCommand(CertCommand())
       ..addCommand(RegistryCommand())
       ..addCommand(EtcdCommand())
       ..addCommand(SecretsCommand());

@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:nix_infra/providers/providers.dart';
-import 'mcp_server/calculate.dart';
 import 'mcp_server/filesystem.dart';
 import 'mcp_server/filesystem_edit.dart';
 import 'mcp_server/test_environment.dart';
@@ -40,21 +39,6 @@ void main() async {
         tools: ServerCapabilitiesTools(),
       ),
     ),
-  );
-
-  // *** Calculate ***
-
-  final calculate = Calculate(
-    workingDir: workingDir,
-    sshKeyName: sshKeyName,
-    provider: provider,
-  );
-
-  server.tool(
-    "calculate",
-    description: Calculate.description,
-    inputSchemaProperties: Calculate.inputSchemaProperties,
-    callback: calculate.callback,
   );
 
   // *** Filesystem ***

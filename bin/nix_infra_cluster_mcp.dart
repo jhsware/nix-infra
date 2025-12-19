@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:nix_infra/providers/providers.dart';
-import 'mcp_server/calculate.dart';
 import 'mcp_server/remote_command.dart';
 import 'mcp_server/available_nodes.dart';
 import 'mcp_server/etcd.dart';
@@ -43,21 +42,6 @@ void main() async {
         tools: ServerCapabilitiesTools(),
       ),
     ),
-  );
-
-  // *** Calculate ***
-
-  final calculate = Calculate(
-    workingDir: workingDir,
-    sshKeyName: sshKeyName,
-    provider: provider,
-  );
-
-  server.tool(
-    "calculate",
-    description: Calculate.description,
-    inputSchemaProperties: Calculate.inputSchemaProperties,
-    callback: calculate.callback,
   );
 
   // *** RemoteCommand ***

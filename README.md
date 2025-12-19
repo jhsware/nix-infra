@@ -8,7 +8,7 @@ Create a private PaaS on Hetzner Cloud or your own servers in minutes. Leverage 
 
 **Benefits:**
 
-- **Low and predictable cost** — runs on Hetzner Cloud
+- **Low and predictable cost** — can provision from scratch on Hetzner Cloud or deploy to your existing servers using ssh 
 - **Reproducible and auditable** — 100% configuration in code
 - **Privacy** — all data within your private walled garden
 - **Easy to debug** — zero blackbox services
@@ -40,6 +40,7 @@ Low system requirements for each cluster node make virtual machine isolation per
 - Cluster health visualisation [major]
 
 Apple discusses privacy in a post about [Private Cloud Compute](https://security.apple.com/blog/private-cloud-compute/).
+Discussions on [boot time integrity checks](https://discourse.nixos.org/t/boot-time-integrity-checks-for-the-nix-store/36793).
 
 ## Getting Started
 
@@ -55,7 +56,7 @@ You need SSH and OpenSSL installed.
 
 Use the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) template for a fault-tolerant multi-node cluster with service mesh and overlay networking.
 
-**Option 2: Standalone machines**
+**Option 2: Fleet of standalone machines**
 
 Use the [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) template for managing individual machines or fleets without cluster orchestration.
 
@@ -88,7 +89,7 @@ servers:
   web-server-1:
     ip: 192.168.1.10
     ssh_key: ./ssh/web-server-key
-    description: Primary web server
+    description: Primary web server # Optional
     username: admin  # Optional, defaults to 'root'
     metadata:        # Optional, for your own use
       location: rack-1
@@ -124,11 +125,25 @@ nix-infra automatically selects the provider based on your configuration:
 **Limitations of self-hosted servers:**
 
 The self-hosting provider does not support:
-- `provision` command (add servers manually to `servers.yaml`)
+- creating servers during the provisioning phase
 - `destroy` command (remove servers manually from `servers.yaml`)
-- Placement groups
+- placement groups, since the servers have already been created
 
 All other commands work normally: `init-node`, `deploy`, `ssh`, `cmd`, `action`, etc.
+
+Note: the provision command should still be used and will convert a linux server to NixOS if it is running another distribution.
+
+**IMPORTANT:** the nix-infra SSH library doesn't support the NixOS default encryption algorithms, make sure you update configuration.nix (or similar) with:
+
+'''nix
+  services.openssh.settings.Macs = [
+    "hmac-sha2-512-etm@openssh.com"
+    "hmac-sha2-512" # Required for dartssh
+    "hmac-sha2-256-etm@openssh.com"
+    "hmac-sha2-256" # Required for dartssh
+    "umac-128-etm@openssh.com"
+  ];
+'''
 
 **Mixed environments:**
 
@@ -145,7 +160,7 @@ You can migrate between providers or use self-hosted servers alongside Hetzner C
 git clone git@github.com:jhsware/nix-infra.git
 ```
 
-3. Build using the build script:
+3. Build using the build script (requires Dart, you can use `nix-shell -p dart`):
 ```sh
 cd nix-infra && ./build.sh
 # output: bin/nix-infra

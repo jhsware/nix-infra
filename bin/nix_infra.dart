@@ -10,7 +10,6 @@ import 'commands/ssh_key.dart';
 import 'commands/cert.dart';
 import 'commands/registry.dart';
 import 'commands/secrets.dart';
-import 'commands/legacy.dart';
 
 void main(List<String> arguments) async {
   try {
@@ -29,9 +28,7 @@ void main(List<String> arguments) async {
       exit(64); // Exit code 64 indicates a usage error.
     });
   } catch (err) {
-    if (err is FormatException) {
-      await legacyCommands(arguments);
-    } else if (err is Exception) {
+    if (err is Exception) {
       // Handle regular exceptions (from SSH, providers, etc.)
       // Extract just the message without "Exception:" prefix and stack trace
       final message = err.toString().replaceFirst('Exception: ', '');

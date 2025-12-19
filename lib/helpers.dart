@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dotenv/dotenv.dart';
+import 'package:path/path.dart' as path;
 
 import 'package:ansi_escapes/ansi_escapes.dart';
 import 'package:nix_infra/ssh.dart';
@@ -257,4 +259,23 @@ Future<Map<String, String>> getOverlayMeshIps(
 
 String multi(Iterable<String> lines) {
   return lines.toList().join('\n');
+}
+
+Future<DotEnv> loadEnv(String? envFileName, Directory workingDir) async {
+  // Load environment variables
+  final env = DotEnv(includePlatformEnvironment: true);
+  final envFile = File(envFileName ?? '${workingDir.path}/.env');
+  if (await envFile.exists()) {
+    env.load([envFile.path]);
+  }
+  return env;
+}
+
+Future<Directory> getWorkingDirectory(String dirName) async {
+  final workingDir = Directory(path.normalize(path.absolute(dirName)));
+  if (!await workingDir.exists()) {
+    echo('ERROR! Working directory does not exist: ${workingDir.path}');
+    exit(2);
+  }
+  return workingDir;
 }

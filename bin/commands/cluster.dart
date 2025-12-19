@@ -3,6 +3,7 @@ import 'package:args/command_runner.dart';
 import 'package:nix_infra/certificates.dart';
 import 'package:nix_infra/cluster_node.dart';
 import 'package:nix_infra/control_node.dart';
+import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/helpers.dart';

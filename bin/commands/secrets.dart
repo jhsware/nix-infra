@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
+import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/secrets.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:path/path.dart' as path;

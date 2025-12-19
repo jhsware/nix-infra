@@ -15,6 +15,9 @@ class MockProvider implements InfrastructureProvider {
   bool get supportsCreateServer => false;
 
   @override
+  bool get supportsAddSshKey => false;
+
+  @override
   bool get supportsDestroyServer => false;
 
   @override
@@ -346,7 +349,8 @@ void main() {
       });
 
       test('reads single file via read-files', () async {
-        await File('${testDir.path}/single.txt').writeAsString('Single content');
+        await File('${testDir.path}/single.txt')
+            .writeAsString('Single content');
 
         final result = await fs.callback(
           args: {
@@ -385,8 +389,10 @@ void main() {
         );
 
         final text = (result.content.first as TextContent).text;
-        expect(text, contains('/absolute/path1.txt: No absolute paths allowed'));
-        expect(text, contains('/absolute/path2.txt: No absolute paths allowed'));
+        expect(
+            text, contains('/absolute/path1.txt: No absolute paths allowed'));
+        expect(
+            text, contains('/absolute/path2.txt: No absolute paths allowed'));
       });
 
       test('reports error for hidden files in list', () async {
@@ -403,8 +409,10 @@ void main() {
         final text = (result.content.first as TextContent).text;
         expect(text, contains('$testDirName/visible.txt:'));
         expect(text, contains('visible'));
-        expect(text,
-            contains('$testDirName/.hidden: No hidden files or directories allowed'));
+        expect(
+            text,
+            contains(
+                '$testDirName/.hidden: No hidden files or directories allowed'));
       });
 
       test('reports error for paths outside allowed directories', () async {
@@ -622,7 +630,8 @@ Hello
       });
 
       test('skips hidden files', () async {
-        await File('${testDir.path}/visible.txt').writeAsString('match visible');
+        await File('${testDir.path}/visible.txt')
+            .writeAsString('match visible');
         await File('${testDir.path}/.hidden').writeAsString('match hidden');
 
         final result = await fs.callback(
@@ -642,7 +651,8 @@ Hello
 
       test('skips hidden directories', () async {
         await Directory('${testDir.path}/.hidden_dir').create();
-        await File('${testDir.path}/visible.txt').writeAsString('match visible');
+        await File('${testDir.path}/visible.txt')
+            .writeAsString('match visible');
         await File('${testDir.path}/.hidden_dir/file.txt')
             .writeAsString('match hidden');
 

@@ -14,6 +14,9 @@ class MockProvider implements InfrastructureProvider {
   bool get supportsCreateServer => false;
 
   @override
+  bool get supportsAddSshKey => false;
+
+  @override
   bool get supportsDestroyServer => false;
 
   @override

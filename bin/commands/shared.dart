@@ -11,7 +11,7 @@ import 'package:nix_infra/providers/providers.dart';
 import 'utils.dart';
 
 /// Helper function to get the infrastructure provider.
-/// 
+///
 /// Uses ProviderFactory.autoDetect to automatically choose between:
 /// - SelfHosting if servers.yaml exists
 /// - HetznerCloud if HCLOUD_TOKEN is set
@@ -59,13 +59,6 @@ class ProvisionCommand extends Command {
     final String nixOsVersion = argResults!['nixos-version'];
 
     final provider = await getProvider(workingDir, env, sshKeyName);
-    
-    // Provisioning requires cloud provider capabilities
-    if (!provider.supportsCreateServer) {
-      echo('ERROR! The ${provider.providerName} provider does not support creating servers.');
-      echo('For self-hosted servers, add them manually to servers.yaml instead.');
-      exit(2);
-    }
 
     final createdNodeNames = await createNodes(workingDir, nodeNames,
         provider: provider,
@@ -74,22 +67,29 @@ class ProvisionCommand extends Command {
         machineType: machineType,
         placementGroup: placementGroup);
 
-    final createdServers = await provider.getServers(only: createdNodeNames);
+    Iterable<ClusterNode> provisioningServers;
+    if (provider.supportsCreateServer) {
+      provisioningServers = await provider.getServers(only: createdNodeNames);
 
-    await clearKnownHosts(createdServers);
+      await clearKnownHosts(provisioningServers);
 
-    await waitForServers(
-      workingDir,
-      createdServers,
-      provider: provider,
-    );
+      await waitForServers(
+        workingDir,
+        provisioningServers,
+        provider: provider,
+      );
+    } else {
+      provisioningServers = await provider.getServers(only: nodeNames);
 
-    await waitForSsh(createdServers);
+      await clearKnownHosts(provisioningServers);
+    }
+
+    await waitForSsh(provisioningServers);
 
     echo('Converting to NixOS... $nixOsVersion');
     await installNixos(
       workingDir,
-      createdServers,
+      provisioningServers,
       nixVersion: nixOsVersion,
       sshKeyName: sshKeyName,
       debug: debug,
@@ -97,8 +97,9 @@ class ProvisionCommand extends Command {
     echo('Done!');
 
     int triesLeft = 3;
-    List<ClusterNode> failedConversions =
-        await getServersWithoutNixos(workingDir, createdServers, debug: true);
+    List<ClusterNode> failedConversions = await getServersWithoutNixos(
+        workingDir, provisioningServers,
+        debug: true);
     while (triesLeft-- > 0 && failedConversions.isNotEmpty) {
       echo('WARN! Some nodes are still running Ubuntu, retrying...');
       await installNixos(
@@ -108,8 +109,9 @@ class ProvisionCommand extends Command {
         sshKeyName: sshKeyName,
         debug: debug,
       );
-      failedConversions =
-          await getServersWithoutNixos(workingDir, createdServers, debug: true);
+      failedConversions = await getServersWithoutNixos(
+          workingDir, provisioningServers,
+          debug: true);
     }
 
     if (failedConversions.isNotEmpty) {

@@ -121,6 +121,9 @@ class SelfHosting implements InfrastructureProvider {
 
   @override
   bool get supportsCreateServer => false;
+  
+  @override
+  bool get supportsAddSshKey => false;
 
   @override
   bool get supportsDestroyServer => false;

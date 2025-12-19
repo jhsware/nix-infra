@@ -10,7 +10,7 @@ import 'package:nix_infra/types.dart';
 import 'package:process_run/shell.dart';
 
 /// Create nodes using the provided infrastructure provider.
-/// 
+///
 /// This function requires a provider that supports server creation.
 /// For HetznerCloud, it also supports placement groups.
 Future<List<String>> createNodes(
@@ -22,14 +22,9 @@ Future<List<String>> createNodes(
   required String machineType,
   String? placementGroup,
 }) async {
-  if (!provider.supportsCreateServer) {
-    throw UnsupportedError(
-      '${provider.providerName} does not support creating servers. '
-      'For self-hosted servers, add them manually to servers.yaml instead.',
-    );
+  if (provider.supportsAddSshKey) {
+    await provider.addSshKeyToCloudProvider(workingDir, sshKeyName);
   }
-
-  await provider.addSshKeyToCloudProvider(workingDir, sshKeyName);
 
   int? placementGroupId;
   if (placementGroup != null && provider.supportsPlacementGroups) {
@@ -73,10 +68,10 @@ Future<List<String>> createNodes(
 }
 
 /// Destroy nodes using the provided infrastructure provider.
-/// 
+///
 /// This function requires a provider that supports server destruction.
 Future<void> destroyNodes(
-  Directory workingDir, 
+  Directory workingDir,
   Iterable<ClusterNode> nodes, {
   required InfrastructureProvider provider,
 }) async {
@@ -265,11 +260,11 @@ Future<void> rebootToNixos(Directory workingDir,
 }
 
 /// Wait for servers to be ready after creation.
-/// 
+///
 /// This is a HetznerCloud-specific operation that polls the server action status.
 /// For other providers, this function does nothing (assumes servers are ready).
 Future<void> waitForServers(
-  Directory workingDir, 
+  Directory workingDir,
   Iterable<ClusterNode> nodes, {
   required InfrastructureProvider provider,
 }) async {

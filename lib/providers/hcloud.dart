@@ -35,6 +35,9 @@ class HetznerCloud implements InfrastructureProvider {
   bool get supportsCreateServer => true;
 
   @override
+  bool get supportsAddSshKey => true;
+
+  @override
   bool get supportsDestroyServer => true;
 
   @override

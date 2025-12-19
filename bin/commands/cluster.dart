@@ -129,6 +129,7 @@ class UpdateCtrlCommand extends Command {
   UpdateCtrlCommand() {
     argParser
       ..addFlag('batch', defaultsTo: false)
+      ..addFlag('rebuild', defaultsTo: false)
       ..addOption('target', mandatory: true)
       ..addOption('nixos-version', mandatory: true)
       ..addOption('cluster-uuid', mandatory: true);

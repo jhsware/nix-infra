@@ -26,7 +26,7 @@ abstract class McpTool {
   /// [extra] - Additional context or metadata (optional)
   /// 
   /// Returns a [CallToolResult] containing the tool's output
-  static Future<CallToolResult> callback({
+  Future<CallToolResult> callback({
     Map<String, dynamic>? args,
     dynamic extra,
   }) async {

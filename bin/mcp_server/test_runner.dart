@@ -150,10 +150,10 @@ cancel -- cancel a running session
 
   Future<CallToolResult> callback({args, extra}) async {
     final operation = args!['operation'];
-    final testName = args!['test-name'];
-    final sessionId = args!['session_id'];
-    final chunkIndex = args!['chunk_index'] ?? 0;
-    final maxChunks = (args!['max_chunks'] ?? 50).clamp(1, 200);
+    final testName = args['test-name'];
+    final sessionId = args['session_id'];
+    final chunkIndex = args['chunk_index'] ?? 0;
+    final maxChunks = (args['max_chunks'] ?? 50).clamp(1, 200);
 
     if (['run', 'reset'].contains(operation)) {
       if (testName == null || testName.isEmpty) {

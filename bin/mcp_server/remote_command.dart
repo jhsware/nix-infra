@@ -22,9 +22,10 @@ class RemoteCommand extends McpTool {
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final target = args!['target'];
-    final command = args!['command'];
+    final command = args['command'];
 
     final tmpTargets = target.split(',');
     final nodes = await provider.getServers(only: tmpTargets);

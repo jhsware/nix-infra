@@ -53,9 +53,10 @@ class FileSystem extends McpTool {
     required this.allowedPaths,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final operation = args!['operation'];
-    final path = args!['path'] ?? '.';
+    final path = args['path'] ?? '.';
 
     String result = 'No operation specified';
 
@@ -70,9 +71,9 @@ class FileSystem extends McpTool {
         result = await readFiles(paths: path.split(','));
         break;
       case 'search-text':
-        final pattern = args!['pattern'];
-        final filePattern = args!['file-pattern'];
-        final caseSensitive = args!['case-sensitive'] ?? true;
+        final pattern = args['pattern'];
+        final filePattern = args['file-pattern'];
+        final caseSensitive = args['case-sensitive'] ?? true;
         result = await searchText(
           path: path,
           pattern: pattern,

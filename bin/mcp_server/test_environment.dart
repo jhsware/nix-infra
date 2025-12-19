@@ -147,11 +147,12 @@ cancel -- cancel a running session
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final operation = args!['operation'];
-    final sessionId = args!['session_id'];
-    final chunkIndex = args!['chunk_index'] ?? 0;
-    final maxChunks = (args!['max_chunks'] ?? 50).clamp(1, 200);
+    final sessionId = args['session_id'];
+    final chunkIndex = args['chunk_index'] ?? 0;
+    final maxChunks = (args['max_chunks'] ?? 50).clamp(1, 200);
 
     switch (operation) {
       case 'create':

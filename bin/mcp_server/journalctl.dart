@@ -33,10 +33,11 @@ class JournalCtl extends McpTool {
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final target = args!['target'];
-    final options = args!['options'] as String?;
-    final matches = args!['matches'] as String?;
+    final options = args['options'] as String?;
+    final matches = args['matches'] as String?;
 
     // Build the command parts for validation
     final cmdParts = <String>[];

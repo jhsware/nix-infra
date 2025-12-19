@@ -34,9 +34,9 @@ class SystemCtl extends McpTool {
 
   Future<CallToolResult> callback({args, extra}) async {
     final target = args!['target'];
-    final options = args!['options'] as String?;
-    final command = args!['command'] as String?;
-    final units = args!['units'] as String?;
+    final options = args['options'] as String?;
+    final command = args['command'] as String?;
+    final units = args['units'] as String?;
 
     // Build the command parts for validation
     final cmdParts = <String>[];

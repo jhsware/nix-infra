@@ -27,9 +27,10 @@ class ControlPlaneEtcd extends McpTool {
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final target = args!['target'];
-    final query = args!['query'] as String?;
+    final query = args['query'] as String?;
 
     if (query == null || query.trim().isEmpty) {
       return CallToolResult.fromContent(

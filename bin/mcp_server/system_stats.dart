@@ -35,9 +35,10 @@ Operations:
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final target = args!['target'] as String?;
-    final operation = (args!['operation'] as String?) ?? 'health';
+    final operation = (args['operation'] as String?) ?? 'health';
 
     if (target == null || target.trim().isEmpty) {
       return CallToolResult.fromContent(

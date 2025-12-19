@@ -331,13 +331,6 @@ void main() {
 
   group('Chunked output workflow', () {
     test('simulates full workflow with session and pagination', () async {
-      // Create a test runner that we can control
-      final testRunner = TestRunner(
-        workingDir: Directory.current,
-        sshKeyName: 'fake',
-        provider: MockProvider(),
-      );
-
       // Since we can't run actual tests, let's test the session manager directly
       final sessionManager = SessionManager();
       final sessionId = sessionManager.createSession('run', 'simulated-test');

@@ -54,12 +54,13 @@ edit-file -- edit the content of a file
     required this.allowedPaths,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final operation = args!['operation'];
-    final path = args!['path'] ?? '.';
-    final content = args!['content'];
-    final startLine = args!['startLine'];
-    final endLine = args!['endLine'];
+    final path = args['path'] ?? '.';
+    final content = args['content'];
+    final startLine = args['startLine'];
+    final endLine = args['endLine'];
 
     String result = 'No operation specified';
 

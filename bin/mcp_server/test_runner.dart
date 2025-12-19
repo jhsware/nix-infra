@@ -5,6 +5,7 @@ import 'package:path/path.dart';
 import 'package:process_run/shell.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
+import 'utils/shared.dart';
 
 /// Represents an active test session with cached output chunks
 class TestSession {
@@ -154,6 +155,12 @@ cancel -- cancel a running session
     final chunkIndex = args!['chunk_index'] ?? 0;
     final maxChunks = (args!['max_chunks'] ?? 50).clamp(1, 200);
 
+    if (['run', 'reset'].contains(operation)) {
+      if (testName == null || testName.isEmpty) {
+        return callToolText('Missing test-name parameter for $operation');
+      }
+    }
+
     switch (operation) {
       case 'run':
         return _startOperation('run', testName);
@@ -284,7 +291,8 @@ cancel -- cancel a running session
       response['message'] =
           'More chunks available. Call get_output with chunk_index: $nextChunkIndex';
     } else if (session.isComplete && !hasMoreChunks) {
-      response['message'] = 'All output has been retrieved. Operation complete.';
+      response['message'] =
+          'All output has been retrieved. Operation complete.';
     }
 
     return CallToolResult.fromContent(
@@ -297,14 +305,16 @@ cancel -- cancel a running session
     // Clean up old sessions first
     _sessionManager.cleanupOldSessions();
 
-    final sessions = _sessionManager.allSessions.map((s) => {
-          'session_id': s.id,
-          'operation': s.operation,
-          'test_name': s.testName,
-          'is_complete': s.isComplete,
-          'chunks_collected': s.chunks.length,
-          'started_at': s.startedAt.toIso8601String(),
-        }).toList();
+    final sessions = _sessionManager.allSessions
+        .map((s) => {
+              'session_id': s.id,
+              'operation': s.operation,
+              'test_name': s.testName,
+              'is_complete': s.isComplete,
+              'chunks_collected': s.chunks.length,
+              'started_at': s.startedAt.toIso8601String(),
+            })
+        .toList();
 
     final response = {
       'sessions': sessions,

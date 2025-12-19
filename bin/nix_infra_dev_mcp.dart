@@ -7,7 +7,6 @@ import 'mcp_server/filesystem_edit.dart';
 import 'mcp_server/test_environment.dart';
 import 'mcp_server/test_runner.dart';
 import 'package:nix_infra/helpers.dart';
-import 'mcp_server/utils.dart';
 
 void main() async {
   final workingDir = await getWorkingDirectory(Directory.current.path);

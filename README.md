@@ -135,15 +135,15 @@ Note: the provision command should still be used and will convert a linux server
 
 **IMPORTANT:** the nix-infra SSH library doesn't support the NixOS default encryption algorithms, make sure you update configuration.nix (or similar) with:
 
-'''nix
-  services.openssh.settings.Macs = [
+```yaml
+services.openssh.settings.Macs = [
     "hmac-sha2-512-etm@openssh.com"
     "hmac-sha2-512" # Required for dartssh
     "hmac-sha2-256-etm@openssh.com"
     "hmac-sha2-256" # Required for dartssh
     "umac-128-etm@openssh.com"
   ];
-'''
+```
 
 **Mixed environments:**
 

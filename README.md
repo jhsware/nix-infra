@@ -82,6 +82,8 @@ With Hetzner Cloud, nix-infra can:
 
 ### Self-Hosted Servers
 
+Note: your host machine must run a **Debian-based distro or NixOS**. Currently RHEL-based distros fail to convert to Nixos.
+
 For existing servers, bare metal machines, or other cloud providers, use the self-hosting provider. Create a `servers.yaml` file in your working directory:
 
 ```yaml

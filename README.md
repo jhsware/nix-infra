@@ -328,23 +328,60 @@ nix-infra includes experimental [Model Context Protocol (MCP)](https://modelcont
 
 The vision is to provide an assistant that is more natural and efficient to use than complex GUI environments, while leveraging well-known Linux system administration tools available on the server by default. Instead of memorising command syntax or navigating dashboards, you can ask questions like "What's the health status of my service nodes?" or "Show me the recent logs for nginx".
 
-### Two MCP Servers
+### Three MCP Servers
 
 - **nix-infra-cluster-mcp** — For HA clusters with etcd control plane
 - **nix-infra-machine-mcp** — For standalone machines or fleets
+- **nix-infra-dev-mcp** — For project configuration development and testing
 
 ### Available Tools
 
+nix-infra provides two types of MCP servers with different purposes:
+
+- **Infrastructure Management MCPs** (cluster-mcp, machine-mcp) — Query and monitor production infrastructure
+- **Development MCP** (dev-mcp) — Assist with project configuration, testing, and app module development
+
+#### Infrastructure Management MCPs
+
+These MCPs enable AI assistants to query and monitor your running infrastructure without making modifications. They're designed for production environments where you want visibility without risk of accidental changes.
+
 | Tool | Description | Cluster | Machine |
 |------|-------------|:-------:|:-------:|
-| `list-available-nodes` | List all nodes with Hetzner ID, name, and IP | ✓ | ✓ |
+| `list-available-nodes` | List all nodes with ID, name, and IP | ✓ | ✓ |
 | `system-stats` | Query system health, disk I/O, memory, network, and processes | ✓ | ✓ |
 | `systemctl` | Query systemd unit status (read-only) | ✓ | ✓ |
 | `journalctl` | Query systemd journal logs (read-only) | ✓ | ✓ |
 | `remote-command` | Execute whitelisted commands over SSH | ✓ | ✓ |
 | `configuration-files` | Read local configuration files | ✓ | ✓ |
-| `test-runner` | Run tests on existing test cluster | ✓ | ✓ |
 | `etcd` | Query the etcd control plane (read-only) | ✓ | — |
+
+#### Development MCP (nix-infra-dev-mcp)
+
+The development MCP provides AI-assisted project configuration and testing capabilities. Unlike infrastructure MCPs, this MCP can modify files and manage test environments.
+
+| Tool | Description |
+|------|-------------|
+| `read-project-files` | Read configuration files, app modules, and test definitions |
+| `edit-app-module-files` | Modify files in the `app_modules` directory with AI assistance |
+| `test-runner` | Run tests on existing test cluster and iterate on results |
+| `test-environment` | Manage test cluster lifecycle (create, reset, teardown) |
+
+### nix-infra-dev-mcp: Project Configuration Assistant
+
+The dev MCP is designed for developers working on cluster configurations and app modules. It enables AI assistants to help with project development by:
+
+- **Reading project files** — Access configuration files, app modules, and test definitions
+- **Editing app modules** — Modify files in the `app_modules` directory with AI assistance
+- **Running tests** — Execute tests on your test cluster and iterate on results
+- **Managing test environments** — Create, reset, and teardown test clusters
+
+This MCP is particularly useful when:
+- Developing new app modules or services
+- Debugging configuration issues
+- Writing and running integration tests
+- Refactoring cluster configurations
+
+The dev MCP has restricted filesystem access limited to project directories like `__test__`, `app_modules`, `modules`, and `node_types`, ensuring safe AI-assisted development.
 
 ### Safety Measures
 
@@ -363,7 +400,13 @@ The MCP servers implement several layers of protection:
 
 ### Usage
 
-The cluster templates include a `./cli claude` command that launches Claude with the MCP server configured. See the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) or [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) repositories for setup instructions.
+The cluster templates include a `./cli claude` command that launches Claude with the appropriate MCP server configured:
+
+- **For HA clusters** (nix-infra-ha-cluster): Uses `nix-infra-cluster-mcp` for infrastructure management with etcd control plane access
+- **For standalone machines** (nix-infra-machine): Uses `nix-infra-machine-mcp` for fleet management without cluster orchestration
+- **For development**: Both templates support `nix-infra-dev-mcp` for AI-assisted project configuration and testing
+
+See the [nix-infra-ha-cluster](https://github.com/jhsware/nix-infra-ha-cluster) or [nix-infra-machine](https://github.com/jhsware/nix-infra-machine) repositories for detailed setup instructions and usage examples.
 
 ## Secrets
 

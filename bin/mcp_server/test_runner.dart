@@ -148,6 +148,7 @@ cancel -- cancel a running session
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
     final operation = args!['operation'];
     final testName = args['test-name'];

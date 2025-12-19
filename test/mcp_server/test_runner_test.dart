@@ -75,7 +75,7 @@ void main() {
           },
         );
         final text = (result.content.first as TextContent).text;
-        expect(text, 'Missing test-name parameter');
+        expect(text, 'Missing test-name parameter for run');
       });
 
       test('run returns error for test with slash in name', () async {
@@ -109,7 +109,7 @@ void main() {
           },
         );
         final text = (result.content.first as TextContent).text;
-        expect(text, 'Missing test-name parameter');
+        expect(text, 'Missing test-name parameter for reset');
       });
 
       test('reset returns error for test with slash in name', () async {

@@ -40,7 +40,7 @@ void main() {
       
       expect(
         node.getEffectiveSshKeyPath('/home/user/project'),
-        equals('/home/user/project/./ssh/custom-key'),
+        equals('/home/user/project/ssh/custom-key'),
       );
     });
 
@@ -314,7 +314,7 @@ servers:
       // Test effective path resolution
       expect(
         serverRelative.getEffectiveSshKeyPath(tempDir.path),
-        equals('${tempDir.path}/./ssh/my-key'),
+        equals('${tempDir.path}/ssh/my-key'),
       );
       expect(
         serverAbsolute.getEffectiveSshKeyPath(tempDir.path),

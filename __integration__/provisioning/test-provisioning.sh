@@ -8,13 +8,6 @@ ENV=${ENV:-.env}
 SECRETS_PWD=${SECRETS_PWD:-my_secrets_password}
 TEST_NODES=${TEST_NODES:-"testnode001"}
 
-# # Check for nix-infra CLI if using default
-# if [ "$NIX_INFRA" = "nix-infra" ] && ! command -v nix-infra >/dev/null 2>&1; then
-#   echo "The 'nix-infra' CLI is required for this script to work."
-#   echo "Visit https://github.com/jhsware/nix-infra for installation instructions."
-#   exit 1
-# fi
-
 read -r -d '' __help_text__ <<EOF || true
 nix-infra-machine Test Runner
 =============================
@@ -25,7 +18,7 @@ Commands:
   convert             Convert different linux distributions to NixOS
   destroy             Tear down all test machines
   status              Run basic health checks on machines
-  upgrade <nodes>     Upgrade NixOS version on nodes
+  images              List available Hetzner Cloud system images
   
   ssh <node>          SSH into a node
 
@@ -34,11 +27,11 @@ Options:
 
 Examples:
   # Run the full test cycle
-  $0 create --env=.env
-  $0 destroy --env=.env
+  $0 convert
+  $0 destroy
 EOF
 
-if [[ "convert upgrade destroy status ssh images" == *"$1"* ]]; then
+if [[ "convert destroy status ssh images" == *"$1"* ]]; then
   CMD="$1"
   shift
 else
@@ -62,10 +55,15 @@ for i in "$@"; do
   esac
 done
 
-echo workdir: $WORK_DIR
-echo path to env: $ENV
 if [ "$ENV" != "" ] && [ -f "$ENV" ]; then
   source $ENV
+fi
+
+# Check for nix-infra CLI if using default
+if [ "$NIX_INFRA" = "nix-infra" ] && ! command -v nix-infra >/dev/null 2>&1; then
+  echo "The 'nix-infra' CLI is required for this script to work."
+  echo "Visit https://github.com/jhsware/nix-infra for installation instructions."
+  exit 1
 fi
 
 if [ -z "$HCLOUD_TOKEN" ]; then
@@ -76,6 +74,10 @@ fi
 # Source shared helpers
 source "$WORK_DIR/shared.sh"
 
+
+# ============================================================================
+# Hetzner Cloud Commands
+# ============================================================================
 
 if [ "$CMD" = "images" ]; then
   curl -H "Authorization: Bearer $HCLOUD_TOKEN" \
@@ -107,15 +109,6 @@ if [ "$CMD" = "status" ]; then
   exit 0
 fi
 
-if [ "$CMD" = "upgrade" ]; then
-  if [ -z "$REST" ]; then
-    echo "Usage: $0 upgrade --env=$ENV [node1 node2 ...]"
-    exit 1
-  fi
-  $NIX_INFRA fleet cmd -d "$WORK_DIR" --target="$REST" "nixos-rebuild switch --upgrade"
-  exit 0
-fi
-
 # ============================================================================
 # Interactive Commands
 # ============================================================================
@@ -130,7 +123,7 @@ if [ "$CMD" = "ssh" ]; then
 fi
 
 # ============================================================================
-# Create Command - Provision and Initialize Test Fleet
+# Convert Command - Rebuild and convert to Nixos
 # ============================================================================
 
 if [ "$CMD" = "convert" ]; then

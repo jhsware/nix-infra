@@ -194,7 +194,8 @@ class AsciiProgressBar {
   AsciiProgressBar();
 
   int update(int? index, String chars) {
-    stdout.write(ansiEscapes.eraseLines(progressBars.length));
+    stdout.write(ansiEscapes.cursorUp(progressBars.length));
+    //stdout.write(ansiEscapes.eraseLines(progressBars.length));
     if (index == null) {
       index = progressBars.length;
       progressBars.add([chars]);

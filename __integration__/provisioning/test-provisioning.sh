@@ -162,28 +162,26 @@ EOF
 
   # ubuntu-22.04 ubuntu-24.04 debian-11 debian-12 centos-stream-9 centos-stream-10 rocky-9 rocky-10 alma-9 alma-10 fedora-41 opensuse-15 nixos-25.05
   for image in ubuntu-22.04 ubuntu-24.04 debian-11 debian-12 centos-stream-9 centos-stream-10 rocky-9 rocky-10 alma-9 alma-10 fedora-41 opensuse-15; do
-
+    _start_test=$(date +%s)
     echo "*** Rebuild $TEST_NODES with $image ***"
-    curl -X POST \
+    server_id=115946226
+    action_id=$(curl -s -X POST \
       -H "Authorization: Bearer $HCLOUD_TOKEN" \
       -H "Content-Type: application/json" \
       -d "{\"image\":\"$image\"}" \
-      -s -o /dev/null https://api.hetzner.cloud/v1/servers/115789511/actions/rebuild
+      https://api.hetzner.cloud/v1/servers/$server_id/actions/rebuild | jq -r '.action.id')
+      #-s -o /dev/null https://api.hetzner.cloud/v1/servers/115946226/actions/rebuild
+
+    echo -n "Wait for rebuild to complete... "
+    waitForActionToComplete "$action_id"
     
-    echo -n "Allow rebuild to progress... "
-    for i in {1..10}; do
-      echo -n "z"
-      sleep 0.2
-      echo -n "z"
-      sleep 0.2
-      echo -n "Z"
-      sleep 0.6
-    done
-    echo
+    echo -n "Allow to stabilise... "
+    snooze 10
 
     echo "Verify installed system:"
-    $NIX_INFRA fleet cmd -d "$WORK_DIR" --env="$ENV" --target="$TEST_NODES" "uname -a; cat /etc/os-release"
+    showInstalledSystem "$TEST_NODES"
     
+    _start_provision=$(date +%s)
     echo "*** Provisioning NixOS $NIXOS_VERSION ***"
     $NIX_INFRA fleet provision -d "$WORK_DIR" --batch --env="$ENV" \
         --nixos-version="$NIXOS_VERSION" \
@@ -192,23 +190,18 @@ EOF
         --machine-type=cpx21 \
         --node-names="$TEST_NODES"
 
-    _provision=$(date +%s)
+    _end_provision=$(date +%s)
 
     echo -n "Allow rebuild to stabilise... "
-    for i in {1..10}; do
-      echo -n "z"
-      sleep 0.2
-      echo -n "z"
-      sleep 0.2
-      echo -n "Z"
-      sleep 0.6
-    done
-    echo
+    snooze 10
+    showInstalledSystem "$TEST_NODES"
 
     # Verify the operation of the test fleet
     echo "******************************************"
     testFleet "$TEST_NODES"
     echo "Base image: $image"
+    printf 'Provisioning time: %s\n' "$(printTime $_start_provision $_end_provision)"
+    printf 'Total test time: %s\n' "$(printTime $_start_test $(date +%s))"
     echo "******************************************"
   done
 
@@ -222,6 +215,6 @@ EOF
     local _start=$1; local _end=$2; local _secs=$((_end-_start))
     printf '%02dh:%02dm:%02ds' $((_secs/3600)) $((_secs%3600/60)) $((_secs%60))
   }
-  printf '= SUM %s\n' "$(printTime $_start $_end)"
+  printf 'TOTAL TEST TIME: %s\n' "$(printTime $_start $_end)"
   echo "***************** DONE *******************"
 fi

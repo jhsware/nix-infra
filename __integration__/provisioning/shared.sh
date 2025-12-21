@@ -22,6 +22,22 @@ printTime() {
   printf '%02dh:%02dm:%02ds' $((_secs/3600)) $((_secs%3600/60)) $((_secs%60))
 }
 
+snooze() {
+  local max_tries=$1
+  local tries=0
+
+  while [ $tries -lt $max_tries ]; do
+    echo -n "z"
+    sleep 0.2
+    echo -n "z"
+    sleep 0.2
+    echo -n "Z"
+    sleep 0.6
+    tries=$((tries+1))
+  done
+  echo
+}
+
 # ============================================================================
 # Common Commands (used by run-tests.sh command parsing)
 # ============================================================================
@@ -289,4 +305,64 @@ getServiceLogs() {
   echo "--- Service logs for $SERVICE on $NODE ---"
   cmd "$NODE" "journalctl -n $LINES -u $SERVICE" 2>&1
   echo "--- End of logs ---"
+}
+
+# ============================================================================
+# Hetzner cloud Helpers
+# ============================================================================
+
+waitForActionToComplete() {
+  local action_id=$1
+  local max_tries=${2:-30}
+  local tries=0
+
+  while [ $tries -lt $max_tries ]; do
+    echo -n "z"
+    sleep 0.2
+    echo -n "z"
+    sleep 0.2
+    echo -n "Z"
+    sleep 0.6
+
+    status=$(curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" \
+      https://api.hetzner.cloud/v1/actions/$action_id | jq -r '.action.status')
+        
+    if [ "$status" = "success" ]; then
+      echo " - Action completed successfully!"
+      return 0
+    elif [ "$status" = "error" ]; then
+      echo " - Action failed!"
+      return 1
+    fi
+    
+    tries=$((tries+1))
+  done
+
+  echo " - Timeout: Max tries reached"
+  return 1
+}
+
+showInstalledSystem() {
+  local NODE=$1
+  local max_tries=30
+  local tries=0
+
+  while [ $tries -lt $max_tries ]; do
+    tries=$((tries+1))
+    
+    # Run the command and capture output
+    if output=$(cmd "$NODE" "uname -a; cat /etc/os-release" 2>&1); then
+      # Extract and print PRETTY_NAME
+      pretty_name=$(echo "$output" | grep "PRETTY_NAME=" | sed 's/.*PRETTY_NAME=//' | tr -d '"')
+      echo "$pretty_name"
+      return 0
+    fi
+    
+    if [ $tries -lt $max_tries ]; then
+      sleep 1
+    fi
+  done
+
+  echo "Timeout: Node $NODE did not become ready after $max_tries seconds"
+  return 1
 }

@@ -1,5 +1,6 @@
 servers:
   testnode001:
+    id: 115946226
     ip: 77.42.72.174
-    ssh_key: ./ssh/nixinfra
+    ssh_key: ./ssh/nixinfra-machine
     

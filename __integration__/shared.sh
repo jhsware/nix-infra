@@ -382,7 +382,6 @@ showInstalledSystem() {
     if [ $tries -lt $max_tries ]; then
       sleep 1
     fi
-    exit 1
   done
 
   echo "Timeout: Node $NODE did not become ready after $max_tries seconds"

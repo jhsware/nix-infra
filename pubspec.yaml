@@ -17,10 +17,10 @@ dependencies:
   posix: ^6.0.1
   process_run: ^0.14.2
   cli_script: ^1.0.0
-  ansi_escapes: ^1.1.0
+  ansi_escapes: ^2.0.0
   yaml: ^3.1.2
   # path: ^1.8.0
 
 dev_dependencies:
-  lints: ^2.0.0
-  test: ^1.21.0
+  lints: ">=2.0.0"
+  test: ">=1.21.0"

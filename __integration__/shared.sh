@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Shared helper functions for nix-infra-machine tests
+THIS_DIR=$(pwd)
 
 # ============================================================================
 # Utility Functions
@@ -13,11 +14,11 @@ getServerId() {
     echo "Usage: getServerId <server-name>" >&2
     return 1
   fi
-  
-  id=$(yq -r ".servers.${name}.id" "$WORK_DIR/servers.yaml" 2>/dev/null)
+
+  id=$(yq -r ".servers.${name}.id" "$THIS_DIR/servers.yaml" 2>/dev/null)
   
   if [ -z "$id" ] || [ "$id" = "null" ]; then
-    echo "Server '$name' not found in servers.yaml" >&2
+    echo "Server '$name' not found in $THIS_DIR/servers.yaml" >&2
     return 1
   fi
   
@@ -33,7 +34,7 @@ appendWithLineBreak() {
 }
 
 cmd() {
-  $NIX_INFRA fleet cmd --env="$ENV" -d "$WORK_DIR" --target="$1" "$2"
+  $NIX_INFRA fleet cmd --env="../$ENV" -d "$WORK_DIR" --target="$1" "$2"
 }
 
 printTime() {
@@ -71,7 +72,7 @@ if [ "$CMD" = "ssh" ]; then
     echo "Usage: $0 ssh --env=$ENV [node]"
     exit 1
   fi
-  HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i "$WORK_DIR/ssh/$SSH_KEY"
+  HCLOUD_TOKEN=$HCLOUD_TOKEN hcloud server ssh $REST -i "$THIS_DIR/ssh/$SSH_KEY"
   exit 0
 fi
 
@@ -370,6 +371,7 @@ showInstalledSystem() {
     tries=$((tries+1))
     
     # Run the command and capture output
+
     if output=$(cmd "$NODE" "uname -a; cat /etc/os-release" 2>&1); then
       # Extract and print PRETTY_NAME
       pretty_name=$(echo "$output" | grep "PRETTY_NAME=" | sed 's/.*PRETTY_NAME=//' | tr -d '"')
@@ -380,6 +382,7 @@ showInstalledSystem() {
     if [ $tries -lt $max_tries ]; then
       sleep 1
     fi
+    exit 1
   done
 
   echo "Timeout: Node $NODE did not become ready after $max_tries seconds"

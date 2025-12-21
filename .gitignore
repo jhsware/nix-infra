@@ -7,3 +7,4 @@ bin/nix-infra*
 *.log
 TEST_NIX_INFRA/
 __integration__/**/ssh
+__integration__/servers.yaml

@@ -76,7 +76,7 @@ if [ -z "$HCLOUD_TOKEN" ]; then
 fi
 
 # Source shared helpers
-source "$WORK_DIR/shared.sh"
+source "./shared.sh"
 
 
 # ============================================================================
@@ -104,11 +104,11 @@ if [ "$CMD" = "create" ]; then
   
   if [ -z "$ssh_key_id" ] || [ "$ssh_key_id" = "null" ]; then
     echo "SSH key '$SSH_KEY' not found on Hetzner Cloud, creating..."
-    if [ ! -f "$WORK_DIR/ssh/${SSH_KEY}.pub" ]; then
-      echo "Error: Public key file not found: $WORK_DIR/ssh/${SSH_KEY}.pub"
+    if [ ! -f "./ssh/${SSH_KEY}.pub" ]; then
+      echo "Error: Public key file not found: ./ssh/${SSH_KEY}.pub"
       exit 1
     fi
-    pub_key=$(cat "$WORK_DIR/ssh/${SSH_KEY}.pub")
+    pub_key=$(cat "./ssh/${SSH_KEY}.pub")
     ssh_key_id=$(curl -s -X POST \
       -H "Authorization: Bearer $HCLOUD_TOKEN" \
       -H "Content-Type: application/json" \
@@ -155,21 +155,6 @@ if [ "$CMD" = "create" ]; then
   echo -n "Waiting for server to be ready... "
   waitForActionToComplete "$action_id"
 
-  # Update servers.yaml
-  if [ -f "$WORK_DIR/servers.yaml" ]; then
-    # Add new server entry using yq
-    yq -i ".servers.$node_name.id = $server_id | .servers.$node_name.ip = \"$server_ip\" | .servers.$node_name.ssh_key = \"./ssh/$SSH_KEY\"" "$WORK_DIR/servers.yaml"
-  else
-    # Create new servers.yaml
-    cat > "$WORK_DIR/servers.yaml" <<YAML
-servers:
-  $node_name:
-    id: $server_id
-    ip: $server_ip
-    ssh_key: ./ssh/$SSH_KEY
-YAML
-  fi
-
   echo ""
   echo "========================================"
   echo "Server created successfully!"
@@ -188,10 +173,10 @@ fi
 # ============================================================================
 
 destroyFleet() {
-  $NIX_INFRA fleet destroy -d "$WORK_DIR" --batch \
+  $NIX_INFRA fleet destroy -d "$WORK_DIR" --env="$ENV" --batch \
       --target="$TEST_NODES"
 
-  $NIX_INFRA ssh-key remove -d "$WORK_DIR" --batch --name="$SSH_KEY"
+  $NIX_INFRA ssh-key remove -d "$WORK_DIR" --env="$ENV" --batch --name="$SSH_KEY"
 
   echo "Remove /secrets..."
   rm -rf "$WORK_DIR/secrets"
@@ -249,13 +234,14 @@ EOF
 
   _start=$(date +%s)
 
-  ssh-add "$WORK_DIR/ssh/$SSH_KEY"
+  ssh-add "./ssh/$SSH_KEY"
 
   # ubuntu-22.04 ubuntu-24.04 debian-11 debian-12 centos-stream-9 centos-stream-10 rocky-9 rocky-10 alma-9 alma-10 fedora-41 opensuse-15 nixos-25.05
   for image in ubuntu-22.04 ubuntu-24.04 debian-11 debian-12 centos-stream-9 centos-stream-10 rocky-9 rocky-10 alma-9 alma-10 fedora-41 opensuse-15; do
     _start_test=$(date +%s)
     echo "*** Rebuild $TEST_NODES with $image ***"
     server_id=$(getServerId "${TEST_NODES%% *}")
+
     if [ -z "$server_id" ]; then
       echo "Failed to get server ID for ${TEST_NODES%% *}"
       exit 1

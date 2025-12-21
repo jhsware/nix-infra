@@ -15,6 +15,7 @@ nix-infra-machine Test Runner
 Usage: $0 <command> [options]
 
 Commands:
+  create [name]       Create a new test server on Hetzner Cloud
   convert             Convert different linux distributions to NixOS
   destroy             Tear down all test machines
   status              Run basic health checks on machines
@@ -26,12 +27,15 @@ Options:
   --env=<file>        Environment file (default: .env)
 
 Examples:
+  # Create a new test server
+  $0 create testnode001
+  
   # Run the full test cycle
   $0 convert
   $0 destroy
 EOF
 
-if [[ "convert destroy status ssh images" == *"$1"* ]]; then
+if [[ "create convert destroy status ssh images" == *"$1"* ]]; then
   CMD="$1"
   shift
 else
@@ -80,8 +84,102 @@ source "$WORK_DIR/shared.sh"
 # ============================================================================
 
 if [ "$CMD" = "images" ]; then
-  curl -H "Authorization: Bearer $HCLOUD_TOKEN" \
+  curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" \
     https://api.hetzner.cloud/v1/images | jq -r '.images[] | select(.type=="system") | .name'
+  exit 0
+fi
+
+if [ "$CMD" = "create" ]; then
+  node_name="${REST:-$TEST_NODES}"
+  node_name="${node_name%% *}"  # Take first node if multiple provided
+  
+  if [ -z "$node_name" ]; then
+    echo "Usage: $0 create [name]"
+    exit 1
+  fi
+
+  # Check if SSH key exists on Hetzner Cloud, create if not
+  ssh_key_id=$(curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" \
+    "https://api.hetzner.cloud/v1/ssh_keys?name=$SSH_KEY" | jq -r '.ssh_keys[0].id')
+  
+  if [ -z "$ssh_key_id" ] || [ "$ssh_key_id" = "null" ]; then
+    echo "SSH key '$SSH_KEY' not found on Hetzner Cloud, creating..."
+    if [ ! -f "$WORK_DIR/ssh/${SSH_KEY}.pub" ]; then
+      echo "Error: Public key file not found: $WORK_DIR/ssh/${SSH_KEY}.pub"
+      exit 1
+    fi
+    pub_key=$(cat "$WORK_DIR/ssh/${SSH_KEY}.pub")
+    ssh_key_id=$(curl -s -X POST \
+      -H "Authorization: Bearer $HCLOUD_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\":\"$SSH_KEY\",\"public_key\":\"$pub_key\"}" \
+      https://api.hetzner.cloud/v1/ssh_keys | jq -r '.ssh_key.id')
+    
+    if [ -z "$ssh_key_id" ] || [ "$ssh_key_id" = "null" ]; then
+      echo "Error: Failed to create SSH key on Hetzner Cloud"
+      exit 1
+    fi
+    echo "Created SSH key with ID: $ssh_key_id"
+  fi
+
+  echo "Creating server '$node_name' on Hetzner Cloud..."
+  
+  response=$(curl -s -X POST \
+    -H "Authorization: Bearer $HCLOUD_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"name\": \"$node_name\",
+      \"server_type\": \"cpx21\",
+      \"image\": \"ubuntu-24.04\",
+      \"location\": \"hel1\",
+      \"ssh_keys\": [$ssh_key_id]
+    }" \
+    https://api.hetzner.cloud/v1/servers)
+  
+  server_id=$(echo "$response" | jq -r '.server.id')
+  server_ip=$(echo "$response" | jq -r '.server.public_net.ipv4.ip')
+  action_id=$(echo "$response" | jq -r '.action.id')
+  error_msg=$(echo "$response" | jq -r '.error.message // empty')
+  
+  if [ -n "$error_msg" ]; then
+    echo "Error: $error_msg"
+    exit 1
+  fi
+  
+  if [ -z "$server_id" ] || [ "$server_id" = "null" ]; then
+    echo "Error: Failed to create server"
+    echo "$response" | jq .
+    exit 1
+  fi
+
+  echo -n "Waiting for server to be ready... "
+  waitForActionToComplete "$action_id"
+
+  # Update servers.yaml
+  if [ -f "$WORK_DIR/servers.yaml" ]; then
+    # Add new server entry using yq
+    yq -i ".servers.$node_name.id = $server_id | .servers.$node_name.ip = \"$server_ip\" | .servers.$node_name.ssh_key = \"./ssh/$SSH_KEY\"" "$WORK_DIR/servers.yaml"
+  else
+    # Create new servers.yaml
+    cat > "$WORK_DIR/servers.yaml" <<YAML
+servers:
+  $node_name:
+    id: $server_id
+    ip: $server_ip
+    ssh_key: ./ssh/$SSH_KEY
+YAML
+  fi
+
+  echo ""
+  echo "========================================"
+  echo "Server created successfully!"
+  echo "========================================"
+  echo "Node name:    $node_name"
+  echo "Server ID:    $server_id"
+  echo "IP address:   $server_ip"
+  echo "SSH key:      $SSH_KEY"
+  echo "========================================"
+  
   exit 0
 fi
 
@@ -157,7 +255,11 @@ EOF
   for image in ubuntu-22.04 ubuntu-24.04 debian-11 debian-12 centos-stream-9 centos-stream-10 rocky-9 rocky-10 alma-9 alma-10 fedora-41 opensuse-15; do
     _start_test=$(date +%s)
     echo "*** Rebuild $TEST_NODES with $image ***"
-    server_id=115946226
+    server_id=$(getServerId "${TEST_NODES%% *}")
+    if [ -z "$server_id" ]; then
+      echo "Failed to get server ID for ${TEST_NODES%% *}"
+      exit 1
+    fi
     action_id=$(curl -s -X POST \
       -H "Authorization: Bearer $HCLOUD_TOKEN" \
       -H "Content-Type: application/json" \

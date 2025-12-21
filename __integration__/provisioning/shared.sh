@@ -5,6 +5,25 @@
 # Utility Functions
 # ============================================================================
 
+getServerId() {
+  local name="$1"
+  local id
+  
+  if [ -z "$name" ]; then
+    echo "Usage: getServerId <server-name>" >&2
+    return 1
+  fi
+  
+  id=$(yq -r ".servers.${name}.id" "$WORK_DIR/servers.yaml" 2>/dev/null)
+  
+  if [ -z "$id" ] || [ "$id" = "null" ]; then
+    echo "Server '$name' not found in servers.yaml" >&2
+    return 1
+  fi
+  
+  echo "$id"
+}
+
 appendWithLineBreak() {
   if [ -z "$1" ]; then
     printf '%s' "$2"

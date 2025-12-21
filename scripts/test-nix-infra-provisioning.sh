@@ -140,7 +140,7 @@ for i in {1..5}; do
   res=$?
   _provision=$(date +%s)
   if [ $res -ne 0 ]; then
-    echoLog "ERROR: Provisioning failed! Cleaning up..."
+    echoLog "WARNING: Provisioning failed! Cleaning up..."
   else
     echoLog "SUCCESS: $(printTime _start _provision)"
   fi

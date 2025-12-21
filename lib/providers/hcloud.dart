@@ -57,11 +57,13 @@ class HetznerCloud implements InfrastructureProvider {
 
       try {
         final body = JsonDecoder().convert(response.body);
-        final tmp = body['placement_groups'].map<PlacementGroup>((inp) => PlacementGroup(
-            DateTime.parse(inp['created']),
-            inp['id'],
-            inp['name'],
-            inp['type'])).toList();
+        final tmp = body['placement_groups']
+            .map<PlacementGroup>((inp) => PlacementGroup(
+                DateTime.parse(inp['created']),
+                inp['id'],
+                inp['name'],
+                inp['type']))
+            .toList();
         outp.addAll(tmp);
         page = body['meta']['nextPage'] ?? 0;
       } catch (e) {
@@ -87,8 +89,8 @@ class HetznerCloud implements InfrastructureProvider {
 
     final body = JsonDecoder().convert(response.body);
     final placementGroup = body['placement_group'];
-    return PlacementGroup(DateTime.parse(placementGroup['created']), placementGroup['id'],
-        placementGroup['name'], placementGroup['type']);
+    return PlacementGroup(DateTime.parse(placementGroup['created']),
+        placementGroup['id'], placementGroup['name'], placementGroup['type']);
   }
 
   Future<void> destroyPlacementGroup(int id) async {
@@ -111,20 +113,19 @@ class HetznerCloud implements InfrastructureProvider {
       totalEntries = body['meta']['pagination']['total_entries'];
       servers.addAll(body['servers']);
     }
-    
+
     if (only != null) {
       // Check if any requested servers don't exist
       final availableNames = servers.map((s) => s['name'] as String).toSet();
       final requestedNames = only.toSet();
       final missingServers = requestedNames.difference(availableNames);
-      
+
       if (missingServers.isNotEmpty) {
         throw Exception(
-          'Server(s) not found in Hetzner Cloud: ${missingServers.join(", ")}\n'
-          'Available servers: ${availableNames.join(", ")}'
-        );
+            'Server(s) not found in Hetzner Cloud: ${missingServers.join(", ")}\n'
+            'Available servers: ${availableNames.join(", ")}');
       }
-      
+
       servers = servers.where((node) => only.contains(node['name'])).toList();
     }
 

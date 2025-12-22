@@ -1,5 +1,10 @@
 NOTE: This are pre 1.0 releases, this means there can be breaking changes on minor releases without clear warnings.
 
+## 0.17.0-beta
+- added support for converting RHEL-based servers to NixOS (self hosting)
+- fixed bug in ascii progress bar that made it wander to the bottom of the screen
+- removed static reference to .env
+
 ## 0.16.0-beta
 - BREAKING: removed legacy commands
 - added support for self hosting by configuring server.yaml file

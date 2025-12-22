@@ -40,37 +40,8 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           draft: true
-          file: bin/nix-infra
-          asset_name: nix-infra
+          file: bin/nix-infra*
+          file_glob: true
+          overwrite: true
           tag: ${{ github.ref }}
           body: "This is my release text"
-
-      - name: Upload nix-infra-cluster-mcp binary to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          draft: true
-          file: bin/nix-infra-cluster-mcp
-          asset_name: nix-infra-cluster-mcp
-          tag: ${{ github.ref }}
-          overwrite: true
-
-      - name: Upload nix-infra-machine-mcp binary to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          draft: true
-          file: bin/nix-infra-machine-mcp
-          asset_name: nix-infra-machine-mcp
-          tag: ${{ github.ref }}
-          overwrite: true
-
-      - name: Upload nix-infra-dev-mcp binary to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          draft: true
-          file: bin/nix-infra-dev-mcp
-          asset_name: nix-infra-dev-mcp
-          tag: ${{ github.ref }}
-          overwrite: true

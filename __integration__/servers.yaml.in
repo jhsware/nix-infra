@@ -1,0 +1,6 @@
+servers:
+  testnode001:
+    id: [server-id]
+    ip: [server-ip]
+    ssh_key: [path-to-private-ssh-key]
+    

@@ -206,7 +206,7 @@ $NIX_INFRA provision -d $WORK_DIR --batch --env="$WORK_DIR/.env" \
     --location=hel1 \
     --machine-type=cpx21 \
     --node-names="$CTRL $CLUSTER_NODES"
-cleanupOnFail $? "ERROR: Provisioning failed! Cleaning up..."
+cleanupOnFail $? "WARNING: Provisioning failed! Cleaning up..."
 
 _provision=`date +%s`
 

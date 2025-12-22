@@ -21,10 +21,10 @@ packages:
     dependency: "direct main"
     description:
       name: ansi_escapes
-      sha256: e2a111254904ff663b8d4be744073f7e327157c895a0ad57ad8de7938297bc8c
+      sha256: dfa842a666609299fbb6ec628229e9685d7763d1af265cfd2abfdfc19ea2bd35
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "2.0.1"
   args:
     dependency: "direct main"
     description:
@@ -197,10 +197,10 @@ packages:
     dependency: "direct dev"
     description:
       name: lints
-      sha256: "0a217c6c989d21039f1498c3ed9f3ed71b354e69873f13a8dfc3c9fe76f1b452"
+      sha256: c35bb79562d980e9a453fc715854e1ed39e24e7d0297a880ef54e17f9874a9d7
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.1"
+    version: "5.1.1"
   logging:
     dependency: transitive
     description:
@@ -506,4 +506,4 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: ">=3.5.0 <4.0.0"
+  dart: ">=3.6.0 <4.0.0"

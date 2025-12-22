@@ -12,6 +12,7 @@ in pkgs.mkShell rec {
     pkgs.openssl
     # pkgs.hcloud
     hcloud
+    yq
   ] ++ (if !isMacOS then [
     pkgs.openssh
   ] else []);

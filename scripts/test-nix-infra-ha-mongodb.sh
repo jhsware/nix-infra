@@ -325,7 +325,7 @@ if [ "$CMD" = "create" ]; then
 
   for pid in $pid1 $pid2 $pid3; do
     wait "$pid"
-    cleanupOnFail $? "ERROR: Provisioning failed! Cleaning up..."
+    cleanupOnFail $? "WARNING: Provisioning failed! Cleaning up..."
   done
 
   _provision=$(date +%s)

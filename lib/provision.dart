@@ -106,16 +106,17 @@ Future<void> installNixos(Directory workingDir, Iterable<ClusterNode> nodes,
   final progressBar = AsciiProgressBar();
 
   final nixChannel = 'nixos-$nixVersion';
+  final muteUnlessDebug = debug ? "" : "2>/dev/null";
   final installScript = """#!/usr/bin/env bash
 echo "mute=on"
-curl -s https://raw.githubusercontent.com/elitak/nixos-infect/master/nixos-infect | NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x 2>/dev/null;
+curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug;
 
 # Make sure we use custom configuration on reboot
 cp -f /root/configuration.nix /etc/nixos/configuration.nix;
 
 # Some picks from the nixos-infect script
 /nix/var/nix/profiles/system/sw/bin/nix-collect-garbage 2>/dev/null;
-/nix/var/nix/profiles/system/bin/switch-to-configuration boot 2>/dev/null;
+/nix/var/nix/profiles/system/bin/switch-to-configuration boot $muteUnlessDebug;
 reboot;
   """;
 
@@ -136,6 +137,7 @@ reboot;
     final sftp = await sshClient.sftp();
 
     await sftpWrite(sftp, installScript, '/root/install.sh');
+
     await sftpSend(
         sftp, '${workingDir.path}/configuration.nix', '/root/configuration.nix',
         substitutions: {

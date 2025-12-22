@@ -265,7 +265,7 @@ String multi(Iterable<String> lines) {
 Future<DotEnv> loadEnv(String? envFileName, Directory workingDir) async {
   // Load environment variables
   final env = DotEnv(includePlatformEnvironment: true);
-  final envFile = File(envFileName ?? path.normalize('${workingDir.path}/$envFileName'));
+  final envFile = File(envFileName ?? path.normalize('${workingDir.path}/${envFileName ?? '.env'}'));
   if (await envFile.exists()) {
     env.load([envFile.path]);
   }

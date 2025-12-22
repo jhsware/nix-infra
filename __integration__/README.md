@@ -13,7 +13,7 @@ This directory contains integration tests for nix-infra. The tests validate that
 
 1. **Create the environment file**
 
-   Create a `.env` file in the `provisioning/` directory:
+   Create a `.env` file in the `__integration__/` directory:
 
 ```bash
 cp __integration__/.env.in __integration__/.env  # or create manually

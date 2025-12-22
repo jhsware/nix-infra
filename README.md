@@ -82,9 +82,23 @@ With Hetzner Cloud, nix-infra can:
 
 ### Self-Hosted Servers
 
-Note: your host machine must run a **Debian-based distro or NixOS**. Currently RHEL-based distros fail to convert to Nixos.
+For existing servers, bare metal machines, or other cloud providers, use the self-hosting provider by creating a `servers.yaml` file in your project root. The host machine must run a **Debian-based distro, RHEL-based distro or NixOS**. Testing has been performed on:
 
-For existing servers, bare metal machines, or other cloud providers, use the self-hosting provider. Create a `servers.yaml` file in your working directory:
+Base Image | Verified System | Provisioning Time | Status
+-- | -- | -- | --
+ubuntu-22.04 | Ubuntu 22.04.5 LTS | 2m 37s | ✓
+ubuntu-24.04 | Ubuntu 24.04.3 LTS | 2m 22s | ✓
+debian-11 | Debian GNU/Linux 11 (bullseye) | 2m 00s | ✓
+debian-12 | Debian GNU/Linux 12 (bookworm) | 2m 08s | ✓
+centos-stream-9 | CentOS Stream 9 | 2m 06s | ✓
+centos-stream-10 | CentOS Stream 10 (Coughlan) | 2m 11s | ✓
+rocky-9 | Rocky Linux 9.7 (Blue Onyx) | 2m 11s | ✓
+rocky-10 | Rocky Linux 10.1 (Red Quartz) | 2m 18s | ✓
+alma-9 | AlmaLinux 9.7 (Moss Jungle Cat) | 2m 15s | ✓
+alma-10 | AlmaLinux 10.1 (Heliotrope Lion) | 2m 11s | ✓
+opensuse-15 | openSUSE Leap 15.6 | 2m 00s | ✓
+
+Create a `servers.yaml` file in your project root:
 
 ```yaml
 servers:

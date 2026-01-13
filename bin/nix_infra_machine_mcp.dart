@@ -9,8 +9,18 @@ import 'mcp_server/systemctl.dart';
 import 'mcp_server/system_stats.dart';
 import 'package:nix_infra/helpers.dart';
 
-void main() async {
-  final workingDir = await getWorkingDirectory(Directory.current.path);
+void main(List<String> arguments) async {
+  String? projectDir;
+
+  // Parse arguments
+  for (final arg in arguments) {
+    if (arg.startsWith('--project-dir=')) {
+      projectDir = arg.substring('--project-dir='.length);
+    }
+  }
+
+  final workingDir = await getWorkingDirectory(projectDir ?? Directory.current.path);
+
   final env = await loadEnv('.env', workingDir);
 
   final sshKeyName = env['SSH_KEY'];

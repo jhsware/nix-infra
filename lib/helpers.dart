@@ -127,7 +127,7 @@ Future<bool> sftpExists(
 }
 
 /// Get SSH key as PEM string by key name.
-/// 
+///
 /// Looks for the key in ${workingDir.path}/ssh/$name
 /// For more flexible path handling, use [getSshKeyAsPemFromNode] instead.
 Future<String> getSshKeyAsPem(Directory workingDir, String name) async {
@@ -137,10 +137,11 @@ Future<String> getSshKeyAsPem(Directory workingDir, String name) async {
 }
 
 /// Get SSH key as PEM string from a ClusterNode.
-/// 
+///
 /// This method respects the node's sshKeyPath if set, allowing for
 /// keys stored in non-standard locations (e.g., self-hosted servers).
-Future<String> getSshKeyAsPemFromNode(Directory workingDir, ClusterNode node) async {
+Future<String> getSshKeyAsPemFromNode(
+    Directory workingDir, ClusterNode node) async {
   final keyPath = node.getEffectiveSshKeyPath(workingDir.path);
   final sshKey = await File(keyPath).readAsString();
   return sshKey.trim();
@@ -263,9 +264,12 @@ String multi(Iterable<String> lines) {
 }
 
 Future<DotEnv> loadEnv(String? envFileName, Directory workingDir) async {
+  envFileName ??= '.env';
+  
   // Load environment variables
   final env = DotEnv(includePlatformEnvironment: true);
-  final envFile = File(envFileName ?? path.normalize('${workingDir.path}/${envFileName ?? '.env'}'));
+  final envFile =
+      File(path.normalize('${workingDir.path}/$envFileName'));
   if (await envFile.exists()) {
     env.load([envFile.path]);
   }

@@ -17,7 +17,8 @@ void main(List<String> arguments) async {
     }
   }
 
-  final workingDir = await getWorkingDirectory(projectDir ?? Directory.current.path);
+  final workingDir =
+      await getWorkingDirectory(projectDir ?? Directory.current.path);
 
   final env = await loadEnv('.env', workingDir);
 

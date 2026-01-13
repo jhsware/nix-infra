@@ -566,32 +566,32 @@ void main() {
 
   group('getAbsolutePath', () {
     test('returns current directory for "."', () {
-      final result = getAbsolutePath('.');
+      final result = getAbsolutePath(Directory.current, '.');
       expect(result, Directory.current.absolute.path);
     });
 
     test('appends relative path to current directory', () {
-      final result = getAbsolutePath('fake-dir');
+      final result = getAbsolutePath(Directory.current, 'fake-dir');
       expect(result, '${Directory.current.absolute.path}/fake-dir');
     });
 
     test('handles path starting with "./"', () {
-      final result = getAbsolutePath('./fake-dir');
+      final result = getAbsolutePath(Directory.current, './fake-dir');
       expect(result, '${Directory.current.absolute.path}/fake-dir');
     });
 
     test('normalizes path with ".."', () {
-      final result = getAbsolutePath('some/path/../other');
+      final result = getAbsolutePath(Directory.current, 'some/path/../other');
       expect(result, '${Directory.current.absolute.path}/some/other');
     });
 
     test('normalizes path with multiple ".."', () {
-      final result = getAbsolutePath('a/b/c/../../d');
+      final result = getAbsolutePath(Directory.current, 'a/b/c/../../d');
       expect(result, '${Directory.current.absolute.path}/a/d');
     });
 
     test('normalizes path with "."', () {
-      final result = getAbsolutePath('some/./path');
+      final result = getAbsolutePath(Directory.current, 'some/./path');
       expect(result, '${Directory.current.absolute.path}/some/path');
     });
   });

@@ -198,7 +198,7 @@ cancel -- cancel a running session
       );
     }
 
-    final directory = Directory(getAbsolutePath('__test__/$testName'));
+    final directory = Directory(getAbsolutePath(workingDir, '__test__/$testName'));
     if (!directory.existsSync()) {
       return CallToolResult.fromContent(
         content: [
@@ -366,7 +366,7 @@ cancel -- cancel a running session
       return;
     }
 
-    final directory = Directory(getAbsolutePath('__test__/$name'));
+    final directory = Directory(getAbsolutePath(workingDir, '__test__/$name'));
     if (!await directory.exists()) {
       yield 'Test not found: $name (${directory.absolute.path})';
       return;
@@ -381,7 +381,7 @@ cancel -- cancel a running session
       return;
     }
 
-    final directory = Directory(getAbsolutePath('__test__/$name'));
+    final directory = Directory(getAbsolutePath(workingDir, '__test__/$name'));
     if (!await directory.exists()) {
       yield 'Test not found: $name (${directory.absolute.path})';
       return;
@@ -485,8 +485,8 @@ Future<List<String>> runCommand(Directory workingDir, String cmd) async {
   return outp;
 }
 
-String getAbsolutePath(String path) {
-  final projectRootPath = Directory.current.absolute.path;
+String getAbsolutePath(Directory workingDir, String path) {
+  final projectRootPath = workingDir.absolute.path;
   final outp = path == '.' ? projectRootPath : '$projectRootPath/$path';
   return normalize(outp);
 }

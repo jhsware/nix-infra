@@ -135,9 +135,6 @@ cancel -- cancel a running session
     },
   };
 
-  /// Path to the test infrastructure directory (current working directory)
-  static String get testInfraPath => getAbsolutePath('.');
-
   final TestEnvironmentSessionManager _sessionManager =
       TestEnvironmentSessionManager();
 
@@ -180,24 +177,22 @@ cancel -- cancel a running session
 
   /// Starts a create or destroy operation and returns session info
   CallToolResult _startOperation(String operation) {
-    final testInfraDir = Directory(testInfraPath);
-    if (!testInfraDir.existsSync()) {
+    if (!workingDir.existsSync()) {
       return CallToolResult.fromContent(
         content: [
           TextContent(
-              text:
-                  'Test infrastructure directory not found: $testInfraPath')
+              text: 'Test infrastructure directory not found: ${workingDir.absolute.path}')
         ],
       );
     }
 
-    final runTestsScript = File('$testInfraPath/__test__/run-tests.sh');
+    final runTestsScript =
+        File('${workingDir.absolute.path}/__test__/run-tests.sh');
     if (!runTestsScript.existsSync()) {
       return CallToolResult.fromContent(
         content: [
           TextContent(
-              text:
-                  'run-tests.sh script not found: ${runTestsScript.path}')
+              text: 'run-tests.sh script not found: ${runTestsScript.path}')
         ],
       );
     }
@@ -210,7 +205,7 @@ cancel -- cancel a running session
     final cmd = '__test__/run-tests.sh $operation';
 
     // Start the command
-    final outputStream = _streamCommand(Directory(testInfraPath), cmd);
+    final outputStream = _streamCommand(workingDir, cmd);
 
     // Start collecting output in the background
     session.collectOutput(outputStream);
@@ -220,7 +215,7 @@ cancel -- cancel a running session
       'status': 'started',
       'session_id': sessionId,
       'operation': operation,
-      'working_directory': testInfraPath,
+      'working_directory': workingDir.absolute.path,
       'message':
           'Operation started. Use get_output with session_id to retrieve output chunks.',
     };
@@ -409,8 +404,8 @@ cancel -- cancel a running session
   }
 }
 
-String getAbsolutePath(String path) {
-  final projectRootPath = Directory.current.absolute.path;
+String getAbsolutePath(Directory workingDir, String path) {
+  final projectRootPath = workingDir.absolute.path;
   final outp = path == '.' ? projectRootPath : '$projectRootPath/$path';
   return normalize(outp);
 }

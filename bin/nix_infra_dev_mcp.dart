@@ -52,45 +52,45 @@ void main(List<String> arguments) async {
     ),
   );
 
-  // *** Filesystem ***
+  // // *** Filesystem ***
 
-  final filesystem = FileSystem(
-    workingDir: workingDir,
-    sshKeyName: sshKeyName,
-    provider: provider,
-    allowedPaths: [
-      "${workingDir.absolute.path}/__test__",
-      "${workingDir.absolute.path}/app_modules",
-      "${workingDir.absolute.path}/modules",
-      "${workingDir.absolute.path}/node_types",
-      "${workingDir.absolute.path}/configuration.nix",
-      "${workingDir.absolute.path}/configuration.nix",
-    ],
-  );
+  // final filesystem = FileSystem(
+  //   workingDir: workingDir,
+  //   sshKeyName: sshKeyName,
+  //   provider: provider,
+  //   allowedPaths: [
+  //     "${workingDir.absolute.path}/__test__",
+  //     "${workingDir.absolute.path}/app_modules",
+  //     "${workingDir.absolute.path}/modules",
+  //     "${workingDir.absolute.path}/node_types",
+  //     "${workingDir.absolute.path}/configuration.nix",
+  //     "${workingDir.absolute.path}/configuration.nix",
+  //   ],
+  // );
 
-  server.tool(
-    "read-project-files",
-    description: FileSystem.description,
-    inputSchemaProperties: FileSystem.inputSchemaProperties,
-    callback: filesystem.callback,
-  );
+  // server.tool(
+  //   "read-project-files",
+  //   description: FileSystem.description,
+  //   inputSchemaProperties: FileSystem.inputSchemaProperties,
+  //   callback: filesystem.callback,
+  // );
 
-  final filesystemEdit = FileSystemEdit(
-    workingDir: workingDir,
-    sshKeyName: sshKeyName,
-    provider: provider,
-    allowedPaths: [
-      "${workingDir.absolute.path}/__test__",
-      "${workingDir.absolute.path}/app_modules",
-    ],
-  );
+  // final filesystemEdit = FileSystemEdit(
+  //   workingDir: workingDir,
+  //   sshKeyName: sshKeyName,
+  //   provider: provider,
+  //   allowedPaths: [
+  //     "${workingDir.absolute.path}/__test__",
+  //     "${workingDir.absolute.path}/app_modules",
+  //   ],
+  // );
 
-  server.tool(
-    "edit-app-module-files",
-    description: FileSystemEdit.description,
-    inputSchemaProperties: FileSystemEdit.inputSchemaProperties,
-    callback: filesystemEdit.callback,
-  );
+  // server.tool(
+  //   "edit-app-module-files",
+  //   description: FileSystemEdit.description,
+  //   inputSchemaProperties: FileSystemEdit.inputSchemaProperties,
+  //   callback: filesystemEdit.callback,
+  // );
 
   // *** Test Runner ***
 

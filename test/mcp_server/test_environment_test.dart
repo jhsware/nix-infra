@@ -429,11 +429,6 @@ void main() {
   });
 
   group('TestEnvironment constants', () {
-    test('has correct test infra path', () {
-      // Verify testInfraPath is a valid absolute path
-      expect(TestEnvironment.testInfraPath, isNotEmpty);
-      expect(path.isAbsolute(TestEnvironment.testInfraPath), isTrue);
-    });
 
     test('has description', () {
       expect(TestEnvironment.description, isNotEmpty);

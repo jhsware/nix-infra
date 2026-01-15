@@ -5,9 +5,9 @@
 
 ## Executive Summary
 
-This document analyzes how nix-infra currently supports systemd credentials and identifies gaps between the implementation and the full systemd credentials specification. The analysis reveals that while nix-infra has solid foundations for secret management using `systemd-creds encrypt`, there is a critical gap in service integration—secrets are deployed but services don't use the standard systemd credential loading mechanism.
+This document analyzes how nix-infra currently supports systemd credentials and identifies gaps between the implementation and the full systemd credentials specification. The analysis reveals that nix-infra correctly uses `systemd-creds encrypt` for TPM/host-bound encryption on remote nodes. The gap is in **service integration**—secrets are properly encrypted but services don't use `LoadCredentialEncrypted=` to have systemd automatically decrypt them at service activation.
 
-**Key Finding**: The primary improvement opportunity is adding `LoadCredentialEncrypted=` directive generation in NixOS service modules, which would enable proper credential lifecycle management and standardized access via `$CREDENTIALS_DIRECTORY`.
+**Key Finding**: The primary improvement opportunity is adding `LoadCredentialEncrypted=` directive generation in NixOS service modules, which would enable automatic decryption at service start and standardized access via `$CREDENTIALS_DIRECTORY`.
 
 ## Current Implementation Overview
 
@@ -15,11 +15,18 @@ This document analyzes how nix-infra currently supports systemd credentials and 
 
 ```
 [Local] secrets/ (openssl AES-256-CBC PBKDF2 encrypted)
-    ↓ SSH
-[Remote] systemd-creds encrypt → /root/secrets/*.enc
-    ↓ Manual access
-[App] reads /root/secrets/* directly
+    ↓ SSH (secret decrypted locally, sent over SSH, re-encrypted on remote)
+[Remote] systemd-creds encrypt → /root/secrets/$secretName (TPM/host-bound encrypted)
+    ↓ Apps must call systemd-creds decrypt OR use LoadCredentialEncrypted=
+[App] Currently: manual decryption required
 ```
+
+The `deploySecretOnRemote()` function correctly encrypts secrets on the remote host:
+```dart
+await shell.run('$sshCmd "systemd-creds encrypt - /root/secrets/$secretName"');
+```
+
+This creates TPM-bound or host-key-bound encrypted credentials that can only be decrypted on that specific machine.
 
 ### Key Components
 
@@ -31,7 +38,7 @@ The `secrets.dart` module provides:
 |----------|---------|----------------|
 | `saveSecret()` | Encrypt and store secrets locally | OpenSSL enc -pbkdf2 with password |
 | `readSecret()` | Decrypt local secrets | OpenSSL decryption |
-| `deploySecretOnRemote()` | Deploy encrypted to remote node | SSH + `systemd-creds encrypt` |
+| `deploySecretOnRemote()` | Deploy encrypted to remote node | SSH + `systemd-creds encrypt` (TPM-bound) |
 | `syncSecrets()` | Sync expected secrets to node | Deploy needed, remove unused |
 
 **Variable Substitution**: Supports `[%%var%%]` syntax for dynamic values like IP addresses and hostnames.
@@ -50,10 +57,10 @@ The `secrets.dart` module provides:
 
 ### What Works Well
 
-1. **Encryption at rest**: Secrets are stored encrypted locally using OpenSSL
-2. **Secure deployment**: Uses `systemd-creds encrypt` on remote for TPM/host-bound encryption
+1. **Local encryption**: Secrets stored encrypted locally using OpenSSL AES-256-CBC PBKDF2
+2. **Remote encryption**: Uses `systemd-creds encrypt` on remote for TPM/host-bound encryption ✅
 3. **Variable substitution**: Dynamic values like IPs can be injected at deployment time
-4. **Binary support**: Can handle credentials up to 1MB (OpenSSL handles binary data)
+4. **Binary support**: Can handle credentials up to 1MB
 5. **Cleanup**: Automatically removes secrets that are no longer needed
 
 ## Gap Analysis: systemd Credentials Features
@@ -62,49 +69,47 @@ The `secrets.dart` module provides:
 
 | Feature | systemd Spec | nix-infra Status | Gap |
 |---------|--------------|------------------|-----|
-| `systemd-creds encrypt` | Encrypt credentials | ✅ Supported | None |
+| `systemd-creds encrypt` | Encrypt credentials | ✅ **Fully Supported** | None |
 | Binary credentials (≤1MB) | Store binary data | ✅ Supported | None |
 | Variable substitution | Custom `${}` syntax | ✅ Custom `[%%var%%]` | Different syntax |
-| `LoadCredential=` | Load unencrypted file at activation | ❌ Not used | **Critical** |
-| `LoadCredentialEncrypted=` | Load encrypted file at activation | ❌ Not used | **Critical** |
+| `LoadCredential=` | Load unencrypted file at activation | ❌ Not configured | Service config needed |
+| `LoadCredentialEncrypted=` | Load encrypted file at activation | ❌ Not configured | **Service config needed** |
 | `SetCredential=` | Literal value in unit file | ❌ Not supported | Low priority |
 | `SetCredentialEncrypted=` | Encrypted literal in unit | ❌ Not supported | Medium priority |
 | `ImportCredential=` | Auto-search credential stores | ❌ Not supported | Medium priority |
 | `/etc/credstore/` | Standard unencrypted store path | ❌ Uses `/root/secrets/` | Easy fix |
 | `/etc/credstore.encrypted/` | Standard encrypted store path | ❌ Uses `/root/secrets/` | Easy fix |
-| `$CREDENTIALS_DIRECTORY` | Runtime credential access | ❌ Not available | **Critical** |
+| `$CREDENTIALS_DIRECTORY` | Runtime credential access | ❌ Not available | Requires LoadCredential= |
 | `ConditionCredential=` | Service conditional on credential | ❌ Not supported | Low priority |
 | `AssertCredential=` | Required credential assertion | ❌ Not supported | Low priority |
 | `PrivateMounts=` | Namespace isolation for credentials | ❌ Not configured | Medium priority |
-| AF_UNIX socket credentials | Dynamic credential delivery | ❌ Not supported | Low priority |
-| System credentials (hypervisor) | Container/VM credentials | ❌ Not applicable | N/A |
 
-### Critical Gap: No Service Integration
+### The Integration Gap
 
-The most significant issue is the disconnect between secret deployment and service consumption:
+The credentials ARE properly encrypted on the remote using `systemd-creds encrypt`. The gap is how services ACCESS these encrypted credentials:
 
-**Current Flow** (suboptimal):
+**Current Flow**:
 ```
-1. Secrets deployed to /root/secrets/*.enc
-2. Applications must manually decrypt and read from /root/secrets/
-3. No integration with systemd credential lifecycle
-4. No $CREDENTIALS_DIRECTORY for standardized access
+1. Secrets deployed to /root/secrets/$secretName (encrypted with systemd-creds)
+2. Applications must manually call: systemd-creds decrypt /root/secrets/$secretName -
+3. OR applications need custom decryption logic
+4. No automatic lifecycle management
 ```
 
-**Ideal Flow** (systemd-native):
+**Ideal Flow** (with LoadCredentialEncrypted=):
 ```
-1. Secrets deployed to /etc/credstore.encrypted/*.enc
-2. Service unit has LoadCredentialEncrypted=myapp.key:/etc/credstore.encrypted/myapp-key.enc
-3. systemd decrypts and mounts to /run/credentials/myapp.service/
-4. Service accesses via $CREDENTIALS_DIRECTORY/myapp.key
-5. Credentials automatically cleaned up when service stops
+1. Secrets deployed to /etc/credstore.encrypted/$secretName.enc (same encryption)
+2. Service unit has: LoadCredentialEncrypted=mykey:/etc/credstore.encrypted/mykey.enc
+3. systemd automatically decrypts at service start → /run/credentials/myservice/mykey
+4. Service reads plaintext from $CREDENTIALS_DIRECTORY/mykey
+5. Credentials automatically removed when service stops
 ```
 
-### Benefits of Proper Integration
+### Benefits of Adding LoadCredentialEncrypted=
 
-1. **Security**: Credentials exist in cleartext only while service runs
-2. **Isolation**: `PrivateMounts=` prevents other processes from accessing
-3. **Lifecycle**: Automatic cleanup when service stops
+1. **Automatic decryption**: systemd handles decryption at service activation
+2. **Lifecycle management**: Credentials only exist in cleartext while service runs
+3. **Isolation**: `PrivateMounts=` prevents other processes from accessing
 4. **Standardization**: Apps use `$CREDENTIALS_DIRECTORY` consistently
 5. **Auditability**: systemd logs credential loading
 
@@ -114,9 +119,8 @@ The most significant issue is the disconnect between secret deployment and servi
 
 | Feature | Value | Effort | ROI |
 |---------|-------|--------|-----|
-| `LoadCredentialEncrypted=` in NixOS modules | **HIGH** - Enables proper credential lifecycle | Medium - Requires template/module changes | ⭐⭐⭐⭐⭐ |
-| Service unit credential configuration | **HIGH** - Completes the integration | Medium - Per-service configuration | ⭐⭐⭐⭐⭐ |
-| `$CREDENTIALS_DIRECTORY` support | **HIGH** - Standardized access pattern | Low - Comes with LoadCredential | ⭐⭐⭐⭐⭐ |
+| `LoadCredentialEncrypted=` in NixOS modules | **HIGH** - Automatic decryption | Medium - NixOS service config | ⭐⭐⭐⭐⭐ |
+| `$CREDENTIALS_DIRECTORY` support | **HIGH** - Standardized access | Low - Comes with LoadCredential | ⭐⭐⭐⭐⭐ |
 
 ### Medium Priority Features
 
@@ -124,133 +128,87 @@ The most significant issue is the disconnect between secret deployment and servi
 |---------|-------|--------|-----|
 | Move to `/etc/credstore.encrypted/` | **MEDIUM** - Standards compliance | Low - Path change | ⭐⭐⭐⭐ |
 | `PrivateMounts=` configuration | **MEDIUM** - Enhanced isolation | Low - Config addition | ⭐⭐⭐⭐ |
-| `ImportCredential=` glob support | **MEDIUM** - Flexible credential discovery | Medium - NixOS module work | ⭐⭐⭐ |
-| `ConditionCredential=` | **LOW** - Conditional service start | Low - Simple addition | ⭐⭐⭐ |
+| `ImportCredential=` glob support | **MEDIUM** - Flexible credential discovery | Medium | ⭐⭐⭐ |
 
 ### Low Priority Features
 
 | Feature | Value | Effort | ROI |
 |---------|-------|--------|-----|
 | `SetCredentialEncrypted=` | **LOW** - Inline encrypted values | Medium | ⭐⭐ |
-| AF_UNIX socket credentials | **LOW** - Dynamic credential API | High - Architecture change | ⭐ |
-| System credentials | **N/A** - Hypervisor/container specific | N/A | N/A |
+| `ConditionCredential=` | **LOW** - Conditional service start | Low | ⭐⭐ |
 
 ## Recommendations
 
-### Phase 1: Core Integration (Recommended First)
+### Phase 1: Service Integration (Recommended First)
 
-**Goal**: Enable proper systemd credential loading for services
+**Goal**: Enable automatic credential decryption for services
 
-1. **Modify secret deployment path**
-   - Change from `/root/secrets/` to `/etc/credstore.encrypted/`
-   - Minimal code change in `secrets.dart`
-
-2. **Add LoadCredentialEncrypted= generation**
+1. **Add LoadCredentialEncrypted= to NixOS service modules**
    - When deploying NixOS modules, generate appropriate credential loading directives
    - Map secret names to service credential requirements
-   - Example NixOS service config:
+   - Example:
    ```nix
    systemd.services.myapp = {
      serviceConfig = {
-       LoadCredentialEncrypted = "db-password:/etc/credstore.encrypted/myapp-db-password.enc";
-       PrivateMounts = true;
+       LoadCredentialEncrypted = "db-password:/root/secrets/myapp-db-password";
+       # OR if path changed:
+       # LoadCredentialEncrypted = "db-password:/etc/credstore.encrypted/myapp-db-password";
      };
    };
    ```
 
-3. **Update application configurations**
-   - Modify apps to read from `$CREDENTIALS_DIRECTORY` instead of `/root/secrets/`
+2. **Update application configurations**
+   - Modify apps to read from `$CREDENTIALS_DIRECTORY` instead of calling `systemd-creds decrypt`
+
+3. **Optional: Change deployment path**
+   - Move from `/root/secrets/` to `/etc/credstore.encrypted/` for standards compliance
 
 ### Phase 2: Enhanced Security
 
 1. Enable `PrivateMounts=true` for credential isolation
 2. Add `AssertCredential=` for required credentials
-3. Add `ConditionCredential=` for optional credentials
-
-### Phase 3: Standards Compliance
-
-1. Support `ImportCredential=` for glob patterns
-2. Consider `SetCredentialEncrypted=` for static inline values
 
 ## Implementation Considerations
 
+### Minimal Change Option
+
+The simplest approach is to just add `LoadCredentialEncrypted=` directives to NixOS service configurations, pointing to the existing `/root/secrets/` path:
+
+```nix
+LoadCredentialEncrypted = "mykey:/root/secrets/mykey";
+```
+
+This requires no changes to `secrets.dart` - only NixOS module configuration.
+
 ### Backward Compatibility
 
-- Existing deployments use `/root/secrets/` - migration needed
-- Applications hardcoded to read from `/root/secrets/` must be updated
-- Consider parallel deployment during transition
-
-### NixOS Module Generation
-
-The key implementation challenge is generating NixOS service configurations with appropriate credential loading. Options:
-
-1. **Template-based**: Add `LoadCredentialEncrypted=` to module templates
-2. **Dynamic generation**: Generate from secret registry
-3. **Convention-based**: Derive credential names from service names
-
-### Testing Strategy
-
-1. Test credential loading with simple service
-2. Verify `$CREDENTIALS_DIRECTORY` accessibility
-3. Confirm cleanup on service stop
-4. Test `PrivateMounts=` isolation
+- Existing deployments already have encrypted secrets in `/root/secrets/`
+- Adding `LoadCredentialEncrypted=` is additive - doesn't break existing apps
+- Apps can migrate to `$CREDENTIALS_DIRECTORY` gradually
 
 ## Conclusion
 
-The nix-infra project has a solid foundation for secret management but lacks the final integration step that would make it fully systemd-native. The critical missing piece is generating `LoadCredentialEncrypted=` directives in service configurations.
+nix-infra correctly implements `systemd-creds encrypt` for TPM/host-bound credential encryption. The gap is purely in **service configuration** - adding `LoadCredentialEncrypted=` directives to NixOS service units would enable automatic decryption and standardized credential access.
 
-**Recommended Priority**:
-1. ✅ (Already done) `systemd-creds encrypt` for credential encryption
-2. 🔲 (High priority) `LoadCredentialEncrypted=` service integration
-3. 🔲 (Medium priority) Standard credential store paths
-4. 🔲 (Low priority) Advanced features like `ImportCredential=`
+**Summary**:
+- ✅ `systemd-creds encrypt` - **Already implemented correctly**
+- 🔲 `LoadCredentialEncrypted=` - Needs NixOS service configuration
+- 🔲 `$CREDENTIALS_DIRECTORY` - Comes automatically with LoadCredentialEncrypted=
 
-The estimated effort for Phase 1 (core integration) is approximately 2-3 days of development work, with significant security and operational benefits.
+**Estimated effort**: 1-2 days (NixOS module configuration only, no Dart code changes required)
 
-## Appendix: systemd Credentials Reference
+## Appendix: How Apps Currently Access Secrets
 
-### Key systemd-creds Commands
-
-```bash
-# Encrypt a credential
-systemd-creds encrypt - /etc/credstore.encrypted/myapp.enc <<<"secret"
-
-# Decrypt a credential (for testing)
-systemd-creds decrypt /etc/credstore.encrypted/myapp.enc -
-
-# List credentials
-systemd-creds list
-```
-
-### NixOS Service Configuration Pattern
-
-```nix
-systemd.services.example = {
-  description = "Example service with credentials";
-  wantedBy = [ "multi-user.target" ];
-  
-  serviceConfig = {
-    ExecStart = "${pkgs.example}/bin/example";
-    
-    # Load encrypted credential
-    LoadCredentialEncrypted = [
-      "api-key:/etc/credstore.encrypted/example-api-key.enc"
-      "db-password:/etc/credstore.encrypted/example-db-password.enc"
-    ];
-    
-    # Security hardening
-    PrivateMounts = true;
-    
-    # Optional: Only start if credential exists
-    ConditionCredential = "api-key";
-  };
-};
-```
-
-### Environment Access in Service
+Currently, applications accessing secrets from `/root/secrets/` would need to:
 
 ```bash
-# Access credentials in service script
-cat "$CREDENTIALS_DIRECTORY/api-key"
-cat "$CREDENTIALS_DIRECTORY/db-password"
+# Manual decryption (current approach)
+SECRET=$(systemd-creds decrypt /root/secrets/myapp-db-password -)
+```
+
+With `LoadCredentialEncrypted=` configured:
+
+```bash
+# Automatic decryption (desired approach)
+SECRET=$(cat "$CREDENTIALS_DIRECTORY/db-password")
 ```

@@ -62,6 +62,7 @@ class RemoteCommand extends McpTool {
   }
 }
 
+// the blacklist overrides the whitelist
 const blackList = [
   "rm",
   "chown",
@@ -89,7 +90,12 @@ const blackList = [
   "wget",
 ];
 
+// TODO: we need to further restrict sub commands for some of these
+// whitelisted commands, especially systemctl
 const whiteList = [
+// NixOS specific
+  "nix-prefetch-url",
+
 // System Information
   "uname",
   "hostnamectl",

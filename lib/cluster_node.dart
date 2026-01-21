@@ -33,7 +33,6 @@ Future<void> deployMachine(
   required String nodeType,
   required String secretsPwd,
 }) async {
-  // Create list of variable substitutions
   final deployments = nodes.map((node) async {
     // Update configuration.nix by adding imported configuration file
     // for control plane services such as etcd.

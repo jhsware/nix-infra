@@ -8,3 +8,5 @@ bin/nix-infra*
 TEST_NIX_INFRA/
 __integration__/**/ssh
 __integration__/servers.yaml
+
+.ai_coding_tool/db.*

@@ -97,9 +97,10 @@ class ProvisionCommand extends Command {
     );
     echo('Done!');
 
+    final allServers = await provider.getServers(only: nodeNames);
     int triesLeft = 3;
     List<ClusterNode> failedConversions = await getServersWithoutNixos(
-        workingDir, provisioningServers,
+        workingDir, allServers,
         debug: true);
     while (triesLeft-- > 0 && failedConversions.isNotEmpty) {
       echo('WARN! Some nodes are still running Ubuntu, retrying...');

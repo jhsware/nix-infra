@@ -5,64 +5,76 @@ import 'package:crypto/crypto.dart';
 /// Nix-compatible base32 encoding and hash utilities.
 ///
 /// Implements the custom base32 encoding used by Nix package manager,
-/// which differs from standard RFC 4648 base32 in alphabet and byte ordering.
+/// which differs from standard RFC 4648 base32 in both alphabet and bit ordering.
 class NixHash {
   /// The Nix base32 alphabet (32 characters, excludes E, O, U, T).
   static const String nix32Alphabet = '0123456789abcdfghijklmnpqrsvwxyz';
 
-  /// Standard RFC 4648 base32 alphabet for translation.
-  static const String rfc4648Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-
   /// Encodes bytes to Nix base32 format.
   ///
-  /// The Nix base32 encoding:
-  /// 1. Reverses the input bytes
-  /// 2. Applies RFC 4648 base32 encoding algorithm
-  /// 3. Translates to Nix alphabet
-  /// 4. Does not use padding
+  /// This implements the exact algorithm from Nix's libutil/hash.cc:
+  /// - Processes 5-bit chunks from the byte array
+  /// - Uses a specific bit extraction order (different from RFC 4648)
+  /// - No padding
   static String toNix32(Uint8List bytes) {
-    // Reverse the bytes
-    final reversed = Uint8List.fromList(bytes.reversed.toList());
+    if (bytes.isEmpty) return '';
 
-    // Encode using standard base32 algorithm
-    final encoded = _base32Encode(reversed);
+    final hashSize = bytes.length;
+    // Calculate output length: ceil(hashSize * 8 / 5)
+    final len = (hashSize * 8 + 4) ~/ 5;
 
-    // Translate from RFC4648 alphabet to Nix alphabet
-    final buffer = StringBuffer();
-    for (final char in encoded.codeUnits) {
-      final charStr = String.fromCharCode(char);
-      if (charStr == '=') continue; // Skip padding
-      final index = rfc4648Alphabet.indexOf(charStr.toUpperCase());
-      if (index >= 0) {
-        buffer.write(nix32Alphabet[index]);
+    final result = StringBuffer();
+
+    // Process from n = len-1 down to 0
+    for (var n = len - 1; n >= 0; n--) {
+      final b = n * 5; // bit position
+      final i = b ~/ 8; // byte index
+      final j = b % 8; // bit offset within byte
+
+      // Extract 5 bits, potentially spanning two bytes
+      int c = bytes[i] >> j;
+      if (i + 1 < hashSize) {
+        c |= bytes[i + 1] << (8 - j);
       }
+
+      result.write(nix32Alphabet[c & 0x1f]);
     }
 
-    return buffer.toString();
+    return result.toString();
   }
 
   /// Decodes Nix base32 format to bytes.
+  ///
+  /// Reverses the encoding process from toNix32.
   static Uint8List fromNix32(String encoded) {
-    // Translate from Nix alphabet to RFC4648 alphabet
-    final buffer = StringBuffer();
-    for (final char in encoded.codeUnits) {
-      final charStr = String.fromCharCode(char);
-      final index = nix32Alphabet.indexOf(charStr);
-      if (index >= 0) {
-        buffer.write(rfc4648Alphabet[index]);
+    if (encoded.isEmpty) return Uint8List(0);
+
+    final len = encoded.length;
+    // Calculate byte size: floor(len * 5 / 8)
+    final hashSize = (len * 5) ~/ 8;
+    final result = Uint8List(hashSize);
+
+    // Process each character and place bits in the correct position
+    for (var n = len - 1; n >= 0; n--) {
+      final charIndex = len - 1 - n;
+      final char = encoded[charIndex];
+      final c = nix32Alphabet.indexOf(char);
+      if (c < 0) {
+        throw ArgumentError('Invalid nix32 character: $char');
+      }
+
+      final b = n * 5; // bit position
+      final i = b ~/ 8; // byte index
+      final j = b % 8; // bit offset within byte
+
+      // Place the 5 bits back, potentially spanning two bytes
+      result[i] |= (c << j) & 0xff;
+      if (i + 1 < hashSize && j > 3) {
+        result[i + 1] |= c >> (8 - j);
       }
     }
 
-    // Add padding if needed
-    final translated = buffer.toString();
-    final paddingNeeded = (8 - translated.length % 8) % 8;
-    final padded = translated + ('=' * paddingNeeded);
-
-    // Decode using standard base32 algorithm
-    final decoded = _base32Decode(padded);
-
-    // Reverse the bytes
-    return Uint8List.fromList(decoded.reversed.toList());
+    return result;
   }
 
   /// Computes SHA256 hash of bytes and returns nix32-encoded result.
@@ -82,66 +94,6 @@ class NixHash {
   static String sha256Hex(Uint8List bytes) {
     final digest = sha256.convert(bytes);
     return digest.toString();
-  }
-
-  /// Standard base32 encoding (RFC 4648).
-  static String _base32Encode(Uint8List bytes) {
-    if (bytes.isEmpty) return '';
-
-    final result = StringBuffer();
-    int buffer = 0;
-    int bitsInBuffer = 0;
-
-    for (final byte in bytes) {
-      buffer = (buffer << 8) | byte;
-      bitsInBuffer += 8;
-
-      while (bitsInBuffer >= 5) {
-        bitsInBuffer -= 5;
-        final index = (buffer >> bitsInBuffer) & 0x1F;
-        result.write(rfc4648Alphabet[index]);
-      }
-    }
-
-    // Handle remaining bits
-    if (bitsInBuffer > 0) {
-      final index = (buffer << (5 - bitsInBuffer)) & 0x1F;
-      result.write(rfc4648Alphabet[index]);
-    }
-
-    // Add padding
-    while (result.length % 8 != 0) {
-      result.write('=');
-    }
-
-    return result.toString();
-  }
-
-  /// Standard base32 decoding (RFC 4648).
-  static Uint8List _base32Decode(String encoded) {
-    // Remove padding
-    final input = encoded.replaceAll('=', '').toUpperCase();
-    if (input.isEmpty) return Uint8List(0);
-
-    final result = <int>[];
-    int buffer = 0;
-    int bitsInBuffer = 0;
-
-    for (final char in input.codeUnits) {
-      final charStr = String.fromCharCode(char);
-      final value = rfc4648Alphabet.indexOf(charStr);
-      if (value < 0) continue;
-
-      buffer = (buffer << 5) | value;
-      bitsInBuffer += 5;
-
-      if (bitsInBuffer >= 8) {
-        bitsInBuffer -= 8;
-        result.add((buffer >> bitsInBuffer) & 0xFF);
-      }
-    }
-
-    return Uint8List.fromList(result);
   }
 
   /// Converts hex string to bytes.

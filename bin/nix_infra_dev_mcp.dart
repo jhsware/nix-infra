@@ -5,6 +5,7 @@ import 'mcp_server/filesystem.dart';
 import 'mcp_server/filesystem_edit.dart';
 import 'mcp_server/test_environment.dart';
 import 'mcp_server/test_runner.dart';
+import 'mcp_server/nix_prefetch_url.dart';
 import 'package:nix_infra/helpers.dart';
 
 void main(List<String> arguments) async {
@@ -118,6 +119,21 @@ void main(List<String> arguments) async {
     description: TestEnvironment.description,
     inputSchemaProperties: TestEnvironment.inputSchemaProperties,
     callback: testEnvronment.callback,
+  );
+
+  // *** Nix Prefetch URL ***
+
+  final nixPrefetchUrl = NixPrefetchUrl(
+    workingDir: workingDir,
+    sshKeyName: sshKeyName,
+    provider: provider,
+  );
+
+  server.tool(
+    "nix-prefetch-url",
+    description: NixPrefetchUrl.description,
+    inputSchemaProperties: NixPrefetchUrl.inputSchemaProperties,
+    callback: nixPrefetchUrl.callback,
   );
 
   server.connect(StdioServerTransport());

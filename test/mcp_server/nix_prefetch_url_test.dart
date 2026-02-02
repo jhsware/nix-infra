@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:test/test.dart';
-import '../bin/mcp_server/nix_prefetch_url.dart';
+import '../../bin/mcp_server/nix_prefetch_url.dart';
 import 'package:nix_infra/providers/providers.dart';
 import 'dart:io';
 
@@ -24,9 +24,9 @@ void main() {
     });
 
     test('has correct input schema', () {
-      expect(NixPrefetchUrl.inputSchemaProperties, containsKey('operation'));
-      expect(NixPrefetchUrl.inputSchemaProperties, containsKey('url'));
-      expect(NixPrefetchUrl.inputSchemaProperties, containsKey('format'));
+      expect(NixPrefetchUrl.inputSchemaProperties, contains('operation'));
+      expect(NixPrefetchUrl.inputSchemaProperties, contains('url'));
+      expect(NixPrefetchUrl.inputSchemaProperties, contains('format'));
     });
 
     test('returns error for missing url on hash operation', () async {

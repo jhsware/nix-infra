@@ -495,7 +495,181 @@ if (!stat.isDirectory) {
 - Certificate storage directory
 - User-writable path
 
+### Additional Changes Found in bin/ Directory
+
+### Change #32: bin/commands/shared.dart (Line 366)
+
+**Location:** `UploadCommand`
+
+**Current Code:**
+```dart
+const uploadPath = '/root/uploads';
+```
+
+**New Code:**
+```dart
+// Use node.homeDir if available, otherwise default to /home/nixinfra/uploads
+final uploadPath = '/home/nixinfra/uploads';
+// Better: use a constant or derive from node
+```
+
+**Rationale:**
+- Upload path must be in user-writable directory
+- User-writable: `/home/nixinfra/uploads/`
+
 ---
+
+### Change #33: bin/commands/etcd.dart (Lines 16-18)
+
+**Location:** `runEtcdCtlCommand()` function
+
+**Current Code:**
+```dart
+final cmdScript = [
+  'export ETCDCTL_DIAL_TIMEOUT=3s',
+  'export ETCDCTL_CACERT=/root/certs/ca-chain.cert.pem',
+  'export ETCDCTL_CERT=/root/certs/${node.name}-client-tls.cert.pem',
+  'export ETCDCTL_KEY=/root/certs/${node.name}-client-tls.key.pem',
+  'export ETCDCTL_API=3',
+  'etcdctl $cmd',
+].join('\n');
+```
+
+**New Code:**
+```dart
+final cmdScript = [
+  'export ETCDCTL_DIAL_TIMEOUT=3s',
+  'export ETCDCTL_CACERT=/home/nixinfra/certs/ca-chain.cert.pem',
+  'export ETCDCTL_CERT=/home/nixinfra/certs/${node.name}-client-tls.cert.pem',
+  'export ETCDCTL_KEY=/home/nixinfra/certs/${node.name}-client-tls.key.pem',
+  'export ETCDCTL_API=3',
+  'etcdctl $cmd',
+].join('\n');
+```
+
+**Rationale:**
+- etcdctl needs certificates from new user home
+
+---
+
+### Change #34: bin/commands/cluster.dart (Lines 499-501) — COMMENTED OUT CODE
+
+**Location:** Commented-out `EtcdCommand` class
+
+**Current Code (commented):**
+```dart
+//       'export ETCDCTL_CACERT=/root/certs/ca-chain.cert.pem',
+//       'export ETCDCTL_CERT=/root/certs/${node.name}-client-tls.cert.pem',
+//       'export ETCDCTL_KEY=/root/certs/${node.name}-client-tls.key.pem',
+```
+
+**Action:** Update the comments to reflect new paths (or clean up dead code)
+
+---
+
+### Change #35: bin/mcp_server/remote_command.dart (Line 82)
+
+**Location:** Blacklist
+
+**Current Code:**
+```dart
+const blackList = [
+  // ...
+  "sudo",
+  // ...
+];
+```
+
+**Phase 1 (No change):** Keep `sudo` blacklisted until gate script is deployed
+
+**Phase 2 (After gate script):** Remove `sudo` from blacklist since:
+- Gate script validates all commands at SSH transport level
+- MCP commands run as nixinfra user (non-root)
+- sudo only works for whitelisted commands anyway
+
+---
+
+### Change #36: lib/control_node.dart (Lines 20-21, 28, 37-38, 48, 54-55)
+
+**Location:** `deployControlNode()` function — SFTP writes to `/etc/nixos/`
+
+**Current Code:**
+```dart
+await sftpSend(sftp, '${workingDir.path}/configuration.nix',
+    '/etc/nixos/configuration.nix', substitutions: {...});
+await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix', ...);
+await sftpSend(sftp, '...', '/etc/nixos/control_node.nix', ...);
+await sftpMkDir(sftp, '/etc/nixos/modules');
+await sftpSend(sftp, ..., '/etc/nixos/modules/${...}');
+```
+
+**New Code (Staging Pattern):**
+```dart
+// Stage all files first
+await sftpSend(sftp, '${workingDir.path}/configuration.nix',
+    '/home/nixinfra/staging/configuration.nix', substitutions: {...});
+await sftpSend(sftp, '${workingDir.path}/flake.nix',
+    '/home/nixinfra/staging/flake.nix', ...);
+await sftpSend(sftp, '...', '/home/nixinfra/staging/control_node.nix', ...);
+await sftpMkDir(sftp, '/home/nixinfra/staging/modules');
+await sftpSend(sftp, ..., '/home/nixinfra/staging/modules/${...}');
+
+// Then copy to /etc/nixos/ via sudo
+await sshClient.run('sudo cp -r /home/nixinfra/staging/* /etc/nixos/');
+```
+
+**Rationale:**
+- Non-root user cannot write to `/etc/nixos/` directly
+- Staging area + sudo cp follows the documented pattern
+
+---
+
+### Change #37: lib/cluster_node.dart — deployMachine() (Lines 47-77)
+
+Same staging pattern as control_node.dart. All SFTP writes to `/etc/nixos/` must go through staging.
+
+### Change #38: lib/cluster_node.dart — deployClusterNode() (Lines 120-157)
+
+Same staging pattern. All writes to `/etc/nixos/` must go through staging.
+
+### Change #39: lib/cluster_node.dart — deployAppsOnNode() (Lines 209-243)
+
+Same staging pattern for `/etc/nixos/` writes. Note: This function also calls `syncSecrets()` which writes to `/root/secrets/` → `/home/nixinfra/secrets/`.
+
+### Change #40: bin/commands/shared.dart — UpgradeNixOsCommand (Lines 218-234)
+
+SFTP writes to `/etc/nixos/` must go through staging pattern.
+
+---
+
+## Updated Summary Table (Complete)
+
+| # | File | Line(s) | Type | Change |
+|----|------|---------|------|--------|
+| 1 | lib/types.dart | 26 | Default | `'root'` → `'nixinfra'` |
+| 2 | lib/certificates.dart | 350 | SSH Client | `username: 'root'` → `node.username` |
+| 3-5 | lib/provision.dart | 139,142,202 | Path | `/root/` → `/home/nixinfra/` |
+| 6 | lib/provision.dart | 225 | Shell SSH | `root@` → `${node.username}@` |
+| 7 | lib/provision.dart | 237 | Shell SSH | **Keep as root@** (bootstrap) |
+| 8 | lib/provision.dart | 298 | Shell SSH | `root@` → `${node.username}@` |
+| 9-10 | lib/docker_registry.dart | 33,82 | Shell SSH | `root@` → `${node.username}@` |
+| 11 | lib/secrets.dart | 103 | Shell SSH | `root@` → `${node.username}@` |
+| 12-15 | lib/ssh.dart | 136,146,151,155 | Path | `/root/action.sh` → `/home/nixinfra/action.sh` |
+| 16-18 | lib/certificates.dart | 357,363,381-382 | Path | `/root/certs/` → `/home/nixinfra/certs/` |
+| 19-20 | lib/cluster_node.dart | 271-273,295-296 | Path | `/root/certs/` → `/home/nixinfra/certs/` |
+| 21-23 | lib/secrets.dart | 149,176,179-180 | Path | `/root/secrets/` → `/home/nixinfra/secrets/` |
+| 24 | lib/helpers.dart | 224-226 | Path | `/root/certs/` → `/home/nixinfra/certs/` |
+| 25-28 | lib/secrets.dart | 8,10,12,24,62,117 | Comment+Path | Documentation + path updates |
+| 29 | bin/commands/shared.dart | 366 | Path | `/root/uploads` → `/home/nixinfra/uploads` |
+| 30 | bin/commands/etcd.dart | 16-18 | Path | `/root/certs/` → `/home/nixinfra/certs/` |
+| 31 | bin/commands/cluster.dart | 499-501 | Comment | Commented-out code update |
+| 32 | bin/mcp_server/remote_command.dart | 82 | Config | Phase 2: Remove `sudo` from blacklist |
+| 33-35 | lib/control_node.dart | 20-55 | Staging | `/etc/nixos/` → staging pattern |
+| 36-38 | lib/cluster_node.dart | 47-77,120-157,209-243 | Staging | `/etc/nixos/` → staging pattern |
+| 39 | bin/commands/shared.dart | 218-234 | Staging | `/etc/nixos/` → staging pattern |
+
+**Total: 40 code locations across 11 files**
+
 
 ### Change #17: lib/certificates.dart (Line 363)
 

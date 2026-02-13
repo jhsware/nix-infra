@@ -11,17 +11,22 @@ import 'package:nix_infra/helpers.dart';
 
 void main(List<String> arguments) async {
   String? projectDir;
+  String dotEnvFile = '.env';
 
   // Parse arguments
   for (final arg in arguments) {
     if (arg.startsWith('--project-dir=')) {
       projectDir = arg.substring('--project-dir='.length);
     }
+    if (arg.startsWith('--env=')) {
+      dotEnvFile = arg.substring('--env='.length);
+    }
   }
 
-  final workingDir = await getWorkingDirectory(projectDir ?? Directory.current.path);
+  final workingDir =
+      await getWorkingDirectory(projectDir ?? Directory.current.path);
 
-  final env = await loadEnv('.env', workingDir);
+  final env = await loadEnv(dotEnvFile, workingDir);
 
   final sshKeyName = env['SSH_KEY'];
 

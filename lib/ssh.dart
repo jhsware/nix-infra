@@ -8,7 +8,7 @@ import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 
-final sshTimeoutDuration = Duration(milliseconds: 3000);
+final sshTimeoutDuration = Duration(milliseconds: 1000);
 
 Future<String> runCommandOverSsh(
     Directory workingDir, ClusterNode node, String cmd) async {

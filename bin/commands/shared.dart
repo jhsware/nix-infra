@@ -42,7 +42,8 @@ class ProvisionCommand extends Command {
       ..addOption('nixos-version')
       ..addOption('machine-type')
       ..addOption('location')
-      ..addOption('placement-group');
+      ..addOption('placement-group')
+      ..addOption('mutation');
   }
 
   @override
@@ -58,6 +59,7 @@ class ProvisionCommand extends Command {
     final String machineType = argResults!['machine-type'];
     final String? placementGroup = argResults!['placement-group'];
     final String nixOsVersion = argResults!['nixos-version'];
+    final String? mutation = argResults!['mutation'];
 
     final provider = await getProvider(workingDir, env, sshKeyName);
 
@@ -94,14 +96,19 @@ class ProvisionCommand extends Command {
       nixVersion: nixOsVersion,
       sshKeyName: sshKeyName,
       debug: debug,
+      mutation: mutation,
     );
     echo('Done!');
 
+    // Early return because we need to manually reboot customised installs for now
+    if (mutation != null) {
+      return;
+    }
+
     final allServers = await provider.getServers(only: nodeNames);
     int triesLeft = 3;
-    List<ClusterNode> failedConversions = await getServersWithoutNixos(
-        workingDir, allServers,
-        debug: true);
+    List<ClusterNode> failedConversions =
+        await getServersWithoutNixos(workingDir, allServers, debug: true);
     while (triesLeft-- > 0 && failedConversions.isNotEmpty) {
       echo('WARN! Some nodes are still running Ubuntu, retrying...');
       await installNixos(

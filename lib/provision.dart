@@ -99,25 +99,36 @@ Future<void> destroyNodes(
   await Future.wait(destroying);
 }
 
-Future<void> installNixos(Directory workingDir, Iterable<ClusterNode> nodes,
-    {required String nixVersion,
-    required String sshKeyName,
-    bool debug = false}) async {
+Future<void> installNixos(
+  Directory workingDir,
+  Iterable<ClusterNode> nodes, {
+  required String nixVersion,
+  required String sshKeyName,
+  String? mutation,
+  bool debug = true,
+}) async {
   final progressBar = AsciiProgressBar();
 
   final nixChannel = 'nixos-$nixVersion';
   final muteUnlessDebug = debug ? "" : "2>/dev/null";
+  final installCommand = mutation != null
+      ? "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/ki-dev/mutations/$mutation | NO_DAEMON=true NIX_CHANNEL=$nixChannel bash -s -- --apply $muteUnlessDebug"
+      : "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | NO_DAEMON=true NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug";
+  final rebootCommand = debug
+      ? "echo 'When --debug is set you are required to reboot the server manually."
+      : "reboot";
+
   final installScript = """#!/usr/bin/env bash
 echo "mute=on"
-curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug;
-
+$installCommand;
+  
 # Make sure we use custom configuration on reboot
 cp -f /root/configuration.nix /etc/nixos/configuration.nix;
 
 # Some picks from the nixos-infect script
 /nix/var/nix/profiles/system/sw/bin/nix-collect-garbage 2>/dev/null;
 /nix/var/nix/profiles/system/bin/switch-to-configuration boot $muteUnlessDebug;
-reboot;
+$rebootCommand;
   """;
 
   final installNixos = nodes.map((node) async {
@@ -163,7 +174,7 @@ reboot;
           mute = false;
         }
 
-        if (mute) {
+        if (!debug && mute) {
           if (str.contains('bin/nix-collect-garbage')) {
             // + /nix/var/nix/profiles/system/sw/bin/nix-collect-garbage
             progressBarId['current'] =

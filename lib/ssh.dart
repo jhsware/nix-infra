@@ -8,14 +8,16 @@ import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 
+final sshTimeoutDuration = Duration(milliseconds: 3000);
+
 Future<String> runCommandOverSsh(
     Directory workingDir, ClusterNode node, String cmd) async {
   SSHSocket? socket;
   SSHClient? sshClient;
-  
+
   try {
     socket = await SSHSocket.connect(node.ipAddr, 22);
-    
+
     sshClient = SSHClient(
       socket,
       username: node.username,
@@ -35,28 +37,25 @@ Future<String> runCommandOverSsh(
   } catch (e) {
     socket?.destroy();
     sshClient?.close();
-    
+
     final errorMsg = e.toString();
     if (errorMsg.contains('Connection refused')) {
       throw Exception(
-        'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22'
-      );
+          'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22');
     } else if (errorMsg.contains('timed out') || errorMsg.contains('timeout')) {
       throw Exception(
-        'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: Connection timeout - server may be unreachable or offline'
-      );
-    } else if (errorMsg.contains('Authentication failed') || errorMsg.contains('auth')) {
+          'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: Connection timeout - server may be unreachable or offline');
+    } else if (errorMsg.contains('Authentication failed') ||
+        errorMsg.contains('auth')) {
       throw Exception(
-        'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: SSH authentication failed - check SSH key permissions and configuration'
-      );
+          'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: SSH authentication failed - check SSH key permissions and configuration');
     } else {
       throw Exception(
-        'Failed to execute command on server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: $errorMsg'
-      );
+          'Failed to execute command on server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: $errorMsg');
     }
   }
 }
@@ -172,7 +171,7 @@ Future<void> waitForSsh(Iterable<ClusterNode> nodes) async {
   final sshSessions = nodes.map((node) async {
     // final sshClient = SSHClient(
     //   await SSHSocket.connect(node.ipAddr, 22,
-    //         timeout: Duration(milliseconds: 1000)),
+    //         timeout: sshTimeoutDuration,),
     //   username: 'root',
     //   identities: [
     //     ...SSHKeyPair.fromPem(await getSshKeyAsPem(workingDir, node.sshKeyName))
@@ -181,8 +180,11 @@ Future<void> waitForSsh(Iterable<ClusterNode> nodes) async {
     var maxTries = 20;
     while (maxTries-- > 0) {
       try {
-        final socket = await SSHSocket.connect(node.ipAddr, 22,
-            timeout: Duration(milliseconds: 1000));
+        final socket = await SSHSocket.connect(
+          node.ipAddr,
+          22,
+          timeout: sshTimeoutDuration,
+        );
         socket.destroy();
         stdout.write('!'); // SSH is up
         return;
@@ -199,11 +201,14 @@ Future<void> waitForSsh(Iterable<ClusterNode> nodes) async {
 Future<SSHSocket> waitAndGetSshConnection(ClusterNode node,
     {maxTries = 20}) async {
   Exception? lastError;
-  
+
   while (maxTries-- > 0) {
     try {
-      final socket = await SSHSocket.connect(node.ipAddr, 22,
-          timeout: Duration(milliseconds: 1000));
+      final socket = await SSHSocket.connect(
+        node.ipAddr,
+        22,
+        timeout: sshTimeoutDuration,
+      );
       print(''); // Add a newline
       return socket;
     } catch (e) {
@@ -212,23 +217,28 @@ Future<SSHSocket> waitAndGetSshConnection(ClusterNode node,
       await Future.delayed(const Duration(milliseconds: 500));
     }
   }
-  
+
   // Provide detailed error message
   final errorDetails = lastError?.toString() ?? 'Unknown error';
-  String errorMsg = 'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n';
-  
+  String errorMsg =
+      'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n';
+
   if (errorDetails.contains('Connection refused')) {
-    errorMsg += 'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22';
-  } else if (errorDetails.contains('timed out') || errorDetails.contains('timeout')) {
-    errorMsg += 'Reason: Connection timeout - server may be unreachable or offline';
+    errorMsg +=
+        'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22';
+  } else if (errorDetails.contains('timed out') ||
+      errorDetails.contains('timeout')) {
+    errorMsg +=
+        'Reason: Connection timeout - server may be unreachable or offline';
   } else if (errorDetails.contains('No route to host')) {
-    errorMsg += 'Reason: No route to host - check network configuration and IP address';
+    errorMsg +=
+        'Reason: No route to host - check network configuration and IP address';
   } else if (errorDetails.contains('Network is unreachable')) {
     errorMsg += 'Reason: Network unreachable - check your network connection';
   } else {
     errorMsg += 'Reason: $errorDetails';
   }
-  
+
   throw Exception(errorMsg);
 }
 
@@ -262,10 +272,10 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
   SSHSocket? socket;
   SSHClient? sshClient;
   SSHSession? shell;
-  
+
   try {
     socket = await SSHSocket.connect(node.ipAddr, 22);
-    
+
     sshClient = SSHClient(
       socket,
       username: node.username,
@@ -306,32 +316,29 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
     // Restore terminal settings on error
     stdin.echoMode = true;
     stdin.lineMode = true;
-    
+
     shell?.close();
     sshClient?.close();
     socket?.destroy();
-    
+
     final errorMsg = e.toString();
     if (errorMsg.contains('Connection refused')) {
       throw Exception(
-        'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22'
-      );
+          'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22');
     } else if (errorMsg.contains('timed out') || errorMsg.contains('timeout')) {
       throw Exception(
-        'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: Connection timeout - server may be unreachable or offline'
-      );
-    } else if (errorMsg.contains('Authentication failed') || errorMsg.contains('auth')) {
+          'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: Connection timeout - server may be unreachable or offline');
+    } else if (errorMsg.contains('Authentication failed') ||
+        errorMsg.contains('auth')) {
       throw Exception(
-        'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: SSH authentication failed - check SSH key permissions and configuration'
-      );
+          'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: SSH authentication failed - check SSH key permissions and configuration');
     } else {
       throw Exception(
-        'Failed to open SSH shell to server "${node.name}" at ${node.ipAddr}:22\n'
-        'Reason: $errorMsg'
-      );
+          'Failed to open SSH shell to server "${node.name}" at ${node.ipAddr}:22\n'
+          'Reason: $errorMsg');
     }
   }
 }

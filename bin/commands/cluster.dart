@@ -244,6 +244,15 @@ class InitNodeCommand extends Command {
       secretsPwd: secretsPwd,
     );
 
+    await deployAppsOnNode(
+      workingDir,
+      cluster,
+      nodes,
+      secretsPwd: secretsPwd,
+      debug: debug,
+      overlayNetwork: true,
+    );
+
     await nixosRebuild(workingDir, nodes);
     await triggerConfdUpdate(workingDir, nodes);
 

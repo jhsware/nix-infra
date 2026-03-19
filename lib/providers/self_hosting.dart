@@ -74,15 +74,23 @@ class SelfHostedServerConfig {
 class SelfHosting implements InfrastructureProvider {
   final Directory _workingDir;
   final Map<String, SelfHostedServerConfig> _servers;
+  final Map<String, InfrastructureProvider> _cloudProviders;
 
-  SelfHosting._internal(this._workingDir, this._servers);
+  SelfHosting._internal(this._workingDir, this._servers, this._cloudProviders);
 
   /// Load a SelfHosting provider from a servers.yaml file.
   /// 
   /// The [workingDir] is the directory containing the servers.yaml file.
   /// Relative paths in the configuration (like ssh_key paths) will be
   /// resolved relative to this directory.
-  static Future<SelfHosting> load(Directory workingDir) async {
+  /// 
+  /// The optional [cloudProviders] map provides cloud provider instances
+  /// keyed by provider name (e.g., "hetzner"). These are used to resolve
+  /// IPs for servers that specify a `provider` field instead of a static `ip`.
+  static Future<SelfHosting> load(
+    Directory workingDir, {
+    Map<String, InfrastructureProvider>? cloudProviders,
+  }) async {
     final configFile = File('${workingDir.path}/servers.yaml');
     
     if (!await configFile.exists()) {
@@ -98,6 +106,7 @@ class SelfHosting implements InfrastructureProvider {
 
     final serversYaml = yaml['servers'] as YamlMap;
     final servers = <String, SelfHostedServerConfig>{};
+    final providers = cloudProviders ?? {};
 
     for (final entry in serversYaml.entries) {
       final name = entry.key as String;
@@ -116,6 +125,18 @@ class SelfHosting implements InfrastructureProvider {
       if (config['ssh_key'] == null) {
         throw Exception('Server "$name" is missing required field "ssh_key"');
       }
+      
+      // Validate that cloud provider is available if specified
+      if (hasProvider) {
+        final providerName = config['provider'] as String;
+        if (!providers.containsKey(providerName)) {
+          throw Exception(
+            'Server "$name" references cloud provider "$providerName" '
+            'but it is not configured. Ensure the required credentials are set '
+            '(e.g., HCLOUD_TOKEN for hetzner).',
+          );
+        }
+      }
 
       servers[name] = SelfHostedServerConfig.fromYaml(
         name, 
@@ -123,13 +144,39 @@ class SelfHosting implements InfrastructureProvider {
       );
     }
 
-    return SelfHosting._internal(workingDir, servers);
+    return SelfHosting._internal(workingDir, servers, providers);
   }
 
   /// Check if a servers.yaml file exists in the given directory.
   static Future<bool> hasServersConfig(Directory workingDir) async {
     final configFile = File('${workingDir.path}/servers.yaml');
     return await configFile.exists();
+  }
+
+  /// Get the set of cloud provider names referenced in servers.yaml.
+  /// 
+  /// Returns an empty set if no servers use cloud providers, or if
+  /// servers.yaml doesn't exist.
+  static Future<Set<String>> getReferencedCloudProviders(Directory workingDir) async {
+    final configFile = File('${workingDir.path}/servers.yaml');
+    if (!await configFile.exists()) return {};
+
+    final content = await configFile.readAsString();
+    final yaml = loadYaml(content);
+    if (yaml == null || yaml['servers'] == null) return {};
+
+    final serversYaml = yaml['servers'] as YamlMap;
+    final providers = <String>{};
+    
+    for (final entry in serversYaml.entries) {
+      final config = entry.value as YamlMap;
+      final provider = config['provider'];
+      if (provider != null) {
+        providers.add(provider as String);
+      }
+    }
+    
+    return providers;
   }
 
   @override
@@ -157,7 +204,7 @@ class SelfHosting implements InfrastructureProvider {
 
   @override
   Future<Iterable<ClusterNode>> getServers({List<String>? only}) async {
-    var servers = _servers.values;
+    var serverConfigs = _servers.values;
     
     if (only != null) {
       // Check if any requested servers don't exist
@@ -172,28 +219,48 @@ class SelfHosting implements InfrastructureProvider {
         );
       }
       
-      servers = servers.where((s) => only.contains(s.name));
+      serverConfigs = serverConfigs.where((s) => only.contains(s.name));
     }
 
-    // Generate a unique ID for each server based on its index
-    // Since self-hosted servers don't have cloud IDs, we use the hash of the name
-    return servers.map((config) {
+    final nodes = <ClusterNode>[];
+    for (final config in serverConfigs) {
       final sshKeyName = _extractSshKeyName(config.sshKeyPath);
+      
+      // Resolve IP: static from config or dynamic from cloud provider
+      String ipAddr;
+      if (config.isCloudManaged) {
+        final cloudProvider = _cloudProviders[config.provider];
+        if (cloudProvider == null) {
+          throw Exception(
+            'Cloud provider "${config.provider}" not configured for server "${config.name}"',
+          );
+        }
+        final resolvedIp = await cloudProvider.getIpAddr(config.name);
+        if (resolvedIp == null) {
+          throw Exception(
+            'Server "${config.name}" not found in ${config.provider}',
+          );
+        }
+        ipAddr = resolvedIp;
+      } else {
+        ipAddr = config.ipAddr!;
+      }
+      
       final node = ClusterNode(
         config.name,
-        config.ipAddr ?? '', // Cloud-managed servers get IP resolved at runtime
+        ipAddr,
         config.name.hashCode, // Use name hash as ID
         sshKeyName,
-        // Store the original path from config - ClusterNode.getEffectiveSshKeyPath
-        // will resolve it relative to workingDir if needed
         sshKeyPath: config.sshKeyPath,
       );
       // Set custom username if specified
       if (config.username != null) {
         node.username = config.username!;
       }
-      return node;
-    });
+      nodes.add(node);
+    }
+    
+    return nodes;
   }
 
   @override
@@ -221,7 +288,15 @@ class SelfHosting implements InfrastructureProvider {
   @override
   Future<String?> getIpAddr(String name) async {
     final server = _servers[name];
-    return server?.ipAddr;
+    if (server == null) return null;
+    
+    if (server.isCloudManaged) {
+      final cloudProvider = _cloudProviders[server.provider];
+      if (cloudProvider == null) return null;
+      return await cloudProvider.getIpAddr(name);
+    }
+    
+    return server.ipAddr;
   }
 
   @override

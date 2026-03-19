@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
+import 'archive_unpacker.dart';
+import 'nar.dart';
+
+
 /// Nix-compatible base32 encoding and hash utilities.
 ///
 /// Implements the custom base32 encoding used by Nix package manager,
@@ -112,4 +116,59 @@ class NixHash {
   static String bytesToHex(Uint8List bytes) {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
+
+  // --- NAR hash methods ---
+  // These compute hashes of the NAR serialization of a NarNode tree,
+  // which is what Nix uses for fetchzip/fetchFromGitHub.
+
+  /// Computes SHA256 of NAR serialization and returns nix32-encoded result.
+  ///
+  /// This produces the same hash as `nix-prefetch-url --unpack` or
+  /// `nix hash path` for the given file system tree.
+  static String sha256NarNix32(NarNode node) {
+    final narBytes = NarSerializer.serialize(node);
+    return sha256Nix32(narBytes);
+  }
+
+  /// Computes SHA256 of NAR serialization and returns SRI format.
+  static String sha256NarSri(NarNode node) {
+    final narBytes = NarSerializer.serialize(node);
+    return sha256Sri(narBytes);
+  }
+
+  /// Computes SHA256 of NAR serialization and returns hex format.
+  static String sha256NarHex(NarNode node) {
+    final narBytes = NarSerializer.serialize(node);
+    return sha256Hex(narBytes);
+  }
+
+  /// Convenience: unpacks archive bytes, strips top-level directory,
+  /// serializes to NAR, and returns nix32-encoded SHA256 hash.
+  ///
+  /// This is the all-in-one method that replicates `nix-prefetch-url --unpack`.
+  /// [archiveBytes] - raw archive file bytes (tar.gz or zip)
+  /// [url] - used to detect archive type; if null, defaults to tar.gz
+  static String sha256UnpackNix32(Uint8List archiveBytes, {String? url}) {
+    final type = url != null
+        ? ArchiveUnpacker.detectType(url)
+        : ArchiveType.tarGz;
+    final tree = ArchiveUnpacker.unpack(archiveBytes, type);
+    return sha256NarNix32(tree);
+  }
+
+  /// Convenience: unpacks archive bytes and returns all hash formats.
+  static Map<String, String> sha256UnpackAll(Uint8List archiveBytes,
+      {String? url}) {
+    final type = url != null
+        ? ArchiveUnpacker.detectType(url)
+        : ArchiveType.tarGz;
+    final tree = ArchiveUnpacker.unpack(archiveBytes, type);
+    final narBytes = NarSerializer.serialize(tree);
+    return {
+      'nix32': sha256Nix32(narBytes),
+      'sri': sha256Sri(narBytes),
+      'hex': sha256Hex(narBytes),
+    };
+  }
 }
+

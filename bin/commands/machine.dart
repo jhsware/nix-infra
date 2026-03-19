@@ -61,7 +61,7 @@ class InitMachineCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    // final bool debug = parent?.argResults!['debug'];
+    final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String nodeType = argResults!['node-module'];
@@ -83,6 +83,16 @@ class InitMachineCommand extends Command {
       nixVersion: nixOsVersion,
       nodeType: nodeType,
       secretsPwd: secretsPwd,
+    );
+
+    final cluster = await provider.getServers();
+    await deployAppsOnNode(
+      workingDir,
+      cluster,
+      nodes,
+      secretsPwd: secretsPwd,
+      debug: debug,
+      overlayNetwork: false,
     );
 
     await nixosRebuild(workingDir, nodes);

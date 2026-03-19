@@ -117,6 +117,45 @@ Future<void> deploySecretOnRemote(
       .run('$sshCmd "systemd-creds encrypt - /root/secrets/$secretName"');
 }
 
+/// Deploy a pre-build secret decrypted to /run/keys/<name> on the remote node.
+///
+/// Pre-build secrets are written to tmpfs (/run/keys/) with mode 0400 so
+/// the nix-daemon can use them before nixos-rebuild switch has run.
+Future<void> deployPreBuildSecretOnRemote(
+  Directory workingDir,
+  String secretName,
+  String secret,
+  ClusterNode node, {
+  required SSHClient sshClient,
+  bool debug = false,
+}) async {
+  final sshCmd =
+      'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr}';
+
+  // Ensure /run/keys/ directory exists with proper permissions
+  final setupShell = Shell(
+    runInShell: true,
+    verbose: debug,
+  );
+  await setupShell
+      .run('$sshCmd "mkdir -p /run/keys && chmod 700 /run/keys"');
+
+  // Write the decrypted secret to /run/keys/<name> via stdin pipe
+  // to avoid exposing the secret in command line arguments
+  final controller = StreamController<List<int>>();
+  final shell = Shell(
+    runInShell: true,
+    verbose: debug,
+    stdin: controller.stream,
+  );
+
+  controller.add(utf8.encode(secret));
+  controller.close();
+
+  await shell.run(
+      '$sshCmd "cat > /run/keys/$secretName && chmod 0400 /run/keys/$secretName"');
+}
+
 Future<void> syncSecrets(
   Directory workingDir,
   Iterable<ClusterNode> cluster,
@@ -165,7 +204,8 @@ Future<void> syncSecrets(
           sshClient: sshClient,
         );
       } catch (err) {
-        echo("WARNING! Secret $secretName does not exist in project, skipping");
+        echo("WARNING! Secret '$secretName' not found in secrets directory, skipping deployment to ${node.name}");
+        echo("  Add it with: nix-infra store-secret --secret=\"<value>\" --store-as-secret=\"$secretName\"");
       }
     }
   }

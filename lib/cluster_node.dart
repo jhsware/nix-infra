@@ -203,6 +203,7 @@ Future<void> deployAppsOnNode(
             '-- overlayIp not found in etcd --';
 
     final expectedSecrets = <String>[];
+    final expectedPreBuildSecrets = <String>[];
     final nodeConfigFile = File(
         '${testDir == null ? workingDir.path : testDir.path}/nodes/${node.name}.nix');
     if (nodeConfigFile.existsSync()) {
@@ -212,6 +213,7 @@ Future<void> deployAppsOnNode(
         '/etc/nixos/${node.name}.nix',
         substitutions: nodeSubstitutions,
         expectedSecrets: expectedSecrets,
+        expectedPreBuildSecrets: expectedPreBuildSecrets,
       );
     }
     await syncSecrets(
@@ -242,10 +244,70 @@ Future<void> deployAppsOnNode(
       }
     }
     sftp.close();
+
+    // Deploy pre-build secrets (decrypted to /run/keys/) and update nix.conf
+    if (expectedPreBuildSecrets.isNotEmpty) {
+      if (debug) echoDebug('Deploying pre-build secrets on ${node.name}: $expectedPreBuildSecrets');
+      for (final secretName in expectedPreBuildSecrets) {
+        try {
+          final secret = await readSecret(workingDir, secretsPwd, secretName);
+          final decryptedSecret =
+              substitute(secret, nodeSubstitutions);
+          await deployPreBuildSecretOnRemote(
+            workingDir,
+            secretName,
+            decryptedSecret,
+            node,
+            sshClient: sshClient,
+            debug: debug,
+          );
+        } catch (err) {
+          echo('ERROR! Pre-build secret \'$secretName\' not found in secrets directory.');
+          echo('  This will cause nixos-rebuild to fail if it needs credentials from this secret.');
+          echo('  Add it with: nix-infra store-secret --secret="<value>" --store-as-secret="$secretName"');
+        }
+      }
+      await updateNixConfForPreBuildSecrets(
+        workingDir,
+        node,
+        expectedPreBuildSecrets,
+        debug: debug,
+      );
+    }
+
     sshClient.close();
   });
 
   await Future.wait(deployments);
+}
+
+/// Update /etc/nix/nix.conf with settings required by pre-build secrets
+/// and restart nix-daemon to pick up the changes.
+///
+/// Currently supports the netrc convention: secrets with names containing
+/// 'netrc' get a `netrc-file = /run/keys/<name>` entry appended to nix.conf.
+Future<void> updateNixConfForPreBuildSecrets(
+  Directory workingDir,
+  ClusterNode node,
+  List<String> preBuildSecrets, {
+  bool debug = false,
+}) async {
+  if (preBuildSecrets.isEmpty) return;
+
+  final commands = <String>[];
+  for (final name in preBuildSecrets) {
+    // Convention: add netrc-file setting for secrets containing 'netrc'
+    if (name.contains('netrc')) {
+      commands.add(
+          'grep -q "netrc-file = /run/keys/$name" /etc/nix/nix.conf || echo "netrc-file = /run/keys/$name" >> /etc/nix/nix.conf');
+    }
+  }
+  if (commands.isNotEmpty) {
+    commands.add('systemctl restart nix-daemon');
+    final script = commands.join(' && ');
+    await runCommandOverSsh(workingDir, node, script);
+    if (debug) echoDebug('Updated nix.conf and restarted nix-daemon on ${node.name}');
+  }
 }
 
 Future<void> registerClusterNode(

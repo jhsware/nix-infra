@@ -343,7 +343,10 @@ class UploadCommand extends Command {
   UploadCommand() {
     argParser
       ..addOption('target', mandatory: true)
-      ..addOption('file', mandatory: true);
+      ..addOption('file', mandatory: true)
+      ..addOption('remote-path',
+          defaultsTo: '/root/uploads',
+          help: 'Remote destination path for uploaded files');
   }
 
   @override
@@ -364,13 +367,14 @@ class UploadCommand extends Command {
       exit(2);
     }
 
+    final String uploadPath = argResults!['remote-path'];
+
     final futs = nodes.map((node) async {
+      echo('Connecting to ${node.name}...');
       final SSHSocket connection = await waitAndGetSshConnection(node);
       final SSHClient sshClient =
           await getSshClient(workingDir, node, connection);
       final sftp = await sshClient.sftp();
-
-      const uploadPath = '/root/uploads';
 
       try {
         await sftpMkDir(sftp, uploadPath);
@@ -405,9 +409,11 @@ class UploadCommand extends Command {
             continue;
           }
 
+          echoFromNode(node.name, 'Uploading $relPath');
           await sftpSend(sftp, entity.path, '$uploadPath/$relPath');
         }
 
+        echoFromNode(node.name, 'Upload complete');
         sftp.close();
       } finally {
         sshClient.close();
@@ -415,7 +421,6 @@ class UploadCommand extends Command {
     });
 
     await Future.wait(futs);
-  }
 }
 
 class CmdCommand extends Command {

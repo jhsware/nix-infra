@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:test/test.dart';
-import 'package:path/path.dart' as path;
 import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/types.dart';
 import '../../bin/mcp_server/test_environment.dart';
+
 
 /// Mock provider for testing purposes
 class MockProvider implements InfrastructureProvider {

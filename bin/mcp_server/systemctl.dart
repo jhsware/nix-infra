@@ -32,7 +32,9 @@ class SystemCtl extends McpTool {
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
+
     final target = args!['target'];
     final options = args['options'] as String?;
     final command = args['command'] as String?;

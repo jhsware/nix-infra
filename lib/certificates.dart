@@ -9,8 +9,9 @@ import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/types.dart';
 import 'package:process_run/shell.dart';
 
-import 'templates/opensslCnfCaOrig.dart';
-import 'templates/openSslCnfInterOrig.dart';
+import 'templates/openssl_cnf_ca_orig.dart';
+import 'templates/open_ssl_cnf_inter_orig.dart';
+
 
 Future<void> createCertificateAuthority(
   Directory workingDir,

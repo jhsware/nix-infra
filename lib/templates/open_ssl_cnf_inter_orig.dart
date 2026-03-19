@@ -1,11 +1,12 @@
-String openSslCnfCaOrig(String dir, {
+String openSslCnfInterOrig(String dir, {
   required String certEmail,
   required String certCountryCode,
   required String certStateProvince,
   required String certCompany,
 }) {
-  // Dir is the path to the root CA directory.
-  return """# OpenSSL root CA configuration file.
+  // Dir is the path to the intermediate CA directory.
+  return """# OpenSSL intermediate CA configuration file.
+
 [ ca ]
 # `man ca`
 default_ca = CA_default
@@ -21,12 +22,12 @@ serial            = $dir/serial
 RANDFILE          = $dir/private/.rand
 
 # The root key and root certificate.
-private_key       = $dir/private/ca.key.pem
-certificate       = $dir/certs/ca.cert.pem
+private_key       = $dir/private/intermediate.key.pem
+certificate       = $dir/certs/intermediate.cert.pem
 
 # For certificate revocation lists.
 crlnumber         = $dir/crlnumber
-crl               = $dir/crl/ca.crl.pem
+crl               = $dir/crl/intermediate.crl.pem
 crl_extensions    = crl_ext
 default_crl_days  = 30
 
@@ -37,7 +38,7 @@ name_opt          = ca_default
 cert_opt          = ca_default
 default_days      = 375
 preserve          = no
-policy            = policy_strict
+policy            = policy_loose
 
 [ policy_strict ]
 # The root CA should only sign intermediate certificates that match.
@@ -83,12 +84,13 @@ commonName                      = Common Name
 emailAddress                    = Email Address
 
 # Optionally, specify some defaults.
-countryName_default             = ${certCountryCode}
-stateOrProvinceName_default     = ${certStateProvince}
+countryName_default             = $certCountryCode
+stateOrProvinceName_default     = $certStateProvince
 localityName_default            =
-0.organizationName_default      = ${certCompany}
+0.organizationName_default      = $certCompany
 organizationalUnitName_default  =
-emailAddress_default            = ${certEmail}
+emailAddress_default            = $certEmail
+
 
 [ v3_ca ]
 # Extensions for a typical CA (`man x509v3_config`).
@@ -104,17 +106,18 @@ authorityKeyIdentifier = keyid:always,issuer
 basicConstraints = critical, CA:true, pathlen:0
 keyUsage = critical, digitalSignature, cRLSign, keyCertSign
 
-[ usr_cert ]
+[ client_tls ]
 # Extensions for client certificates (`man x509v3_config`).
 basicConstraints = CA:FALSE
-nsCertType = client, email
+nsCertType = client
 nsComment = "OpenSSL Generated Client Certificate"
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid,issuer
 keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
-extendedKeyUsage = clientAuth, emailProtection
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = [%%SUBJ_ALT_NAME%%]
 
-[ server_cert ]
+[ peer_tls ]
 # Extensions for server certificates (`man x509v3_config`).
 basicConstraints = CA:FALSE
 nsCertType = server
@@ -122,7 +125,8 @@ nsComment = "OpenSSL Generated Server Certificate"
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid,issuer:always
 keyUsage = critical, digitalSignature, keyEncipherment
-extendedKeyUsage = serverAuth
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = [%%SUBJ_ALT_NAME%%]
 
 [ crl_ext ]
 # Extension for CRLs (`man x509v3_config`).

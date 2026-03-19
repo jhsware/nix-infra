@@ -1,9 +1,9 @@
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/docker_registry.dart';
 import 'package:nix_infra/helpers.dart';
-import 'package:nix_infra/providers/providers.dart';
 import 'shared.dart';
 import 'utils.dart';
+
 
 class RegistryCommand extends Command {
   @override

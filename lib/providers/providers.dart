@@ -49,7 +49,9 @@
 /// 3. Add a new entry to the `ProviderType` enum
 /// 4. Update `ProviderFactory` to support the new provider
 /// 5. Export the new provider from this file
-library providers;
+library;
+
+
 
 export 'provider.dart';
 export 'provider_factory.dart';

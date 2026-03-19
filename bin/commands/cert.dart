@@ -1,10 +1,9 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/helpers.dart';
-import 'package:nix_infra/types.dart';
 import 'package:path/path.dart' as path;
 import 'package:dotenv/dotenv.dart';
-import './utils.dart';
+
 
 class CertCommand extends Command {
   @override

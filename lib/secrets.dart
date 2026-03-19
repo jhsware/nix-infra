@@ -117,7 +117,8 @@ Future<void> deploySecretOnRemote(
       .run('$sshCmd "systemd-creds encrypt - /root/secrets/$secretName"');
 }
 
-/// Deploy a pre-build secret decrypted to /run/keys/<name> on the remote node.
+/// Deploy a pre-build secret decrypted to `/run/keys/<name>` on the remote node.
+
 ///
 /// Pre-build secrets are written to tmpfs (/run/keys/) with mode 0400 so
 /// the nix-daemon can use them before nixos-rebuild switch has run.

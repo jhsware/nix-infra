@@ -12,7 +12,9 @@ class ListAvailableNodes extends McpTool {
     required super.provider,
   });
 
+  @override
   Future<CallToolResult> callback({args, extra}) async {
+
     final nodes = await provider.getServers();
 
     final tmp = [];

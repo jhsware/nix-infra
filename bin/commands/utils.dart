@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'package:args/args.dart';
-import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/helpers.dart';
-import 'package:path/path.dart' as path;
+
 
 String readInput(String label, bool batch) {
   // TODO: Consider using (interact)[https://github.com/frencojobs/interact] for input

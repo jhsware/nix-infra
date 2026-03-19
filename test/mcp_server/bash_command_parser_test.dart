@@ -543,7 +543,8 @@ void main() {
       });
 
       test('handles backticks in single quotes', () {
-        final result = BashCommandParser.parseCommands("echo '\`date\`'");
+        final result = BashCommandParser.parseCommands("echo '`date`'");
+
         expect(result[0].arguments, ['`date`']);
       });
 

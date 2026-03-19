@@ -262,7 +262,9 @@ Future<void> deployAppsOnNode(
             debug: debug,
           );
         } catch (err) {
-          echo('WARNING! Pre-build secret $secretName does not exist in project, skipping');
+          echo('ERROR! Pre-build secret \'$secretName\' not found in secrets directory.');
+          echo('  This will cause nixos-rebuild to fail if it needs credentials from this secret.');
+          echo('  Add it with: nix-infra store-secret --secret="<value>" --store-as-secret="$secretName"');
         }
       }
       await updateNixConfForPreBuildSecrets(

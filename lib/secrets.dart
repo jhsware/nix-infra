@@ -204,7 +204,8 @@ Future<void> syncSecrets(
           sshClient: sshClient,
         );
       } catch (err) {
-        echo("WARNING! Secret $secretName does not exist in project, skipping");
+        echo("WARNING! Secret '$secretName' not found in secrets directory, skipping deployment to ${node.name}");
+        echo("  Add it with: nix-infra store-secret --secret=\"<value>\" --store-as-secret=\"$secretName\"");
       }
     }
   }

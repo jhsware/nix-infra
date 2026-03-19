@@ -360,7 +360,7 @@ class UploadCommand extends Command {
 
     final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
-      echo('ERROR! Node(s) not found in cluster: $name');
+      echo('ERROR! Node(s) not found in cluster: $targets');
       exit(2);
     }
 
@@ -394,8 +394,9 @@ class UploadCommand extends Command {
           final entity = item["entity"];
           final relPath = item["relPath"];
           if (entity is Directory) {
+            await sftpMkDir(sftp, '$uploadPath/$relPath');
             queue.addAll(entity.listSync().map((e) {
-              final newRelPath = "$relPath/${entity.path.split("/").last}";
+              final newRelPath = "$relPath/${e.path.split("/").last}";
               return {
                 "relPath": newRelPath,
                 "entity": e,

@@ -421,6 +421,7 @@ class UploadCommand extends Command {
     });
 
     await Future.wait(futs);
+  }
 }
 
 class CmdCommand extends Command {

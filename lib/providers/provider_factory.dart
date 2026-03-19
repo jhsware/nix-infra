@@ -10,14 +10,18 @@ import 'self_hosting.dart';
 /// This factory automatically detects which provider to use based on
 /// the presence of configuration files:
 /// 
-/// 1. If servers.yaml exists and contains server definitions, use SelfHosting
+/// 1. If servers.yaml exists, use SelfHosting (with cloud provider
+///    delegation for entries that specify a `provider` field)
 /// 2. Otherwise, if HCLOUD_TOKEN is available, use HetznerCloud
 /// 3. If neither is available, throw an error
 class ProviderFactory {
   /// Automatically detect and create the appropriate provider.
   /// 
   /// The detection logic:
-  /// - If servers.yaml exists in workingDir, use SelfHosting provider
+  /// - If servers.yaml exists in workingDir, use SelfHosting provider.
+  ///   If any entries specify a cloud provider (e.g., `provider: hetzner`),
+  ///   the corresponding cloud provider instances are created and passed
+  ///   to SelfHosting for runtime IP resolution.
   /// - Otherwise, use HetznerCloud with the provided credentials
   /// 
   /// Parameters:
@@ -31,7 +35,37 @@ class ProviderFactory {
   }) async {
     // Check for servers.yaml first
     if (await SelfHosting.hasServersConfig(workingDir)) {
-      return await SelfHosting.load(workingDir);
+      // Check if any servers reference cloud providers
+      final referencedProviders = await SelfHosting.getReferencedCloudProviders(workingDir);
+      final cloudProviders = <String, InfrastructureProvider>{};
+      
+      for (final providerName in referencedProviders) {
+        switch (providerName) {
+          case 'hetzner':
+            final hcloudToken = env['HCLOUD_TOKEN'];
+            if (hcloudToken == null || hcloudToken.isEmpty) {
+              throw Exception(
+                'servers.yaml references cloud provider "hetzner" but '
+                'HCLOUD_TOKEN is not set in your environment or .env file.',
+              );
+            }
+            cloudProviders[providerName] = HetznerCloud(
+              token: hcloudToken,
+              sshKey: sshKeyName,
+            );
+            break;
+          default:
+            throw Exception(
+              'servers.yaml references unknown cloud provider "$providerName". '
+              'Supported providers: hetzner',
+            );
+        }
+      }
+      
+      return await SelfHosting.load(
+        workingDir,
+        cloudProviders: cloudProviders.isNotEmpty ? cloudProviders : null,
+      );
     }
 
     // Fall back to Hetzner Cloud
@@ -59,7 +93,28 @@ class ProviderFactory {
   }) async {
     switch (type) {
       case ProviderType.selfHosting:
-        return await SelfHosting.load(workingDir);
+        // Check if cloud providers are needed
+        Map<String, InfrastructureProvider>? cloudProviders;
+        if (env != null && sshKeyName != null) {
+          final referencedProviders = await SelfHosting.getReferencedCloudProviders(workingDir);
+          if (referencedProviders.isNotEmpty) {
+            cloudProviders = {};
+            for (final providerName in referencedProviders) {
+              switch (providerName) {
+                case 'hetzner':
+                  final hcloudToken = env['HCLOUD_TOKEN'];
+                  if (hcloudToken != null && hcloudToken.isNotEmpty) {
+                    cloudProviders[providerName] = HetznerCloud(
+                      token: hcloudToken,
+                      sshKey: sshKeyName,
+                    );
+                  }
+                  break;
+              }
+            }
+          }
+        }
+        return await SelfHosting.load(workingDir, cloudProviders: cloudProviders);
         
       case ProviderType.hcloud:
         if (env == null) {
@@ -99,6 +154,10 @@ class ProviderFactory {
     
     switch (type) {
       case ProviderType.selfHosting:
+        final cloudProviders = await SelfHosting.getReferencedCloudProviders(workingDir);
+        if (cloudProviders.isNotEmpty) {
+          return 'Self-Hosting + Cloud (servers.yaml with ${cloudProviders.join(", ")} providers)';
+        }
         return 'Self-Hosting (servers.yaml found)';
       case ProviderType.hcloud:
         return 'Hetzner Cloud (HCLOUD_TOKEN set)';

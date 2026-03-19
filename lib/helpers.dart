@@ -116,6 +116,19 @@ Future<void> sftpMkDir(SftpClient sftp, String remotePath) async {
   }
 }
 
+/// Creates nested directories on the remote server recursively.
+/// Unlike [sftpMkDir] which only creates a single directory level,
+/// this function creates all intermediate directories as needed.
+Future<void> sftpMkDirRecursive(SftpClient sftp, String remotePath) async {
+  final parts = remotePath.split('/').where((p) => p.isNotEmpty).toList();
+  String currentPath = '';
+  for (final part in parts) {
+    currentPath = '$currentPath/$part';
+    await sftpMkDir(sftp, currentPath);
+  }
+}
+
+
 Future<void> sftpWrite(
   SftpClient sftp,
   String contents,

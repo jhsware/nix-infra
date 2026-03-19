@@ -377,7 +377,7 @@ class UploadCommand extends Command {
       final sftp = await sshClient.sftp();
 
       try {
-        await sftpMkDir(sftp, uploadPath);
+        await sftpMkDirRecursive(sftp, uploadPath);
 
         final queue = [];
         for (final filePath in files) {

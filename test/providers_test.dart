@@ -3,6 +3,52 @@ import 'package:test/test.dart';
 import 'package:nix_infra/types.dart';
 import 'package:nix_infra/providers/providers.dart';
 
+/// A mock cloud provider for testing hybrid server configurations.
+/// Returns predefined IPs for known server names.
+class MockCloudProvider implements InfrastructureProvider {
+  final Map<String, String> _serverIps;
+
+  MockCloudProvider(this._serverIps);
+
+  @override
+  String get providerName => 'Mock Cloud';
+
+  @override
+  bool get supportsCreateServer => true;
+
+  @override
+  bool get supportsAddSshKey => true;
+
+  @override
+  bool get supportsDestroyServer => true;
+
+  @override
+  bool get supportsPlacementGroups => false;
+
+  @override
+  Future<Iterable<ClusterNode>> getServers({List<String>? only}) async {
+    var entries = _serverIps.entries;
+    if (only != null) {
+      entries = entries.where((e) => only.contains(e.key));
+    }
+    return entries.map((e) => ClusterNode(e.key, e.value, e.key.hashCode, 'mock-key'));
+  }
+
+  @override
+  Future<void> createServer(String name, String machineType, String location, String sshKeyName, int? placementGroupId) async {}
+
+  @override
+  Future<void> destroyServer(int id) async {}
+
+  @override
+  Future<String?> getIpAddr(String name) async => _serverIps[name];
+
+  @override
+  Future<void> addSshKeyToCloudProvider(Directory workingDir, String keyName) async {}
+
+  @override
+  Future<void> removeSshKeyFromCloudProvider(Directory workingDir, String keyName) async {}
+}
 void main() {
   group('ClusterNode', () {
     test('getEffectiveSshKeyPath returns standard path when sshKeyPath is null', () {
@@ -111,6 +157,33 @@ void main() {
       expect(config.metadata!['location'], equals('rack-1'));
       expect(config.metadata!['environment'], equals('production'));
     });
+
+    test('fromYaml parses config with provider field', () {
+      final yaml = {
+        'provider': 'hetzner',
+        'ssh_key': './ssh/cloud-key',
+        'description': 'Cloud managed server',
+      };
+      
+      final config = SelfHostedServerConfig.fromYaml('cloud-server', yaml);
+      
+      expect(config.name, equals('cloud-server'));
+      expect(config.ipAddr, isNull);
+      expect(config.provider, equals('hetzner'));
+      expect(config.sshKeyPath, equals('./ssh/cloud-key'));
+      expect(config.description, equals('Cloud managed server'));
+      expect(config.isCloudManaged, isTrue);
+    });
+
+    test('isCloudManaged returns false for static IP config', () {
+      final yaml = {
+        'ip': '192.168.1.10',
+        'ssh_key': './ssh/key',
+      };
+      
+      final config = SelfHostedServerConfig.fromYaml('static-server', yaml);
+      expect(config.isCloudManaged, isFalse);
+    });
   });
 
   group('SelfHosting', () {
@@ -160,7 +233,7 @@ void main() {
       );
     });
 
-    test('load throws when ip is missing', () async {
+    test('load throws when server has neither ip nor provider', () async {
       final configFile = File('${tempDir.path}/servers.yaml');
       await configFile.writeAsString('''
 servers:
@@ -173,7 +246,7 @@ servers:
         throwsA(isA<Exception>().having(
           (e) => e.toString(),
           'message',
-          contains('missing required field "ip"'),
+          contains('must have either "ip" or "provider"'),
         )),
       );
     });
@@ -454,6 +527,256 @@ servers:
       final result = await provider.tryDestroyServer(123);
       
       expect(result, isFalse);
+    });
+  });
+
+  group('SelfHosting - hybrid cloud provider', () {
+    late Directory tempDir;
+    late MockCloudProvider mockCloud;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('nix-infra-test-');
+      mockCloud = MockCloudProvider({
+        'cloud-server-1': '10.0.1.100',
+        'cloud-server-2': '10.0.1.200',
+      });
+    });
+
+    tearDown(() async {
+      await tempDir.delete(recursive: true);
+    });
+
+    test('load throws when server has both ip and provider', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  bad-server:
+    ip: 192.168.1.10
+    provider: hetzner
+    ssh_key: ./ssh/key
+''');
+      
+      expect(
+        () => SelfHosting.load(tempDir, cloudProviders: {'hetzner': mockCloud}),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('cannot have both "ip" and "provider"'),
+        )),
+      );
+    });
+
+    test('load throws when cloud provider is not configured', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  cloud-server:
+    provider: hetzner
+    ssh_key: ./ssh/key
+''');
+      
+      expect(
+        () => SelfHosting.load(tempDir), // No cloud providers passed
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('not configured'),
+        )),
+      );
+    });
+
+    test('load succeeds with mixed config', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  cloud-server-1:
+    provider: hetzner
+    ssh_key: ./ssh/cloud-key
+    description: Cloud managed server
+  static-server:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/static-key
+    description: Static server
+''');
+      
+      final provider = await SelfHosting.load(
+        tempDir,
+        cloudProviders: {'hetzner': mockCloud},
+      );
+      
+      expect(provider.servers.length, equals(2));
+      expect(provider.servers['cloud-server-1']!.isCloudManaged, isTrue);
+      expect(provider.servers['static-server']!.isCloudManaged, isFalse);
+    });
+
+    test('load succeeds with all-provider config', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  cloud-server-1:
+    provider: hetzner
+    ssh_key: ./ssh/key1
+  cloud-server-2:
+    provider: hetzner
+    ssh_key: ./ssh/key2
+''');
+      
+      final provider = await SelfHosting.load(
+        tempDir,
+        cloudProviders: {'hetzner': mockCloud},
+      );
+      
+      expect(provider.servers.length, equals(2));
+      expect(provider.servers.values.every((s) => s.isCloudManaged), isTrue);
+    });
+
+    test('getServers resolves IPs from cloud provider', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  cloud-server-1:
+    provider: hetzner
+    ssh_key: ./ssh/cloud-key
+  static-server:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/static-key
+''');
+      
+      final provider = await SelfHosting.load(
+        tempDir,
+        cloudProviders: {'hetzner': mockCloud},
+      );
+      final servers = (await provider.getServers()).toList();
+      
+      expect(servers.length, equals(2));
+      
+      final cloudServer = servers.firstWhere((s) => s.name == 'cloud-server-1');
+      final staticServer = servers.firstWhere((s) => s.name == 'static-server');
+      
+      expect(cloudServer.ipAddr, equals('10.0.1.100'));
+      expect(staticServer.ipAddr, equals('192.168.1.10'));
+    });
+
+    test('getServers throws when cloud server not found in provider', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  unknown-cloud-server:
+    provider: hetzner
+    ssh_key: ./ssh/key
+''');
+      
+      final provider = await SelfHosting.load(
+        tempDir,
+        cloudProviders: {'hetzner': mockCloud},
+      );
+      
+      expect(
+        () => provider.getServers(),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('not found in hetzner'),
+        )),
+      );
+    });
+
+    test('getIpAddr delegates to cloud provider for cloud-managed servers', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  cloud-server-1:
+    provider: hetzner
+    ssh_key: ./ssh/key
+  static-server:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/key
+''');
+      
+      final provider = await SelfHosting.load(
+        tempDir,
+        cloudProviders: {'hetzner': mockCloud},
+      );
+      
+      // Cloud-managed server - delegates to mock provider
+      expect(await provider.getIpAddr('cloud-server-1'), equals('10.0.1.100'));
+      
+      // Static server - returns stored IP
+      expect(await provider.getIpAddr('static-server'), equals('192.168.1.10'));
+      
+      // Non-existent server
+      expect(await provider.getIpAddr('non-existent'), isNull);
+    });
+
+    test('getServers with only parameter works for mixed config', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  cloud-server-1:
+    provider: hetzner
+    ssh_key: ./ssh/key1
+  cloud-server-2:
+    provider: hetzner
+    ssh_key: ./ssh/key2
+  static-server:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/key3
+''');
+      
+      final provider = await SelfHosting.load(
+        tempDir,
+        cloudProviders: {'hetzner': mockCloud},
+      );
+      final servers = (await provider.getServers(only: ['cloud-server-1', 'static-server'])).toList();
+      
+      expect(servers.length, equals(2));
+      expect(servers.map((s) => s.name).toSet(), equals({'cloud-server-1', 'static-server'}));
+    });
+  });
+
+  group('SelfHosting - getReferencedCloudProviders', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('nix-infra-test-');
+    });
+
+    tearDown(() async {
+      await tempDir.delete(recursive: true);
+    });
+
+    test('returns empty set when no servers.yaml exists', () async {
+      final providers = await SelfHosting.getReferencedCloudProviders(tempDir);
+      expect(providers, isEmpty);
+    });
+
+    test('returns empty set when no cloud providers referenced', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  server-1:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/key
+''');
+      
+      final providers = await SelfHosting.getReferencedCloudProviders(tempDir);
+      expect(providers, isEmpty);
+    });
+
+    test('returns referenced cloud providers', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  cloud-server:
+    provider: hetzner
+    ssh_key: ./ssh/key
+  static-server:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/key
+''');
+      
+      final providers = await SelfHosting.getReferencedCloudProviders(tempDir);
+      expect(providers, equals({'hetzner'}));
     });
   });
 }

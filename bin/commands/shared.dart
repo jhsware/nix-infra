@@ -343,7 +343,10 @@ class UploadCommand extends Command {
   UploadCommand() {
     argParser
       ..addOption('target', mandatory: true)
-      ..addOption('file', mandatory: true);
+      ..addOption('file', mandatory: true)
+      ..addOption('remote-path',
+          defaultsTo: '/root/uploads',
+          help: 'Remote destination path for uploaded files');
   }
 
   @override
@@ -360,20 +363,21 @@ class UploadCommand extends Command {
 
     final nodes = await provider.getServers(only: targets);
     if (nodes.isEmpty) {
-      echo('ERROR! Node(s) not found in cluster: $name');
+      echo('ERROR! Node(s) not found in cluster: $targets');
       exit(2);
     }
 
+    final String uploadPath = argResults!['remote-path'];
+
     final futs = nodes.map((node) async {
+      echo('Connecting to ${node.name}...');
       final SSHSocket connection = await waitAndGetSshConnection(node);
       final SSHClient sshClient =
           await getSshClient(workingDir, node, connection);
       final sftp = await sshClient.sftp();
 
-      const uploadPath = '/root/uploads';
-
       try {
-        await sftpMkDir(sftp, uploadPath);
+        await sftpMkDirRecursive(sftp, uploadPath);
 
         final queue = [];
         for (final filePath in files) {
@@ -394,8 +398,9 @@ class UploadCommand extends Command {
           final entity = item["entity"];
           final relPath = item["relPath"];
           if (entity is Directory) {
+            await sftpMkDir(sftp, '$uploadPath/$relPath');
             queue.addAll(entity.listSync().map((e) {
-              final newRelPath = "$relPath/${entity.path.split("/").last}";
+              final newRelPath = "$relPath/${e.path.split("/").last}";
               return {
                 "relPath": newRelPath,
                 "entity": e,
@@ -404,9 +409,11 @@ class UploadCommand extends Command {
             continue;
           }
 
+          echoFromNode(node.name, 'Uploading $relPath');
           await sftpSend(sftp, entity.path, '$uploadPath/$relPath');
         }
 
+        echoFromNode(node.name, 'Upload complete');
         sftp.close();
       } finally {
         sshClient.close();

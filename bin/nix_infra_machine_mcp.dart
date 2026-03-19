@@ -7,6 +7,7 @@ import 'mcp_server/filesystem.dart';
 import 'mcp_server/journalctl.dart';
 import 'mcp_server/systemctl.dart';
 import 'mcp_server/system_stats.dart';
+import 'mcp_server/file_upload.dart';
 import 'package:nix_infra/helpers.dart';
 
 void main(List<String> arguments) async {
@@ -156,6 +157,21 @@ void main(List<String> arguments) async {
     description: SystemStats.description,
     inputSchemaProperties: SystemStats.inputSchemaProperties,
     callback: systemStats.callback,
+  );
+
+  // *** FileUpload ***
+
+  final fileUpload = FileUpload(
+    workingDir: workingDir,
+    sshKeyName: sshKeyName,
+    provider: provider,
+  );
+
+  server.tool(
+    "file-upload",
+    description: FileUpload.description,
+    inputSchemaProperties: FileUpload.inputSchemaProperties,
+    callback: fileUpload.callback,
   );
 
   server.connect(StdioServerTransport());

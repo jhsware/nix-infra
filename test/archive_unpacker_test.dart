@@ -6,6 +6,19 @@ import 'package:nix_infra/archive_unpacker.dart';
 import 'package:nix_infra/nar.dart';
 import 'package:nix_infra/nix_hash.dart';
 
+/// Helper to create a tar.gz archive from an Archive object.
+Uint8List _makeTarGz(Archive archive) {
+  final tarBytes = TarEncoder().encode(archive);
+  final gzBytes = GZipEncoder().encode(tarBytes);
+  return Uint8List.fromList(gzBytes);
+}
+
+/// Helper to create a zip archive from an Archive object.
+Uint8List _makeZip(Archive archive) {
+  final zipBytes = ZipEncoder().encode(archive);
+  return Uint8List.fromList(zipBytes);
+}
+
 void main() {
   group('ArchiveUnpacker', () {
     group('detectType', () {
@@ -50,7 +63,6 @@ void main() {
 
     group('unpack tar.gz', () {
       test('unpacks and strips single top-level directory', () {
-        // Create a tar.gz archive with a single top-level directory
         final archive = Archive();
         archive.addFile(
           ArchiveFile.bytes(
@@ -65,11 +77,8 @@ void main() {
           ),
         );
 
-        final tarBytes = TarEncoder().encode(archive);
-        final gzBytes = GZipEncoder().encode(tarBytes);
-
         final result = ArchiveUnpacker.unpack(
-          Uint8List.fromList(gzBytes!),
+          _makeTarGz(archive),
           ArchiveType.tarGz,
         );
 
@@ -101,11 +110,8 @@ void main() {
           ArchiveFile.bytes('file2.txt', utf8.encode('content 2')),
         );
 
-        final tarBytes = TarEncoder().encode(archive);
-        final gzBytes = GZipEncoder().encode(tarBytes);
-
         final result = ArchiveUnpacker.unpack(
-          Uint8List.fromList(gzBytes!),
+          _makeTarGz(archive),
           ArchiveType.tarGz,
         );
 
@@ -123,16 +129,11 @@ void main() {
           ArchiveFile.bytes('single-file.txt', utf8.encode('alone')),
         );
 
-        final tarBytes = TarEncoder().encode(archive);
-        final gzBytes = GZipEncoder().encode(tarBytes);
-
         final result = ArchiveUnpacker.unpack(
-          Uint8List.fromList(gzBytes!),
+          _makeTarGz(archive),
           ArchiveType.tarGz,
         );
 
-        // Single file entry -> root directory with one file (no strip
-        // because the single entry is a file, not a directory)
         expect(result, isA<NarDirectory>());
         final dir = result as NarDirectory;
         expect(dir.entries.length, equals(1));
@@ -156,10 +157,8 @@ void main() {
           ),
         );
 
-        final zipBytes = ZipEncoder().encode(archive);
-
         final result = ArchiveUnpacker.unpack(
-          Uint8List.fromList(zipBytes!),
+          _makeZip(archive),
           ArchiveType.zip,
         );
 
@@ -180,9 +179,7 @@ void main() {
           ),
         );
 
-        final tarBytes = TarEncoder().encode(archive);
-        final gzBytes = Uint8List.fromList(GZipEncoder().encode(tarBytes)!);
-
+        final gzBytes = _makeTarGz(archive);
         final hash1 = NixHash.sha256UnpackNix32(gzBytes);
         final hash2 = NixHash.sha256UnpackNix32(gzBytes);
         expect(hash1, equals(hash2));
@@ -198,9 +195,7 @@ void main() {
           ),
         );
 
-        final tarBytes = TarEncoder().encode(archive);
-        final gzBytes = Uint8List.fromList(GZipEncoder().encode(tarBytes)!);
-
+        final gzBytes = _makeTarGz(archive);
         final allHashes = NixHash.sha256UnpackAll(gzBytes);
         expect(allHashes.containsKey('nix32'), isTrue);
         expect(allHashes.containsKey('sri'), isTrue);
@@ -216,10 +211,10 @@ void main() {
           archive.addFile(
             ArchiveFile.bytes('repo-v1/file.txt', utf8.encode(content)),
           );
-          final tarBytes = TarEncoder().encode(archive);
-          final gzBytes =
-              Uint8List.fromList(GZipEncoder().encode(tarBytes)!);
-          return ArchiveUnpacker.unpack(gzBytes, ArchiveType.tarGz);
+          return ArchiveUnpacker.unpack(
+            _makeTarGz(archive),
+            ArchiveType.tarGz,
+          );
         }
 
         final hash1 = NixHash.sha256NarNix32(makeArchive('content A'));

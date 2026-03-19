@@ -8,29 +8,35 @@ import 'provider.dart';
 /// Configuration for a self-hosted server loaded from servers.yaml
 class SelfHostedServerConfig {
   final String name;
-  final String ipAddr;
+  final String? ipAddr;
   final String sshKeyPath;
   final String? description;
   final String? username;
+  final String? provider;
   final Map<String, dynamic>? metadata;
 
   SelfHostedServerConfig({
     required this.name,
-    required this.ipAddr,
+    this.ipAddr,
     required this.sshKeyPath,
     this.description,
     this.username,
+    this.provider,
     this.metadata,
   });
+
+  /// Whether this server's IP is resolved from a cloud provider at runtime.
+  bool get isCloudManaged => provider != null;
 
   /// Create from a YAML map entry
   factory SelfHostedServerConfig.fromYaml(String name, Map<dynamic, dynamic> yaml) {
     return SelfHostedServerConfig(
       name: name,
-      ipAddr: yaml['ip'] as String,
+      ipAddr: yaml['ip'] as String?,
       sshKeyPath: yaml['ssh_key'] as String,
       description: yaml['description'] as String?,
       username: yaml['username'] as String?,
+      provider: yaml['provider'] as String?,
       metadata: yaml['metadata'] != null 
           ? Map<String, dynamic>.from(yaml['metadata'] as Map)
           : null,
@@ -40,10 +46,9 @@ class SelfHostedServerConfig {
 
 /// Provider for self-hosted servers defined in a servers.yaml file.
 /// 
-/// This provider manages pre-existing servers that are defined in a YAML
-/// configuration file. Unlike cloud providers, this provider cannot create
-/// or destroy servers - it only provides access to the servers defined
-/// in the configuration.
+/// This provider manages servers that are defined in a YAML configuration file.
+/// Servers can either have a static IP address (self-hosted) or specify a cloud
+/// provider (e.g., "hetzner") to resolve their IP at runtime.
 /// 
 /// Example servers.yaml:
 /// ```yaml
@@ -56,6 +61,11 @@ class SelfHostedServerConfig {
 ///     metadata:       # optional additional data
 ///       location: rack-1
 ///       
+///   cloud-server-1:
+///     provider: hetzner
+///     ssh_key: ./ssh/cloud-key
+///     description: Cloud managed server
+///
 ///   db-server-1:
 ///     ip: 192.168.1.20
 ///     ssh_key: ./ssh/db-server-1
@@ -94,8 +104,14 @@ class SelfHosting implements InfrastructureProvider {
       final config = entry.value as YamlMap;
       
       // Validate required fields
-      if (config['ip'] == null) {
-        throw Exception('Server "$name" is missing required field "ip"');
+      final hasIp = config['ip'] != null;
+      final hasProvider = config['provider'] != null;
+      
+      if (!hasIp && !hasProvider) {
+        throw Exception('Server "$name" must have either "ip" or "provider" (found neither)');
+      }
+      if (hasIp && hasProvider) {
+        throw Exception('Server "$name" cannot have both "ip" and "provider"');
       }
       if (config['ssh_key'] == null) {
         throw Exception('Server "$name" is missing required field "ssh_key"');
@@ -165,7 +181,7 @@ class SelfHosting implements InfrastructureProvider {
       final sshKeyName = _extractSshKeyName(config.sshKeyPath);
       final node = ClusterNode(
         config.name,
-        config.ipAddr,
+        config.ipAddr ?? '', // Cloud-managed servers get IP resolved at runtime
         config.name.hashCode, // Use name hash as ID
         sshKeyName,
         // Store the original path from config - ClusterNode.getEffectiveSshKeyPath

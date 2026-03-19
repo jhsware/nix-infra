@@ -463,6 +463,7 @@ state cli_deploy {
   local_secrets_dec : secrets/
   ssh
   systemd_credentials : systemd-credentials
+  pre_build : /run/keys/ (tmpfs)
 }
 cli_deploy : nix-infra deploy
 
@@ -472,10 +473,53 @@ secret --> local_secrets_enc : encrypt
 local_secrets_enc --> cli_deploy
 local_secrets_dec --> ssh : decrypt
 ssh --> systemd_credentials : encrypt
+ssh --> pre_build : pre-build secrets
 
 cli_deploy --> systemd
 systemd --> application : decrypt
 ```
+
+### Pre-build Secrets
+
+Some NixOS modules need credentials available to the Nix daemon *before* `nixos-rebuild switch` — for example, when fetching source from private GitHub repositories using `fetchFromGitHub` with a netrc file.
+
+Regular secrets (deployed encrypted via `systemd-creds`) are only decrypted at runtime by systemd services. But if the systemd service that decrypts them doesn't exist until after the first successful rebuild, the credentials aren't available yet — a chicken-and-egg problem.
+
+**Pre-build secrets** solve this by deploying the secret in two ways:
+- Encrypted to `/root/secrets/` (for the systemd service to use after rebuild)
+- Decrypted to `/run/keys/<name>` on tmpfs (for the Nix daemon to use during rebuild)
+
+#### Usage
+
+In your node config files, use the `[%%pre-build-secrets/name%%]` placeholder instead of `[%%secrets/name%%]`:
+
+```nix
+# In nodes/worker001.nix:
+nix.settings.netrc-file = "/run/keys/[%%pre-build-secrets/github-netrc%%]";
+```
+
+nix-infra will automatically:
+1. Deploy the secret encrypted to `/root/secrets/` (same as regular secrets)
+2. Deploy it decrypted to `/run/keys/github-netrc` (mode 0400, root-only, tmpfs)
+3. Update `/etc/nix/nix.conf` with the `netrc-file` setting if not already present
+4. Restart `nix-daemon` to pick up the new setting
+
+After a successful `nixos-rebuild switch`, the NixOS-managed systemd services take over secret management. The pre-build secret on tmpfs is either overwritten or cleared on reboot.
+
+#### Creating Pre-build Secrets
+
+Pre-build secrets are stored in the same `secrets/` directory as regular secrets:
+
+```sh
+nix-infra store-secret --secret="machine login github.com password ghp_xxxxx" --store-as-secret="github-netrc"
+```
+
+#### Security
+
+Pre-build secrets have the same security properties as regular secrets:
+- Decrypted material only exists on tmpfs (`/run/keys/`), never on persistent storage
+- Files are root-only (mode 0400)
+- The deployment operates at the same trust level as all nix-infra operations (root SSH)
 
 ## Development
 

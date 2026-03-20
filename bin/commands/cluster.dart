@@ -199,8 +199,8 @@ class InitNodeCommand extends Command {
 
     areYouSure('Are you sure you want to init the nodes?', batch);
 
-    final secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final secretsPwd = getSecretsPassword(env, batch);
+
     final pwdCaInt = env['INTERMEDIATE_CA_PASS'] ??
         readPassword(ReadPasswordEnum.caIntermediate, batch);
 
@@ -287,8 +287,8 @@ class UpdateNodeCommand extends Command {
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
-    final String secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final String secretsPwd = getSecretsPassword(env, batch);
+
     final String nixOsVersion = argResults!['nixos-version'];
     final String nodeType = argResults!['node-module'];
     final bool rebuild = argResults!['rebuild'];
@@ -400,8 +400,8 @@ class DeployAppsCommand extends Command {
 
     areYouSure('Are you sure you want to deploy apps?', batch);
 
-    final secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final secretsPwd = getSecretsPassword(env, batch);
+
 
     // Allow passing multiple node names
     final provider = await getProvider(workingDir, env, sshKeyName);

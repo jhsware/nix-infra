@@ -69,8 +69,8 @@ class InitMachineCommand extends Command {
 
     areYouSure('Are you sure you want to init the nodes?', batch);
 
-    final secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final secretsPwd = getSecretsPassword(env, batch);
+
 
     // Allow passing multiple node names
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -127,8 +127,8 @@ class UpdateCommand extends Command {
     final bool rebuild = argResults!['rebuild'];
 
     areYouSure('Are you sure you want to update the nodes?', batch);
-    final secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final secretsPwd = getSecretsPassword(env, batch);
+
 
     // Allow passing multiple node names
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -220,8 +220,8 @@ class DeployAppsCommand extends Command {
 
     areYouSure('Are you sure you want to deploy apps?', batch);
 
-    final secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final secretsPwd = getSecretsPassword(env, batch);
+
 
     // Allow passing multiple node names
     final provider = await getProvider(workingDir, env, sshKeyName);

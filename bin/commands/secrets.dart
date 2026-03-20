@@ -54,8 +54,8 @@ class StoreCommand extends Command {
       secretFilePath: secretFilePath,
     );
 
-    final secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final secretsPwd = getSecretsPassword(env, batch);
+
 
     await saveSecret(workingDir, secretsPwd, secretName, secret);
     echo('Secret saved as $secretName');

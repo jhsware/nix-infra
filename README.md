@@ -479,6 +479,23 @@ cli_deploy --> systemd
 systemd --> application : decrypt
 ```
 
+### Storing Secrets
+
+Secrets are stored encrypted in the local `secrets/` directory. The `store` command accepts the secret value from three sources:
+
+```sh
+# Inline value (single-line secrets)
+nix-infra secrets store --name="api-key" --secret="sk-xxxxxxxxxxxxx"
+
+# From a file (multi-line secrets like netrc)
+nix-infra secrets store --name="github-netrc" --secret-file="./github-netrc"
+
+# Piped via stdin
+cat ./github-netrc | nix-infra secrets store --name="github-netrc"
+```
+
+The `--secret` and `--secret-file` options are mutually exclusive. If neither is provided and stdin has piped data, it will be read automatically.
+
 ### Pre-build Secrets
 
 Some NixOS modules need credentials available to the Nix daemon *before* `nixos-rebuild switch` — for example, when fetching source from private GitHub repositories using `fetchFromGitHub` with a netrc file.
@@ -506,12 +523,31 @@ nix-infra will automatically:
 
 After a successful `nixos-rebuild switch`, the NixOS-managed systemd services take over secret management. The pre-build secret on tmpfs is either overwritten or cleared on reboot.
 
-#### Creating Pre-build Secrets
+#### Example: GitHub PAT as a netrc Pre-build Secret
 
-Pre-build secrets are stored in the same `secrets/` directory as regular secrets:
+A GitHub Personal Access Token used for fetching private repositories requires netrc format, which is multi-line. First create a netrc file:
+
+```
+machine github.com
+login x-access-token
+password ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Then store it as a pre-build secret using `--secret-file` or stdin:
 
 ```sh
-nix-infra store-secret --secret="machine login github.com password ghp_xxxxx" --store-as-secret="github-netrc"
+# From a file
+nix-infra secrets store --name="github-netrc" --secret-file="./github-netrc"
+
+# Or piped via stdin
+cat ./github-netrc | nix-infra secrets store --name="github-netrc"
+```
+
+Reference it in your node configuration:
+
+```nix
+# In nodes/worker001.nix:
+nix.settings.netrc-file = "/run/keys/[%%pre-build-secrets/github-netrc%%]";
 ```
 
 #### Security

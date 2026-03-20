@@ -245,7 +245,7 @@ Future<void> deployAppsOnNode(
     }
     sftp.close();
 
-    // Deploy pre-build secrets (decrypted to /run/keys/) and update nix.conf
+    // Deploy pre-build secrets (decrypted to /run/keys/)
     if (expectedPreBuildSecrets.isNotEmpty) {
       if (debug) echoDebug('Deploying pre-build secrets on ${node.name}: $expectedPreBuildSecrets');
       for (final secretName in expectedPreBuildSecrets) {
@@ -267,47 +267,12 @@ Future<void> deployAppsOnNode(
           echo('  Add it with: nix-infra store-secret --secret="<value>" --store-as-secret="$secretName"');
         }
       }
-      await updateNixConfForPreBuildSecrets(
-        workingDir,
-        node,
-        expectedPreBuildSecrets,
-        debug: debug,
-      );
     }
 
     sshClient.close();
   });
 
   await Future.wait(deployments);
-}
-
-/// Update /etc/nix/nix.conf with settings required by pre-build secrets
-/// and restart nix-daemon to pick up the changes.
-///
-/// Currently supports the netrc convention: secrets with names containing
-/// 'netrc' get a `netrc-file = /run/keys/<name>` entry appended to nix.conf.
-Future<void> updateNixConfForPreBuildSecrets(
-  Directory workingDir,
-  ClusterNode node,
-  List<String> preBuildSecrets, {
-  bool debug = false,
-}) async {
-  if (preBuildSecrets.isEmpty) return;
-
-  final commands = <String>[];
-  for (final name in preBuildSecrets) {
-    // Convention: add netrc-file setting for secrets containing 'netrc'
-    if (name.contains('netrc')) {
-      commands.add(
-          'grep -q "netrc-file = /run/keys/$name" /etc/nix/nix.conf || echo "netrc-file = /run/keys/$name" >> /etc/nix/nix.conf');
-    }
-  }
-  if (commands.isNotEmpty) {
-    commands.add('systemctl restart nix-daemon');
-    final script = commands.join(' && ');
-    await runCommandOverSsh(workingDir, node, script);
-    if (debug) echoDebug('Updated nix.conf and restarted nix-daemon on ${node.name}');
-  }
 }
 
 Future<void> registerClusterNode(

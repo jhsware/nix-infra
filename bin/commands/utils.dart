@@ -44,6 +44,26 @@ String readPassword(ReadPasswordEnum type, bool batch) {
   return pwd;
 }
 
+String getSecretsPassword(Map<String, String> env, bool batch) {
+  // 1. Check SECRETS_PASS first (preferred)
+  final fromPass = env['SECRETS_PASS'];
+  if (fromPass != null && fromPass.isNotEmpty) {
+    return fromPass;
+  }
+
+  // 2. Check SECRETS_PWD (deprecated fallback)
+  final fromPwd = env['SECRETS_PWD'];
+  if (fromPwd != null && fromPwd.isNotEmpty) {
+    stderr.writeln(
+        'WARNING: SECRETS_PWD is deprecated, use SECRETS_PASS instead');
+    return fromPwd;
+  }
+
+  // 3. Fall back to interactive prompt
+  return readPassword(ReadPasswordEnum.secrets, batch);
+}
+
+
 void areYouSure(String txt, bool batch) {
   // TODO: Consider using (interact)[https://github.com/frencojobs/interact] for input
   if (batch) return;

@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/helpers.dart';
+
 
 
 String readInput(String label, bool batch) {
@@ -44,7 +46,8 @@ String readPassword(ReadPasswordEnum type, bool batch) {
   return pwd;
 }
 
-String getSecretsPassword(Map<String, String> env, bool batch) {
+String getSecretsPassword(DotEnv env, bool batch) {
+
   // 1. Check SECRETS_PASS first (preferred)
   final fromPass = env['SECRETS_PASS'];
   if (fromPass != null && fromPass.isNotEmpty) {

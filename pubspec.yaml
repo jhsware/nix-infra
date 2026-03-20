@@ -4,7 +4,7 @@ version: 0.17.0-beta
 repository: https://github.com/jhsware/nix-infra
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: ">=3.9.4 <4.0.0"
 
 # Add regular dependencies here.
 dependencies:

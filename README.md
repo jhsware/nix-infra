@@ -64,12 +64,11 @@ Comprehensive documentation is available in the [`docs/`](./docs/) directory:
 
 2. Clone and build:
 ```sh
+nix-shell -p dart # if you don't have a recent version of Dart
 git clone git@github.com:jhsware/nix-infra.git
 cd nix-infra && ./build.sh
 # output: bin/nix-infra
 ```
-
-Requires Dart — you can use `nix-shell -p dart` to get it.
 
 ## Development
 

@@ -1,9 +1,9 @@
 # Secrets Management
 
-nix-infra provides encrypted secrets management with two deployment modes: **regular secrets** for runtime use via systemd-creds, and **pre-build secrets** for build-time use via tmpfs. Secrets are encrypted locally, stored in your project, and deployed to nodes during `deploy-apps`.
+nix-infra provides encrypted secrets management using systemd-creds. Secrets are encrypted locally, stored in your project, and deployed to nodes during `deploy-apps`.
+
 
 ## How Secrets Flow
-
 ```mermaid
 stateDiagram
 direction LR
@@ -16,7 +16,6 @@ state cli_deploy {
   local_secrets_dec : secrets/
   ssh
   systemd_credentials : systemd-credentials
-  pre_build : /run/keys/ (tmpfs)
 }
 cli_deploy : nix-infra deploy
 
@@ -26,16 +25,15 @@ secret --> local_secrets_enc : encrypt
 local_secrets_enc --> cli_deploy
 local_secrets_dec --> ssh : decrypt
 ssh --> systemd_credentials : encrypt
-ssh --> pre_build : pre-build secrets
 
 cli_deploy --> systemd
 systemd --> application : decrypt
 ```
 
+
 1. **Store** — Secrets are encrypted with OpenSSL and saved in the local `secrets/` directory
 2. **Deploy** — During deployment, secrets are decrypted locally, sent over SSH, and re-encrypted on the target using `systemd-creds encrypt`
 3. **Runtime** — systemd services decrypt secrets at startup using systemd-creds
-4. **Build-time** (pre-build only) — Secrets are also deployed decrypted to `/run/keys/` on tmpfs for the Nix daemon
 
 ## Storing Secrets
 
@@ -111,16 +109,8 @@ services.myapp.credentialFile = "/root/secrets/[%%secrets/api-key%%]";
 
 During deployment, `[%%secrets/api-key%%]` is replaced with the secret name (`api-key`), and the actual encrypted secret file is deployed to `/root/secrets/api-key` on the target node.
 
-### Pre-build Secrets
-
-```nix
-# In nodes/worker001.nix:
-nix.settings.netrc-file = "/run/keys/[%%pre-build-secrets/github-netrc%%]";
-```
-
-Pre-build secrets use the `[%%pre-build-secrets/name%%]` prefix. They are deployed both encrypted (like regular secrets) and decrypted to `/run/keys/` for build-time access.
-
 ### Variable Substitution
+
 
 Secret values can themselves contain placeholders that are resolved during deployment. The substitution system provides these variables:
 
@@ -136,13 +126,13 @@ Secret values can themselves contain placeholders that are resolved during deplo
 
 When `deploy-apps` runs, the deployment pipeline handles secrets automatically:
 
-1. **Scan config files** — The `substitute()` function scans node config files for `[%%secrets/...%%]` and `[%%pre-build-secrets/...%%]` placeholders, building lists of expected secrets
+1. **Scan config files** — The `substitute()` function scans node config files for `[%%secrets/...%%]` placeholders, building a list of expected secrets
+
 2. **Sync secrets** — `syncSecrets()` processes each expected secret:
    - Reads and decrypts the secret locally using `SECRETS_PWD`
    - Applies variable substitutions (node IPs, overlay IPs, etc.)
    - Deploys the secret encrypted via `systemd-creds encrypt` on the remote node to `/root/secrets/`
 3. **Garbage collect** — Any secrets on the remote node that are not in the expected list are removed
-4. **Pre-build secrets** — For pre-build secrets, an additional step deploys the decrypted value to `/run/keys/` on tmpfs
 
 If a referenced secret doesn't exist in the local `secrets/` directory, the deployment prints a warning and continues. The warning includes instructions for creating the missing secret.
 
@@ -298,15 +288,13 @@ During deployment, nix-infra will:
 - **NixOS-native** — Uses systemd-creds and NixOS service configuration declaratively
 - **No bootstrap issues** — Module is deployed as part of base infrastructure during init
 
-### Legacy Pre-build Secrets
 
-The `[%%pre-build-secrets/...%%]` placeholder pattern is still supported for backward compatibility. Pre-build secrets are deployed both encrypted to `/root/secrets/` and decrypted to `/run/keys/<name>` on tmpfs. However, for netrc credentials, the NixOS module approach above is recommended as it supports multiple credentials and is self-healing.
 ## Security Properties
 
 - **Encryption at rest** — Secrets are encrypted with OpenSSL PBKDF2 in the local `secrets/` directory
 - **Encryption in transit** — Secrets are transmitted over SSH
-- **Encryption at runtime** — Regular secrets are encrypted on the target with systemd-creds and only decrypted by the owning systemd service
-- **Pre-build secrets on tmpfs** — Decrypted material only exists on tmpfs (`/run/keys/`), never on persistent storage, and is cleared on reboot
+- **Encryption at runtime** — Secrets are encrypted on the target with systemd-creds and only decrypted by the owning systemd service
+
 - **File permissions** — All secret files are mode `0400` (root read-only)
 - **Garbage collection** — Unused secrets are automatically removed from target nodes during deployment
 - **SECRETS_PWD isolation** — The encryption password is sourced from `.env` or interactive prompt, never stored in configuration files

@@ -56,17 +56,9 @@ final writeCreateMode = SftpFileOpenMode.write |
     SftpFileOpenMode.truncate;
 
 String substitute(String contents, Map<String, String> substitutions,
-    {List<String>? expectedSecrets, List<String>? expectedPreBuildSecrets}) {
+    {List<String>? expectedSecrets}) {
   return contents.replaceAllMapped(RegExp(r'\[\%\%(.*?)\%\%\]'), (match) {
     final key = match.group(1);
-    // Pre-build secrets are deployed both encrypted (like regular secrets)
-    // and decrypted to /run/keys/<name> for use before nixos-rebuild.
-    if (key != null && key.startsWith('pre-build-secrets/')) {
-      final secretName = key.split('/').last;
-      expectedPreBuildSecrets?.add(secretName);
-      expectedSecrets?.add(secretName); // also deploy encrypted via normal flow
-      return secretName;
-    }
     // Secrets are deployed as encrypted files in /root/secrets of target node
     // so they won't exist in substitions.
     if (key != null && key.startsWith('secrets/')) {
@@ -88,8 +80,7 @@ Stream<Uint8List> convertToUint8List(Stream<List<int>> input) {
 
 Future<void> sftpSend(SftpClient sftp, String localPath, String remotePath,
     {Map<String, String>? substitutions,
-    List<String>? expectedSecrets,
-    List<String>? expectedPreBuildSecrets}) async {
+    List<String>? expectedSecrets}) async {
   final local = File(localPath);
   final remote = await sftp.open(remotePath, mode: writeCreateMode);
   if (substitutions == null) {
@@ -99,8 +90,7 @@ Future<void> sftpSend(SftpClient sftp, String localPath, String remotePath,
     // Do variable substitution [%%sshKeyPubPath%%] => { sshKeyPubPath }
     final contents = await local.readAsString();
     final newContents = substitute(contents, substitutions,
-        expectedSecrets: expectedSecrets,
-        expectedPreBuildSecrets: expectedPreBuildSecrets);
+        expectedSecrets: expectedSecrets);
     await remote.writeBytes(Uint8List.fromList(utf8.encode(newContents)));
   }
 }

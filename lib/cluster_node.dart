@@ -203,7 +203,6 @@ Future<void> deployAppsOnNode(
             '-- overlayIp not found in etcd --';
 
     final expectedSecrets = <String>[];
-    final expectedPreBuildSecrets = <String>[];
     final nodeConfigFile = File(
         '${testDir == null ? workingDir.path : testDir.path}/nodes/${node.name}.nix');
     if (nodeConfigFile.existsSync()) {
@@ -213,7 +212,6 @@ Future<void> deployAppsOnNode(
         '/etc/nixos/${node.name}.nix',
         substitutions: nodeSubstitutions,
         expectedSecrets: expectedSecrets,
-        expectedPreBuildSecrets: expectedPreBuildSecrets,
       );
     }
     await syncSecrets(
@@ -245,31 +243,8 @@ Future<void> deployAppsOnNode(
     }
     sftp.close();
 
-    // Deploy pre-build secrets (decrypted to /run/keys/)
-    if (expectedPreBuildSecrets.isNotEmpty) {
-      if (debug) echoDebug('Deploying pre-build secrets on ${node.name}: $expectedPreBuildSecrets');
-      for (final secretName in expectedPreBuildSecrets) {
-        try {
-          final secret = await readSecret(workingDir, secretsPwd, secretName);
-          final decryptedSecret =
-              substitute(secret, nodeSubstitutions);
-          await deployPreBuildSecretOnRemote(
-            workingDir,
-            secretName,
-            decryptedSecret,
-            node,
-            sshClient: sshClient,
-            debug: debug,
-          );
-        } catch (err) {
-          echo('ERROR! Pre-build secret \'$secretName\' not found in secrets directory.');
-          echo('  This will cause nixos-rebuild to fail if it needs credentials from this secret.');
-          echo('  Add it with: nix-infra store-secret --secret="<value>" --store-as-secret="$secretName"');
-        }
-      }
-    }
-
     sshClient.close();
+
   });
 
   await Future.wait(deployments);

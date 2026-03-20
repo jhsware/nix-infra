@@ -46,38 +46,20 @@ The encryption key (`SECRETS_PWD`) is either typed interactively at each command
 
 When deploying secrets to nodes, the decrypted secret value is **piped via stdin** through an SSH tunnel. This is a deliberate design choice — secrets never appear in command-line arguments where they could be visible via `ps` on either the local or remote machine.
 
-For regular secrets:
 ```
 stdin → SSH tunnel → systemd-creds encrypt - /root/secrets/<name>
 ```
 
-For pre-build secrets:
-```
-stdin → SSH tunnel → cat > /run/keys/<name>
-```
 
 ## Secrets at Runtime
 
-nix-infra uses two mechanisms for runtime secrets, depending on when the secret is needed:
-
-### Standard Secrets — systemd-creds
-
-Regular secrets are encrypted on the remote node using `systemd-creds encrypt`. This ties the encrypted secret to the specific machine's TPM or machine ID, so the encrypted file is only decryptable on that node.
+Secrets are encrypted on the remote node using `systemd-creds encrypt`. This ties the encrypted secret to the specific machine's TPM or machine ID, so the encrypted file is only decryptable on that node.
 
 Encrypted secrets are stored in `/root/secrets/` on each node.
 
 **Current gap:** While `systemd-creds encrypt` is correctly implemented, the generated NixOS service configurations do not yet use `LoadCredentialEncrypted=` directives. This means services access secrets through other mechanisms rather than the full systemd credential pipeline. See `lib/analysis/SYSTEMD_CREDENTIALS_ANALYSIS.md` for the detailed analysis.
 
-### Pre-build Secrets — tmpfs
 
-Some secrets are needed at NixOS build time (before `nixos-rebuild switch` runs), such as container registry credentials for fetching private images. These are deployed decrypted to `/run/keys/` on a tmpfs filesystem:
-
-- `/run/keys/` is a tmpfs mount (never written to persistent storage)
-- File permissions are mode `0400` (root read-only)
-- Directory permissions are mode `700`
-- Available to the nix-daemon during builds
-
-The NixOS configuration is updated to reference these paths so the build system can access them. See [Known Limitations](#known-limitations) for security implications.
 
 ## Certificate Authority (PKI)
 
@@ -189,8 +171,7 @@ Hetzner Cloud does not provide virtual TPM, so `systemd-creds encrypt` falls bac
 ### SECRETS_PWD Exposure Risk
 The secrets password is either typed interactively or set as an environment variable. If set as an environment variable, it may appear in shell history, process listings, or CI logs. Use care with how you provide this value.
 
-### Pre-build Secrets Accessibility
-Pre-build secrets are deployed decrypted to `/run/keys/` (tmpfs). While this avoids writing them to persistent storage, any root process on the node can read them while they exist. They are necessary for the NixOS build process but represent a wider exposure window than systemd-creds encrypted secrets.
+
 
 ### dartssh Library Constraints
 The dartssh2 Dart library limits SSH algorithm choices. RSA 2048-bit keys are used instead of Ed25519, and some MAC algorithms may not be available. This is a trade-off of using a pure-Dart SSH implementation.

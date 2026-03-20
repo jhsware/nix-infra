@@ -128,7 +128,7 @@ nix-infra delivers NixOS configuration files to each node via SFTP. The deployme
 
 ### Variable Substitution
 
-Config files use a placeholder syntax `[%%key%%]` that gets replaced at deploy time. The substitution system supports three types of placeholders:
+Config files use a placeholder syntax `[%%key%%]` that gets replaced at deploy time. The substitution system supports these types of placeholders:
 
 | Placeholder | Example | Replaced With |
 |-------------|---------|---------------|
@@ -136,9 +136,9 @@ Config files use a placeholder syntax `[%%key%%]` that gets replaced at deploy t
 | Node IP addresses | `[%%worker001.ipv4%%]` | The public IP address of the named node |
 | Overlay IPs | `[%%worker001.overlayIp%%]` | The WireGuard overlay IP of the named node (cluster mode) |
 | Secrets | `[%%secrets/api-key%%]` | The secret name (file deployed separately via systemd-creds) |
-| Pre-build secrets | `[%%pre-build-secrets/github-netrc%%]` | The secret name (deployed decrypted to `/run/keys/` for build-time access) |
 
-The substitution is performed by the `substitute()` function in `lib/helpers.dart`. When a `[%%secrets/...%%]` or `[%%pre-build-secrets/...%%]` placeholder is encountered, the secret name is added to a list of expected secrets that the deployment pipeline then provisions on the target node.
+The substitution is performed by the `substitute()` function in `lib/helpers.dart`. When a `[%%secrets/...%%]` placeholder is encountered, the secret name is added to a list of expected secrets that the deployment pipeline then provisions on the target node.
+
 
 ## Service Mesh (Cluster Mode)
 
@@ -204,6 +204,7 @@ This allows services to communicate using stable overlay IPs regardless of the u
 Secrets flow through three stages:
 
 ```mermaid
+```mermaid
 stateDiagram
 direction LR
 
@@ -215,7 +216,6 @@ state cli_deploy {
   local_secrets_dec : secrets/
   ssh
   systemd_credentials : systemd-credentials
-  pre_build : /run/keys/ (tmpfs)
 }
 cli_deploy : nix-infra deploy
 
@@ -225,7 +225,6 @@ secret --> local_secrets_enc : encrypt
 local_secrets_enc --> cli_deploy
 local_secrets_dec --> ssh : decrypt
 ssh --> systemd_credentials : encrypt
-ssh --> pre_build : pre-build secrets
 
 cli_deploy --> systemd
 systemd --> application : decrypt
@@ -235,7 +234,8 @@ systemd --> application : decrypt
 2. **Deployment** — During deploy, secrets are decrypted locally, sent over SSH, and re-encrypted on the target using `systemd-creds encrypt` into `/root/secrets/`.
 3. **Runtime** — systemd services decrypt secrets at startup using `systemd-creds`.
 
-**Pre-build secrets** follow an additional path: they are also deployed decrypted to `/run/keys/` on tmpfs (mode 0400, root-only) so the Nix daemon can access them during `nixos-rebuild switch`. This solves the chicken-and-egg problem where credentials are needed to fetch packages before the systemd service that manages them exists.
+The `syncSecrets()` function ensures only expected secrets exist on each node, removing any that are no longer referenced.
+
 
 The `syncSecrets()` function ensures only expected secrets exist on each node, removing any that are no longer referenced.
 

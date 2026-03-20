@@ -146,39 +146,101 @@ When `deploy-apps` runs, the deployment pipeline handles secrets automatically:
 
 If a referenced secret doesn't exist in the local `secrets/` directory, the deployment prints a warning and continues. The warning includes instructions for creating the missing secret.
 
-## Pre-build Secrets
+## Netrc Credentials for Private Repositories
 
 ### The Problem
 
-Some NixOS modules need credentials available to the Nix daemon *before* `nixos-rebuild switch` runs. For example, fetching source from private GitHub repositories using `fetchFromGitHub` requires a netrc file.
+Some NixOS builds need credentials to fetch source from private repositories (e.g., via `fetchFromGitHub`). The Nix daemon requires a netrc file to authenticate these requests. However, Nix only supports a single `nix.settings.netrc-file` per machine, so when you have multiple private repository credentials (e.g., GitHub and GitLab), they must be combined into one file.
 
-Regular secrets (deployed encrypted via systemd-creds) are only decrypted at runtime by systemd services. But if the systemd service that decrypts them doesn't exist until after the first successful rebuild, the credentials aren't available yet — a chicken-and-egg problem.
+### The Solution: NixOS Module + systemd LoadCredentialEncrypted
 
-### The Solution
+A NixOS module (`modules/netrc.nix`) handles credential management declaratively using systemd's `LoadCredentialEncrypted` and an `ExecStartPre` script:
 
-Pre-build secrets are deployed in two ways:
+1. **nix-infra deploys encrypted secrets** to `/root/secrets/` using the regular `[%%secrets/...%%]` pattern
+2. **The NixOS module configures nix-daemon's systemd service** with:
+   - `LoadCredentialEncrypted` entries for each credential, pointing at `/root/secrets/<name>`
+   - An `ExecStartPre` script that reads decrypted credentials from `$CREDENTIALS_DIRECTORY/<name>` and combines them into a single netrc file
+   - `ExecStopPost` to clean up the decrypted combined file
+3. **`nix.settings.netrc-file`** is set declaratively to the combined file path
 
-1. **Encrypted** to `/root/secrets/` — For the systemd service to use after rebuild (same as regular secrets)
-2. **Decrypted** to `/run/keys/<name>` on tmpfs — For the Nix daemon to use during rebuild
+This approach is self-healing: after reboot or daemon restart, `ExecStartPre` automatically re-creates the combined netrc from encrypted copies.
 
-The decrypted files are:
+### Setup
 
-- Written to tmpfs (`/run/keys/`), never to persistent storage
-- Set to mode `0400` (root read-only)
-- Cleared on reboot or overwritten by the NixOS-managed systemd services after a successful rebuild
+#### 1. Add the NixOS module to your project
 
-### Automatic nix.conf Updates
+Create `modules/netrc.nix` in your infrastructure project:
 
-For secrets containing "netrc" in their name, nix-infra automatically:
+```nix
+{ config, lib, pkgs, ... }:
 
-1. Appends `netrc-file = /run/keys/<name>` to `/etc/nix/nix.conf` (if not already present)
-2. Restarts `nix-daemon` to pick up the new setting
+let
+  cfg = config.infrastructure.netrc-file;
+in
+{
+  options.infrastructure.netrc-file = {
+    target = lib.mkOption {
+      type = lib.types.str;
+      default = "/run/keys/combined-netrc";
+      description = "Path where the combined netrc file will be written.";
+    };
 
-## Example: GitHub PAT as a netrc Pre-build Secret
+    credentials = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = ''
+        List of encrypted credential names in /root/secrets/ to combine
+        into a single netrc file. Each credential is decrypted by systemd
+        via LoadCredentialEncrypted and concatenated into the target file.
+      '';
+    };
+  };
 
-This is a complete walkthrough for setting up private GitHub repository access during NixOS builds.
+  config = lib.mkIf (cfg.credentials != []) {
+    systemd.services.nix-daemon.serviceConfig = {
+      LoadCredentialEncrypted =
+        map (name: "${name}:/root/secrets/${name}") cfg.credentials;
 
-### 1. Create the netrc file
+      ExecStartPre = [
+        "+${pkgs.writeShellScript "combine-netrc" ''
+          set -euo pipefail
+          target="${cfg.target}"
+          mkdir -p "$(dirname "$target")"
+          : > "$target"
+          ${lib.concatMapStrings (name: ''
+            cat "$CREDENTIALS_DIRECTORY/${name}" >> "$target"
+            printf '\n' >> "$target"
+          '') cfg.credentials}
+          chmod 0400 "$target"
+        ''}"
+      ];
+
+      ExecStopPost = [
+        "+${pkgs.writeShellScript "cleanup-netrc" ''
+          rm -f "${cfg.target}"
+        ''}"
+      ];
+    };
+
+    nix.settings.netrc-file = cfg.target;
+  };
+}
+```
+
+Import it from `modules/default.nix`:
+
+```nix
+{
+  imports = [
+    ./netrc.nix
+    # ... other modules
+  ];
+}
+```
+
+Since `configuration.nix` (deployed during init) already imports `./modules/default.nix`, the module is available from the very first `nixos-rebuild switch`.
+
+#### 2. Create the netrc files
 
 ```
 machine github.com
@@ -186,28 +248,31 @@ login x-access-token
 password ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-Save this as `./github-netrc` (do not commit this file).
+Save as `./github-netrc` (do not commit this file).
 
-### 2. Store it as a secret
+#### 3. Store them as secrets
 
 ```sh
-# From a file
 nix-infra secrets store --name="github-netrc" --secret-file="./github-netrc"
-
-# Or piped via stdin
-cat ./github-netrc | nix-infra secrets store --name="github-netrc"
+nix-infra secrets store --name="gitlab-netrc" --secret-file="./gitlab-netrc"
 ```
 
-This encrypts the file and stores it in `secrets/github-netrc`.
-
-### 3. Reference it in your node configuration
+#### 4. Reference in your node configuration
 
 ```nix
 # In nodes/worker001.nix:
-nix.settings.netrc-file = "/run/keys/[%%pre-build-secrets/github-netrc%%]";
+infrastructure.netrc-file = {
+  target = "/run/keys/combined-netrc";
+  credentials = [
+    "[%%secrets/github-netrc%%]"
+    "[%%secrets/gitlab-netrc%%]"
+  ];
+};
 ```
 
-### 4. Deploy
+After nix-infra substitution, `[%%secrets/github-netrc%%]` becomes `github-netrc`, and the encrypted secret files are deployed to `/root/secrets/`.
+
+#### 5. Deploy
 
 ```sh
 # Cluster mode
@@ -219,12 +284,23 @@ nix-infra fleet deploy-apps --target="worker001" --rebuild
 
 During deployment, nix-infra will:
 
-1. Deploy the secret encrypted to `/root/secrets/github-netrc`
-2. Deploy it decrypted to `/run/keys/github-netrc` (mode 0400, root-only, tmpfs)
-3. Add `netrc-file = /run/keys/github-netrc` to `/etc/nix/nix.conf`
-4. Restart `nix-daemon` to pick up the new setting
-5. Run `nixos-rebuild switch` which can now fetch from private GitHub repos
+1. Deploy the secrets encrypted to `/root/secrets/github-netrc` and `/root/secrets/gitlab-netrc`
+2. Run `nixos-rebuild switch`
+3. On daemon start, systemd decrypts the credentials via `LoadCredentialEncrypted`
+4. The `ExecStartPre` script combines them into `/run/keys/combined-netrc`
+5. The Nix daemon uses the combined netrc file to fetch from private repos
 
+### Benefits
+
+- **Multiple credentials** — Combine any number of netrc files into one
+- **Self-healing** — After reboot, nix-daemon's ExecStartPre automatically re-creates the combined netrc
+- **Daemon restart resilience** — Credentials are re-decrypted on every daemon start
+- **NixOS-native** — Uses systemd-creds and NixOS service configuration declaratively
+- **No bootstrap issues** — Module is deployed as part of base infrastructure during init
+
+### Legacy Pre-build Secrets
+
+The `[%%pre-build-secrets/...%%]` placeholder pattern is still supported for backward compatibility. Pre-build secrets are deployed both encrypted to `/root/secrets/` and decrypted to `/run/keys/<name>` on tmpfs. However, for netrc credentials, the NixOS module approach above is recommended as it supports multiple credentials and is self-healing.
 ## Security Properties
 
 - **Encryption at rest** — Secrets are encrypted with OpenSSL PBKDF2 in the local `secrets/` directory

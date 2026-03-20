@@ -493,8 +493,8 @@ class ActionCommand extends Command {
     final String? secretNamespace = argResults?['save-as-secret'];
     final List<String> envVars = argResults?['env-vars']?.split(',') ?? [];
 
-    final String secretsPwd =
-        env['SECRETS_PWD'] ?? readPassword(ReadPasswordEnum.secrets, batch);
+    final String secretsPwd = getSecretsPassword(env, batch);
+
 
     final provider = await getProvider(workingDir, env, sshKeyName);
 

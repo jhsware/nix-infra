@@ -56,9 +56,17 @@ final writeCreateMode = SftpFileOpenMode.write |
     SftpFileOpenMode.truncate;
 
 String substitute(String contents, Map<String, String> substitutions,
-    {List<String>? expectedSecrets}) {
+    {List<String>? expectedSecrets, List<String>? expectedNetrcSecrets}) {
   return contents.replaceAllMapped(RegExp(r'\[\%\%(.*?)\%\%\]'), (match) {
     final key = match.group(1);
+    // Netrc secrets are deployed as encrypted files AND pre-decrypted into
+    // combined-netrc before nixos-rebuild to solve the bootstrap problem.
+    if (key != null && key.startsWith('secrets.netrc/')) {
+      final secretName = key.split('/').last;
+      expectedSecrets?.add(secretName);
+      expectedNetrcSecrets?.add(secretName);
+      return secretName;
+    }
     // Secrets are deployed as encrypted files in /root/secrets of target node
     // so they won't exist in substitions.
     if (key != null && key.startsWith('secrets/')) {

@@ -88,7 +88,8 @@ Stream<Uint8List> convertToUint8List(Stream<List<int>> input) {
 
 Future<void> sftpSend(SftpClient sftp, String localPath, String remotePath,
     {Map<String, String>? substitutions,
-    List<String>? expectedSecrets}) async {
+    List<String>? expectedSecrets,
+    List<String>? expectedNetrcSecrets}) async {
   final local = File(localPath);
   final remote = await sftp.open(remotePath, mode: writeCreateMode);
   if (substitutions == null) {
@@ -98,7 +99,8 @@ Future<void> sftpSend(SftpClient sftp, String localPath, String remotePath,
     // Do variable substitution [%%sshKeyPubPath%%] => { sshKeyPubPath }
     final contents = await local.readAsString();
     final newContents = substitute(contents, substitutions,
-        expectedSecrets: expectedSecrets);
+        expectedSecrets: expectedSecrets,
+        expectedNetrcSecrets: expectedNetrcSecrets);
     await remote.writeBytes(Uint8List.fromList(utf8.encode(newContents)));
   }
 }

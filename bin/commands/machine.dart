@@ -60,7 +60,6 @@ class InitMachineCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String nodeType = argResults!['node-module'];
@@ -71,26 +70,22 @@ class InitMachineCommand extends Command {
 
     final secretsPwd = getSecretsPassword(env, batch);
 
-
     // Allow passing multiple node names
     final provider = await getProvider(workingDir, env, sshKeyName);
     final nodes = await provider.getServers(only: targets);
-    final cluster = await provider.getServers();
 
     await deployMachine(
       workingDir,
-      cluster,
       nodes,
       nixVersion: nixOsVersion,
       nodeType: nodeType,
       secretsPwd: secretsPwd,
-      debug: debug,
     );
 
     await nixosRebuild(workingDir, nodes);
-
   }
 }
+
 
 class UpdateCommand extends Command {
   @override
@@ -112,7 +107,7 @@ class UpdateCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = parent?.argResults!['debug'];
+    // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String nodeType = argResults!['node-module'];
@@ -123,21 +118,16 @@ class UpdateCommand extends Command {
     areYouSure('Are you sure you want to update the nodes?', batch);
     final secretsPwd = getSecretsPassword(env, batch);
 
-
     // Allow passing multiple node names
     final provider = await getProvider(workingDir, env, sshKeyName);
     final nodes = await provider.getServers(only: targets);
-    final cluster = await provider.getServers();
     await deployMachine(
       workingDir,
-      cluster,
       nodes,
       nixVersion: nixOsVersion,
       nodeType: nodeType,
       secretsPwd: secretsPwd,
-      debug: debug,
     );
-
 
     if (rebuild) {
       echo("Rebuilding...");
@@ -145,6 +135,7 @@ class UpdateCommand extends Command {
     }
   }
 }
+
 
 class DestroyCommand extends Command {
   @override

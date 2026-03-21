@@ -84,22 +84,12 @@ Future<void> bootstrapNetrcOnRemote(
 
 Future<void> deployMachine(
   Directory workingDir,
-  Iterable<ClusterNode> cluster,
   Iterable<ClusterNode> nodes, {
   required String nixVersion,
   required String nodeType,
   required String secretsPwd,
   bool debug = false,
 }) async {
-  // Create list of variable substitutions
-  final substitutions = Map.fromEntries(
-      cluster.map((node) => MapEntry('${node.name}.ipv4', node.ipAddr)));
-
-  // Add cache key for nix-store
-  final trustedKeys = await getTrustedKeys(workingDir, secretsPwd);
-  substitutions['nix-store.trusted-public-keys'] =
-      "[ ${trustedKeys.map((k) => '"$k"').join(" ")} ]";
-
   final deployments = nodes.map((node) async {
     final authorizedKey =
         await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
@@ -130,8 +120,11 @@ Future<void> deployMachine(
     await sftpSend(
         sftp, '${workingDir.path}/$nodeType', '/etc/nixos/cluster_node.nix');
 
-    // Deploy modules
+    // Create modules directory
     await sftpMkDir(sftp, '/etc/nixos/modules');
+    await sftpMkDir(sftp, '/etc/nixos/app_modules');
+
+    // Send modules to the node
     final modulesDir = Directory('${workingDir.path}/modules');
     for (final file in modulesDir.listSync()) {
       if (file is File) {
@@ -140,64 +133,13 @@ Future<void> deployMachine(
       }
     }
 
-    // Deploy per-node config with secret detection
-    Map<String, String> nodeSubstitutions = Map.from(substitutions);
-    nodeSubstitutions['localhost.hostname'] = node.name;
-    nodeSubstitutions['localhost.ipv4'] = node.ipAddr;
-
-    final expectedSecrets = <String>[];
-    final expectedNetrcSecrets = <String>[];
-    final nodeConfigFile = File(
-        '${workingDir.path}/nodes/${node.name}.nix');
-    if (nodeConfigFile.existsSync()) {
-      await sftpSend(
-        sftp,
-        nodeConfigFile.path,
-        '/etc/nixos/${node.name}.nix',
-        substitutions: nodeSubstitutions,
-        expectedSecrets: expectedSecrets,
-        expectedNetrcSecrets: expectedNetrcSecrets,
-      );
-    }
-
-    // Deploy app modules recursively
-    await sftpMkDir(sftp, '/etc/nixos/app_modules');
-    final appModulesDir = Directory('${workingDir.path}/app_modules');
-    final queue = appModulesDir.listSync();
-    while (queue.isNotEmpty) {
-      final item = queue.removeAt(0);
-      final itemRelPath = item.path.replaceFirst(appModulesDir.path, '');
-      if (item is File) {
-        await sftpSend(sftp, item.path, '/etc/nixos/app_modules$itemRelPath');
-      } else if (item is Directory) {
-        await sftpMkDir(sftp, '/etc/nixos/app_modules$itemRelPath');
-        queue.addAll(item.listSync());
-      }
-    }
-
-    // Sync secrets
-    await syncSecrets(
-      workingDir,
-      cluster,
-      node,
-      expectedSecrets,
-      sshClient,
-      secretsPwd: secretsPwd,
-      debug: debug,
-      overlayNetwork: false,
-    );
-
-    // Bootstrap netrc: secrets were deployed by syncSecrets above,
-    // now decrypt and combine them for the upcoming nixos-rebuild.
-    await bootstrapNetrcOnRemote(
-        sshClient, node.name, expectedNetrcSecrets, debug: debug);
-
     sftp.close();
     sshClient.close();
   });
 
   await Future.wait(deployments);
 }
+
 
 Future<void> deployClusterNode(
   Directory workingDir,

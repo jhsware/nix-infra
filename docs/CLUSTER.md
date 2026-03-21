@@ -425,7 +425,7 @@ Cluster mode adds overlay network substitutions beyond what fleet mode provides:
 | `[%%localhost.ipv4%%]` | Current node's public IP |
 | `[%%localhost.overlayIp%%]` | Current node's overlay IP |
 | `[%%secrets/<name>%%]` | Secret name (deployed encrypted via systemd-creds) |
-
+| `[%%secrets.netrc/<name>%%]` | Secret name (deployed encrypted AND pre-decrypted into combined-netrc before rebuild) |
 
 These substitutions are applied when deploying configuration files and secrets to nodes.
 

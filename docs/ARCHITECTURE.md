@@ -136,7 +136,7 @@ Config files use a placeholder syntax `[%%key%%]` that gets replaced at deploy t
 | Node IP addresses | `[%%worker001.ipv4%%]` | The public IP address of the named node |
 | Overlay IPs | `[%%worker001.overlayIp%%]` | The WireGuard overlay IP of the named node (cluster mode) |
 | Secrets | `[%%secrets/api-key%%]` | The secret name (file deployed separately via systemd-creds) |
-
+| Netrc secrets | `[%%secrets.netrc/github-netrc%%]` | The secret name (deployed via systemd-creds AND pre-decrypted into combined-netrc before rebuild) |
 The substitution is performed by the `substitute()` function in `lib/helpers.dart`. When a `[%%secrets/...%%]` placeholder is encountered, the secret name is added to a list of expected secrets that the deployment pipeline then provisions on the target node.
 
 

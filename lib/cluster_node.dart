@@ -203,6 +203,7 @@ Future<void> deployAppsOnNode(
             '-- overlayIp not found in etcd --';
 
     final expectedSecrets = <String>[];
+    final expectedNetrcSecrets = <String>[];
     final nodeConfigFile = File(
         '${testDir == null ? workingDir.path : testDir.path}/nodes/${node.name}.nix');
     if (nodeConfigFile.existsSync()) {
@@ -212,6 +213,7 @@ Future<void> deployAppsOnNode(
         '/etc/nixos/${node.name}.nix',
         substitutions: nodeSubstitutions,
         expectedSecrets: expectedSecrets,
+        expectedNetrcSecrets: expectedNetrcSecrets,
       );
     }
     await syncSecrets(
@@ -224,6 +226,25 @@ Future<void> deployAppsOnNode(
       debug: debug,
       overlayNetwork: overlayNetwork,
     );
+
+    // Bootstrap netrc: decrypt and combine netrc secrets into
+    // /run/keys/combined-netrc BEFORE nixos-rebuild so that
+    // fetchFromGitHub can authenticate to private repos.
+    if (expectedNetrcSecrets.isNotEmpty) {
+      if (debug) echoDebug("Bootstrap netrc on ${node.name}");
+      if (debug) echoDebug('Netrc secrets: $expectedNetrcSecrets');
+      final decryptCmds = expectedNetrcSecrets
+          .map((name) =>
+              'systemd-creds decrypt /root/secrets/$name - >> /run/keys/combined-netrc')
+          .join('\n');
+      await sshClient.run('''
+        mkdir -p /run/keys
+        rm -f /run/keys/combined-netrc
+        $decryptCmds
+        chmod 0400 /run/keys/combined-netrc
+      ''');
+      if (debug) echoDebug("Netrc bootstrap complete on ${node.name}");
+    }
 
     // Create modules directory
     await sftpMkDir(sftp, '/etc/nixos/app_modules');

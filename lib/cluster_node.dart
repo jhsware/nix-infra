@@ -230,6 +230,9 @@ Future<void> deployAppsOnNode(
     // Bootstrap netrc: decrypt and combine netrc secrets into
     // /run/keys/combined-netrc BEFORE nixos-rebuild so that
     // fetchFromGitHub can authenticate to private repos.
+    // Also configure the nix daemon to use the netrc file via a
+    // systemd drop-in, since nix.settings.netrc-file hasn't been
+    // applied yet (it's part of the config being built).
     if (expectedNetrcSecrets.isNotEmpty) {
       if (debug) echoDebug("Bootstrap netrc on ${node.name}");
       if (debug) echoDebug('Netrc secrets: $expectedNetrcSecrets');
@@ -242,6 +245,14 @@ Future<void> deployAppsOnNode(
         rm -f /run/keys/combined-netrc
         $decryptCmds
         chmod 0400 /run/keys/combined-netrc
+
+        # Tell the nix daemon to use the netrc file for this build.
+        # On NixOS /etc/nix/nix.conf is read-only (nix store symlink),
+        # so we inject the setting via a systemd drop-in using NIX_CONFIG.
+        mkdir -p /etc/systemd/system/nix-daemon.service.d
+        printf '[Service]\\nEnvironment="NIX_CONFIG=netrc-file = /run/keys/combined-netrc"\\n' > /etc/systemd/system/nix-daemon.service.d/netrc-bootstrap.conf
+        systemctl daemon-reload
+        systemctl restart nix-daemon
       ''');
       if (debug) echoDebug("Netrc bootstrap complete on ${node.name}");
     }

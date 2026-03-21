@@ -26,12 +26,69 @@ Future<Iterable<String>> getTrustedKeys(
   return trustedKeys;
 }
 
+/// Scan a file for [%%secrets.netrc/<name>%%] patterns and return the names.
+///
+/// Reads the file locally and runs substitute() with empty substitutions
+/// just to extract the netrc secret names. This is used by deployMachine()
+/// which needs to know about netrc secrets without deploying the file.
+List<String> scanForNetrcSecrets(String filePath) {
+  final file = File(filePath);
+  if (!file.existsSync()) return [];
+
+  final contents = file.readAsStringSync();
+  final expectedNetrcSecrets = <String>[];
+  substitute(contents, {}, expectedNetrcSecrets: expectedNetrcSecrets);
+  return expectedNetrcSecrets;
+}
+
+/// Bootstrap netrc credentials on a remote node.
+///
+/// Decrypts the specified secrets from /root/secrets/ and combines them
+/// into /run/keys/combined-netrc. Then configures the nix daemon to use
+/// the netrc file via a systemd drop-in (since nix.settings.netrc-file
+/// hasn't been applied yet on a fresh install).
+///
+/// This must be called AFTER the secrets have been deployed to
+/// /root/secrets/ (via syncSecrets or deploySecretOnRemote).
+Future<void> bootstrapNetrcOnRemote(
+  SSHClient sshClient,
+  String nodeName,
+  List<String> netrcSecretNames, {
+  bool debug = false,
+}) async {
+  if (netrcSecretNames.isEmpty) return;
+
+  if (debug) echoDebug("Bootstrap netrc on $nodeName");
+  if (debug) echoDebug('Netrc secrets: $netrcSecretNames');
+
+  final decryptCmds = netrcSecretNames
+      .map((name) =>
+          'systemd-creds decrypt /root/secrets/$name - >> /run/keys/combined-netrc')
+      .join('\n');
+  await sshClient.run('''
+    mkdir -p /run/keys
+    rm -f /run/keys/combined-netrc
+    $decryptCmds
+    chmod 0400 /run/keys/combined-netrc
+
+    # Tell the nix daemon to use the netrc file for this build.
+    # On NixOS /etc/nix/nix.conf is read-only (nix store symlink),
+    # so we inject the setting via a systemd drop-in using NIX_CONFIG.
+    mkdir -p /etc/systemd/system/nix-daemon.service.d
+    printf '[Service]\\nEnvironment="NIX_CONFIG=netrc-file = /run/keys/combined-netrc"\\n' > /etc/systemd/system/nix-daemon.service.d/netrc-bootstrap.conf
+    systemctl daemon-reload
+    systemctl restart nix-daemon
+  ''');
+  if (debug) echoDebug("Netrc bootstrap complete on $nodeName");
+}
+
 Future<void> deployMachine(
   Directory workingDir,
   Iterable<ClusterNode> nodes, {
   required String nixVersion,
   required String nodeType,
   required String secretsPwd,
+  bool debug = false,
 }) async {
   final deployments = nodes.map((node) async {
     // Update configuration.nix by adding imported configuration file
@@ -75,6 +132,43 @@ Future<void> deployMachine(
         await sftpSend(
             sftp, file.path, '/etc/nixos/modules/${file.path.split('/').last}');
       }
+    }
+
+    // Check if the per-node config references netrc secrets that need
+    // to be available before nixos-rebuild (bootstrap problem).
+    // Scan the node config file locally without deploying it (that's
+    // done by deployAppsOnNode), just to discover netrc secret names.
+    final nodeConfigPath =
+        '${workingDir.path}/nodes/${node.name}.nix';
+    final netrcSecretNames = scanForNetrcSecrets(nodeConfigPath);
+
+    if (netrcSecretNames.isNotEmpty) {
+      // Deploy the netrc secrets to /root/secrets/ on the remote.
+      // In deployAppsOnNode this is handled by syncSecrets(), but
+      // deployMachine() doesn't do a full secret sync, so we deploy
+      // just the netrc secrets directly.
+      await sftpMkDir(sftp, '/root/secrets');
+      for (final secretName in netrcSecretNames) {
+        try {
+          final secret =
+              await readSecret(workingDir, secretsPwd, secretName);
+          await deploySecretOnRemote(
+            workingDir,
+            secretName,
+            secret,
+            node,
+            sshClient: sshClient,
+            debug: debug,
+          );
+        } catch (err) {
+          echo("WARNING! Netrc secret '$secretName' not found in secrets directory, skipping");
+          echo("  Add it with: nix-infra store-secret --secret=\"<value>\" --store-as-secret=\"$secretName\"");
+        }
+      }
+
+      // Bootstrap: decrypt, combine, and configure nix daemon
+      await bootstrapNetrcOnRemote(
+          sshClient, node.name, netrcSecretNames, debug: debug);
     }
 
     sftp.close();
@@ -227,35 +321,10 @@ Future<void> deployAppsOnNode(
       overlayNetwork: overlayNetwork,
     );
 
-    // Bootstrap netrc: decrypt and combine netrc secrets into
-    // /run/keys/combined-netrc BEFORE nixos-rebuild so that
-    // fetchFromGitHub can authenticate to private repos.
-    // Also configure the nix daemon to use the netrc file via a
-    // systemd drop-in, since nix.settings.netrc-file hasn't been
-    // applied yet (it's part of the config being built).
-    if (expectedNetrcSecrets.isNotEmpty) {
-      if (debug) echoDebug("Bootstrap netrc on ${node.name}");
-      if (debug) echoDebug('Netrc secrets: $expectedNetrcSecrets');
-      final decryptCmds = expectedNetrcSecrets
-          .map((name) =>
-              'systemd-creds decrypt /root/secrets/$name - >> /run/keys/combined-netrc')
-          .join('\n');
-      await sshClient.run('''
-        mkdir -p /run/keys
-        rm -f /run/keys/combined-netrc
-        $decryptCmds
-        chmod 0400 /run/keys/combined-netrc
-
-        # Tell the nix daemon to use the netrc file for this build.
-        # On NixOS /etc/nix/nix.conf is read-only (nix store symlink),
-        # so we inject the setting via a systemd drop-in using NIX_CONFIG.
-        mkdir -p /etc/systemd/system/nix-daemon.service.d
-        printf '[Service]\\nEnvironment="NIX_CONFIG=netrc-file = /run/keys/combined-netrc"\\n' > /etc/systemd/system/nix-daemon.service.d/netrc-bootstrap.conf
-        systemctl daemon-reload
-        systemctl restart nix-daemon
-      ''');
-      if (debug) echoDebug("Netrc bootstrap complete on ${node.name}");
-    }
+    // Bootstrap netrc: secrets were deployed by syncSecrets above,
+    // now decrypt and combine them for the upcoming nixos-rebuild.
+    await bootstrapNetrcOnRemote(
+        sshClient, node.name, expectedNetrcSecrets, debug: debug);
 
     // Create modules directory
     await sftpMkDir(sftp, '/etc/nixos/app_modules');

@@ -59,6 +59,16 @@ cat ./github-netrc | nix-infra secrets store --name="github-netrc"
 
 The `--secret` and `--secret-file` options are mutually exclusive. If neither is provided and stdin has piped data, it will be read automatically. If no secret is provided from any source, the command exits with an error.
 
+## Reading Secrets
+
+The `secrets read` command decrypts and displays a stored secret. This is useful for verifying secret contents without deploying.
+
+```sh
+nix-infra secrets read --name="secrets.netrc/github-netrc"
+```
+
+The secret is decrypted using `SECRETS_PWD` and printed to stdout. Use `--batch` to suppress interactive prompts (reads password from `.env` only).
+
 ## Storing Action Output as Secrets
 
 When running remote actions (e.g., creating a database user), you can capture the output as a secret:
@@ -119,7 +129,9 @@ infrastructure.netrc-file.credentials = [
 ];
 ```
 
-The `[%%secrets.netrc/<name>%%]` pattern works like regular secrets (deployed encrypted via `syncSecrets`), but additionally triggers a **pre-build bootstrap step**: before `nixos-rebuild switch`, nix-infra decrypts and combines all netrc secrets into `/run/keys/combined-netrc` on the remote machine. This solves the bootstrap problem where `nixos-rebuild` needs netrc credentials to fetch from private repos (e.g., via `fetchFromGitHub`), but the NixOS module's `ExecStartPre` only runs after a successful rebuild.
+The `[%%secrets.netrc/<name>%%]` pattern works like regular secrets (deployed encrypted via `syncSecrets`), but additionally triggers a **pre-build bootstrap step**: before `nixos-rebuild switch`, nix-infra decrypts and combines all netrc secrets into `/run/keys/combined-netrc` on the remote machine. This solves the bootstrap problem where `nixos-rebuild` needs netrc credentials to fetch from private repos (e.g., via `builtins.fetchTarball`), but the NixOS module's `ExecStartPre` only runs after a successful rebuild.
+
+See [PRIVATE_REPO_PACKAGES.md](./PRIVATE_REPO_PACKAGES.md) for a detailed guide on building packages from private repositories.
 
 ### Variable Substitution
 
@@ -153,7 +165,9 @@ If a referenced secret doesn't exist in the local `secrets/` directory, the depl
 
 ### The Problem
 
-Some NixOS builds need credentials to fetch source from private repositories (e.g., via `fetchFromGitHub`). The Nix daemon requires a netrc file to authenticate these requests. However, Nix only supports a single `nix.settings.netrc-file` per machine, so when you have multiple private repository credentials (e.g., GitHub and GitLab), they must be combined into one file.
+Some NixOS builds need credentials to fetch source from private repositories (e.g., via `builtins.fetchTarball`). The Nix daemon requires a netrc file to authenticate these requests. However, Nix only supports a single `nix.settings.netrc-file` per machine, so when you have multiple private repository credentials (e.g., GitHub and GitLab), they must be combined into one file.
+
+For a detailed guide on building packages from private repositories, including common pitfalls and the full architecture, see [PRIVATE_REPO_PACKAGES.md](./PRIVATE_REPO_PACKAGES.md).
 
 ### The Solution: NixOS Module + systemd LoadCredentialEncrypted
 
@@ -245,13 +259,17 @@ Since `configuration.nix` (deployed during init) already imports `./modules/defa
 
 #### 2. Create the netrc files
 
+#### 2. Create the netrc files
+
 ```
-machine github.com
+machine api.github.com
 login x-access-token
 password ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Save as `./github-netrc` (do not commit this file).
+
+**Important:** The `machine` field must exactly match the hostname in the URL being fetched. For packages using `builtins.fetchTarball` with GitHub API URLs, use `machine api.github.com`. Using `machine github.com` will NOT work — the Nix daemon matches netrc entries by hostname. See [PRIVATE_REPO_PACKAGES.md](./PRIVATE_REPO_PACKAGES.md) for details on hostname matching.
 
 #### 3. Store them as secrets
 

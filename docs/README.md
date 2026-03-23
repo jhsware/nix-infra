@@ -11,6 +11,7 @@ nix-infra is a command-line tool for building a private PaaS on Hetzner Cloud or
 | [Cluster Guide](./CLUSTER.md) | Setting up and managing HA clusters with etcd, certificates, overlay networking, and service mesh |
 | [Fleet Guide](./FLEET.md) | Managing standalone machines or fleets without cluster orchestration |
 | [Secrets](./SECRETS.md) | Secrets management — storing, deploying, and managing encrypted secrets |
+| [Private Repo Packages](./PRIVATE_REPO_PACKAGES.md) | Building Nix packages from private GitHub/GitLab repositories |
 
 | [Security](./SECURITY.md) | Security model, trust boundaries, encryption, and known limitations |
 

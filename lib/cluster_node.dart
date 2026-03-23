@@ -44,9 +44,10 @@ List<String> scanForNetrcSecrets(String filePath) {
 /// Bootstrap netrc credentials on a remote node.
 ///
 /// Decrypts the specified secrets from /root/secrets/ and combines them
-/// into /run/keys/combined-netrc. Then configures the nix daemon to use
-/// the netrc file via a systemd drop-in (since nix.settings.netrc-file
-/// hasn't been applied yet on a fresh install).
+/// into /run/keys/combined-netrc. Then restarts the nix-daemon so it
+/// picks up the netrc file via nix.settings.netrc-file which is already
+/// configured in the NixOS configuration but wasn't active when the
+/// daemon first started (before the netrc file existed).
 ///
 /// This must be called AFTER the secrets have been deployed to
 /// /root/secrets/ (via syncSecrets or deploySecretOnRemote).
@@ -71,12 +72,9 @@ Future<void> bootstrapNetrcOnRemote(
     $decryptCmds
     chmod 0400 /run/keys/combined-netrc
 
-    # Tell the nix daemon to use the netrc file for this build.
-    # On NixOS /etc/nix/nix.conf is read-only (nix store symlink),
-    # so we inject the setting via a systemd drop-in using NIX_CONFIG.
-    mkdir -p /etc/systemd/system/nix-daemon.service.d
-    printf '[Service]\\nEnvironment="NIX_CONFIG=netrc-file = /run/keys/combined-netrc"\\n' > /etc/systemd/system/nix-daemon.service.d/netrc-bootstrap.conf
-    systemctl daemon-reload
+    # Restart nix-daemon so it picks up the netrc file.
+    # The NixOS config sets nix.settings.netrc-file = "/run/keys/combined-netrc"
+    # but on first deploy the daemon started before this file existed.
     systemctl restart nix-daemon
   ''');
   if (debug) echoDebug("Netrc bootstrap complete on $nodeName");

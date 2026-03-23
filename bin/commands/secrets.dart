@@ -19,6 +19,7 @@ class SecretsCommand extends Command {
       ..addOption('env', help: 'Path to environment file');
 
     addSubcommand(StoreCommand());
+    addSubcommand(ReadCommand());
   }
 }
 
@@ -61,6 +62,38 @@ class StoreCommand extends Command {
     echo('Secret saved as $secretName');
   }
 }
+
+class ReadCommand extends Command {
+  @override
+  final name = 'read';
+  @override
+  final description = 'Read and decrypt a secret';
+
+  ReadCommand() {
+    argParser.addFlag('batch', defaultsTo: false);
+    argParser.addOption('name', mandatory: true, help: 'Secret name to read');
+  }
+
+  @override
+  void run() async {
+    final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final env = await loadEnv(parent?.argResults!['env'], workingDir);
+
+    final bool batch = argResults!['batch'];
+    final String secretName = argResults!['name'];
+
+    final secretsPwd = getSecretsPassword(env, batch);
+
+    try {
+      final secret = await readSecret(workingDir, secretsPwd, secretName);
+      stdout.write(secret);
+    } catch (e) {
+      echo('ERROR: $e');
+      exit(1);
+    }
+  }
+}
+
 /// Resolve the secret value from one of three sources (in priority order):
 /// 1. `--secret-file` reads file contents, preserving multi-line
 /// 2. `--secret` inline string value
@@ -100,32 +133,3 @@ Future<String> resolveSecret({
   echo('ERROR! No secret provided. Use --secret, --secret-file, or pipe via stdin');
   exit(2);
 }
-
-// class DestoryCommand extends Command {
-//   @override
-//   final name = 'destroy';
-//   @override
-//   final description = 'Destroy a secret';
-
-//   DestoryCommandz() {
-//     argParser.addFlag('batch', defaultsTo: false);
-//     argParser.addOption('name', mandatory: true);
-//   }
-
-//   @override
-//   void run() async {
-//     final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
-//     final env = await loadEnv(parent?.argResults!['env'], workingDir);
-
-//     // final bool debug = parent?.argResults!['debug'];
-//     final bool batch = argResults!['batch'];
-//     final String secret = argResults!['secret'];
-//     final String secretName = argResults!['name'];
-    
-//     // 1. Check that it exists
-//     // 2. Remove the secret
-//     // 3. QUESTION: Should we remove it from machines?
-//     // 4. QUESTION: Should we add an update that can update on all machines too?
-
-//   }
-// }

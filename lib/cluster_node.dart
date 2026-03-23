@@ -72,19 +72,6 @@ Future<void> bootstrapNetrcOnRemote(
     $decryptCmds
     chmod 0400 /run/keys/combined-netrc
 
-    # The decrypted content may be base64-encoded (nix-infra stores
-    # multiline secrets as base64). Detect and decode: netrc files
-    # must start with "machine" in plain text.
-    NETRC_CONTENT=\$(cat /run/keys/combined-netrc)
-    if ! echo "\$NETRC_CONTENT" | head -1 | grep -qF "machine"; then
-      # Doesn't start with "machine" — try base64 decode
-      DECODED=\$(echo "\$NETRC_CONTENT" | base64 -d 2>/dev/null || echo "")
-      if echo "\$DECODED" | head -1 | grep -qF "machine"; then
-        echo "\$DECODED" > /run/keys/combined-netrc
-        chmod 0400 /run/keys/combined-netrc
-      fi
-    fi
-
     # Ensure nix.conf has the netrc-file setting.
     # On first deploy, the NixOS config hasn't been applied yet so
     # nix.settings.netrc-file isn't in nix.conf. We add it manually

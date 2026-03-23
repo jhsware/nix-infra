@@ -72,11 +72,25 @@ Future<void> bootstrapNetrcOnRemote(
     $decryptCmds
     chmod 0400 /run/keys/combined-netrc
 
-    # Restart nix-daemon so it picks up the netrc file.
-    # The NixOS config sets nix.settings.netrc-file = "/run/keys/combined-netrc"
-    # but on first deploy the daemon started before this file existed.
+    # Ensure nix.conf has the netrc-file setting.
+    # On first deploy, the NixOS config hasn't been applied yet so
+    # nix.settings.netrc-file isn't in nix.conf. We add it manually
+    # so the nix-daemon can authenticate git clone HTTPS requests.
+    # After nixos-rebuild succeeds, NixOS manages nix.conf declaratively.
+    NIX_CONF=\$(readlink -f /etc/nix/nix.conf || echo /etc/nix/nix.conf)
+    if [ -L /etc/nix/nix.conf ]; then
+      cp "\$NIX_CONF" /etc/nix/nix.conf.tmp
+      rm /etc/nix/nix.conf
+      mv /etc/nix/nix.conf.tmp /etc/nix/nix.conf
+    fi
+    if ! grep -q 'netrc-file' /etc/nix/nix.conf 2>/dev/null; then
+      echo 'netrc-file = /run/keys/combined-netrc' >> /etc/nix/nix.conf
+    fi
+
+    # Restart nix-daemon so it picks up the netrc file and setting.
     systemctl restart nix-daemon
   ''');
+
   if (debug) echoDebug("Netrc bootstrap complete on $nodeName");
 }
 

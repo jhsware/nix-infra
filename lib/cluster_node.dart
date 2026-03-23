@@ -26,16 +26,69 @@ Future<Iterable<String>> getTrustedKeys(
   return trustedKeys;
 }
 
+/// Scan a file for [%%secrets.netrc/<name>%%] patterns and return the names.
+///
+/// Reads the file locally and runs substitute() with empty substitutions
+/// just to extract the netrc secret names. This is used by deployMachine()
+/// which needs to know about netrc secrets without deploying the file.
+List<String> scanForNetrcSecrets(String filePath) {
+  final file = File(filePath);
+  if (!file.existsSync()) return [];
+
+  final contents = file.readAsStringSync();
+  final expectedNetrcSecrets = <String>[];
+  substitute(contents, {}, expectedNetrcSecrets: expectedNetrcSecrets);
+  return expectedNetrcSecrets;
+}
+
+/// Bootstrap netrc credentials on a remote node.
+///
+/// Decrypts the specified secrets from /root/secrets/ and combines them
+/// into /run/keys/combined-netrc. Then restarts the nix-daemon so it
+/// picks up the netrc file via nix.settings.netrc-file which is already
+/// configured in the NixOS configuration but wasn't active when the
+/// daemon first started (before the netrc file existed).
+///
+/// This must be called AFTER the secrets have been deployed to
+/// /root/secrets/ (via syncSecrets or deploySecretOnRemote).
+Future<void> bootstrapNetrcOnRemote(
+  SSHClient sshClient,
+  String nodeName,
+  List<String> netrcSecretNames, {
+  bool debug = false,
+}) async {
+  if (netrcSecretNames.isEmpty) return;
+
+  if (debug) echoDebug("Bootstrap netrc on $nodeName");
+  if (debug) echoDebug('Netrc secrets: $netrcSecretNames');
+
+  final decryptCmds = netrcSecretNames
+      .map((name) =>
+          'systemd-creds decrypt /root/secrets/$name - >> /run/keys/combined-netrc')
+      .join('\n');
+  await sshClient.run('''
+    mkdir -p /run/keys
+    rm -f /run/keys/combined-netrc
+    $decryptCmds
+    chmod 0400 /run/keys/combined-netrc
+
+    # Restart nix-daemon so it picks up the netrc file.
+    # The NixOS config sets nix.settings.netrc-file = "/run/keys/combined-netrc"
+    # but on first deploy the daemon started before this file existed.
+    systemctl restart nix-daemon
+  ''');
+  if (debug) echoDebug("Netrc bootstrap complete on $nodeName");
+}
+
 Future<void> deployMachine(
   Directory workingDir,
   Iterable<ClusterNode> nodes, {
   required String nixVersion,
   required String nodeType,
   required String secretsPwd,
+  bool debug = false,
 }) async {
   final deployments = nodes.map((node) async {
-    // Update configuration.nix by adding imported configuration file
-    // for control plane services such as etcd.
     final authorizedKey =
         await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
 
@@ -44,6 +97,7 @@ Future<void> deployMachine(
         await getSshClient(workingDir, node, connection);
     final sftp = await sshClient.sftp();
 
+    // Deploy base NixOS configuration
     await sftpSend(sftp, '${workingDir.path}/configuration.nix',
         '/etc/nixos/configuration.nix',
         substitutions: {
@@ -83,6 +137,7 @@ Future<void> deployMachine(
 
   await Future.wait(deployments);
 }
+
 
 Future<void> deployClusterNode(
   Directory workingDir,
@@ -203,7 +258,7 @@ Future<void> deployAppsOnNode(
             '-- overlayIp not found in etcd --';
 
     final expectedSecrets = <String>[];
-    final expectedPreBuildSecrets = <String>[];
+    final expectedNetrcSecrets = <String>[];
     final nodeConfigFile = File(
         '${testDir == null ? workingDir.path : testDir.path}/nodes/${node.name}.nix');
     if (nodeConfigFile.existsSync()) {
@@ -213,7 +268,7 @@ Future<void> deployAppsOnNode(
         '/etc/nixos/${node.name}.nix',
         substitutions: nodeSubstitutions,
         expectedSecrets: expectedSecrets,
-        expectedPreBuildSecrets: expectedPreBuildSecrets,
+        expectedNetrcSecrets: expectedNetrcSecrets,
       );
     }
     await syncSecrets(
@@ -226,6 +281,11 @@ Future<void> deployAppsOnNode(
       debug: debug,
       overlayNetwork: overlayNetwork,
     );
+
+    // Bootstrap netrc: secrets were deployed by syncSecrets above,
+    // now decrypt and combine them for the upcoming nixos-rebuild.
+    await bootstrapNetrcOnRemote(
+        sshClient, node.name, expectedNetrcSecrets, debug: debug);
 
     // Create modules directory
     await sftpMkDir(sftp, '/etc/nixos/app_modules');
@@ -245,69 +305,11 @@ Future<void> deployAppsOnNode(
     }
     sftp.close();
 
-    // Deploy pre-build secrets (decrypted to /run/keys/) and update nix.conf
-    if (expectedPreBuildSecrets.isNotEmpty) {
-      if (debug) echoDebug('Deploying pre-build secrets on ${node.name}: $expectedPreBuildSecrets');
-      for (final secretName in expectedPreBuildSecrets) {
-        try {
-          final secret = await readSecret(workingDir, secretsPwd, secretName);
-          final decryptedSecret =
-              substitute(secret, nodeSubstitutions);
-          await deployPreBuildSecretOnRemote(
-            workingDir,
-            secretName,
-            decryptedSecret,
-            node,
-            sshClient: sshClient,
-            debug: debug,
-          );
-        } catch (err) {
-          echo('ERROR! Pre-build secret \'$secretName\' not found in secrets directory.');
-          echo('  This will cause nixos-rebuild to fail if it needs credentials from this secret.');
-          echo('  Add it with: nix-infra store-secret --secret="<value>" --store-as-secret="$secretName"');
-        }
-      }
-      await updateNixConfForPreBuildSecrets(
-        workingDir,
-        node,
-        expectedPreBuildSecrets,
-        debug: debug,
-      );
-    }
-
     sshClient.close();
+
   });
 
   await Future.wait(deployments);
-}
-
-/// Update /etc/nix/nix.conf with settings required by pre-build secrets
-/// and restart nix-daemon to pick up the changes.
-///
-/// Currently supports the netrc convention: secrets with names containing
-/// 'netrc' get a `netrc-file = /run/keys/<name>` entry appended to nix.conf.
-Future<void> updateNixConfForPreBuildSecrets(
-  Directory workingDir,
-  ClusterNode node,
-  List<String> preBuildSecrets, {
-  bool debug = false,
-}) async {
-  if (preBuildSecrets.isEmpty) return;
-
-  final commands = <String>[];
-  for (final name in preBuildSecrets) {
-    // Convention: add netrc-file setting for secrets containing 'netrc'
-    if (name.contains('netrc')) {
-      commands.add(
-          'grep -q "netrc-file = /run/keys/$name" /etc/nix/nix.conf || echo "netrc-file = /run/keys/$name" >> /etc/nix/nix.conf');
-    }
-  }
-  if (commands.isNotEmpty) {
-    commands.add('systemctl restart nix-daemon');
-    final script = commands.join(' && ');
-    await runCommandOverSsh(workingDir, node, script);
-    if (debug) echoDebug('Updated nix.conf and restarted nix-daemon on ${node.name}');
-  }
 }
 
 Future<void> registerClusterNode(

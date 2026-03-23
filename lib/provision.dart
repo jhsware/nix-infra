@@ -338,17 +338,11 @@ Future<void> rebuildNixos(Directory workingDir,
 Future<void> nixosRebuild(
     Directory workingDir, Iterable<ClusterNode> nodes) async {
   final rebuilders = nodes.map((node) async {
-    final sshClient = SSHClient(
-      await SSHSocket.connect(node.ipAddr, 22),
-      username: node.username,
-      identities: [
-        ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
-      ],
-    );
-
-    await sshClient.run('nixos-rebuild switch --fast --impure');
-    sshClient.close();
+    final output = await runCommandOverSsh(
+        workingDir, node, 'nixos-rebuild switch --fast --impure');
+    echoFromNode(node.name, output);
   });
 
   await Future.wait(rebuilders);
 }
+

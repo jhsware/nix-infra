@@ -1,0 +1,35 @@
+filesystem:
+  - ./lib
+  - ./bin
+  - ./test
+  - ./docs
+  - ./pubspec.yaml
+  - ./README.md
+  - ./RELEASING.md
+  - ./TESTING.md
+  - ./CHANGELOG.md
+  - ./.env.in
+  - ./.gitignore
+  - ./.github
+  - ./scripts
+  - ./claude.sh
+  - ./build.sh
+  - ./build-linux.sh
+git:
+  - ./lib
+  - ./bin
+  - ./test
+  - ./docs
+  - ./pubspec.yaml
+  - ./README.md
+  - ./RELEASING.md
+  - ./TESTING.md
+  - ./CHANGELOG.md
+  - ./.env.in
+  - ./.gitignore
+  - ./.github
+  - ./pubspec.lock
+  - ./scripts
+  - ./claude.sh
+  - ./build.sh
+  - ./build-linux.sh

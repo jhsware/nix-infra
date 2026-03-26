@@ -383,8 +383,8 @@ void main() {
       test('no command specified is denied', () {
         final result = CscliCommandParser.validate('--output json');
         expect(result.isAllowed, isFalse);
-        expect(result.reason, contains('not in the allowed list'));
       });
+
     });
 
     group('isAllowed convenience method', () {

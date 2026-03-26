@@ -8,6 +8,7 @@ import 'mcp_server/journalctl.dart';
 import 'mcp_server/systemctl.dart';
 import 'mcp_server/system_stats.dart';
 import 'mcp_server/file_upload.dart';
+import 'mcp_server/cscli.dart';
 import 'package:nix_infra/helpers.dart';
 
 void main(List<String> arguments) async {
@@ -174,5 +175,21 @@ void main(List<String> arguments) async {
     callback: fileUpload.callback,
   );
 
+  // *** Cscli ***
+
+  final cscli = Cscli(
+    workingDir: workingDir,
+    sshKeyName: sshKeyName,
+    provider: provider,
+  );
+
+  server.tool(
+    "cscli",
+    description: Cscli.description,
+    inputSchemaProperties: Cscli.inputSchemaProperties,
+    callback: cscli.callback,
+  );
+
   server.connect(StdioServerTransport());
+
 }

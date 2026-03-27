@@ -9,6 +9,11 @@ import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 
+void stderrLog(String message) {
+  stderr.writeln(message);
+}
+
+
 void echo(String message) {
   final tmp = message.split('\n');
   final outp = tmp.map((str) => '- $str');
@@ -303,8 +308,7 @@ Future<DotEnv> loadEnv(String? envFileName, Directory workingDir) async {
 Future<Directory> getWorkingDirectory(String dirName) async {
   final workingDir = Directory(path.normalize(path.absolute(dirName)));
   if (!await workingDir.exists()) {
-    echo('ERROR! Working directory does not exist: ${workingDir.path}');
-    exit(2);
+    throw Exception('Working directory does not exist: ${workingDir.path}');
   }
   return workingDir;
 }

@@ -179,12 +179,12 @@ void main() {
   ];
   
   for (String cmd in testCommands) {
-    print('Input: $cmd');
+    stderr.writeln('Input: $cmd');
     List<ParsedCommand> parsed = BashCommandParser.parseCommands(cmd);
     for (int i = 0; i < parsed.length; i++) {
-      print('  Command ${i + 1}: ${parsed[i]}');
+      stderr.writeln('  Command ${i + 1}: ${parsed[i]}');
     }
-    print('');
+    stderr.writeln('');
   }
 }
 */

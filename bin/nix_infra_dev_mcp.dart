@@ -17,15 +17,21 @@ void main(List<String> arguments) async {
     }
   }
 
-  final workingDir =
-      await getWorkingDirectory(projectDir ?? Directory.current.path);
+  late final Directory workingDir;
+  try {
+    workingDir =
+        await getWorkingDirectory(projectDir ?? Directory.current.path);
+  } catch (e) {
+    stderr.writeln('ERROR! $e');
+    exit(2);
+  }
 
   final env = await loadEnv('.env', workingDir);
 
   final sshKeyName = env['SSH_KEY'];
 
   if (sshKeyName == null) {
-    echo('ERROR! env-var SSH_KEY is missing');
+    stderr.writeln('ERROR! env-var SSH_KEY is missing');
     exit(2);
   }
 
@@ -38,7 +44,7 @@ void main(List<String> arguments) async {
       sshKeyName: sshKeyName,
     );
   } catch (e) {
-    echo('ERROR! $e');
+    stderr.writeln('ERROR! $e');
     exit(2);
   }
 

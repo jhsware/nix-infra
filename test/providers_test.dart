@@ -382,7 +382,6 @@ servers:
     });
 
     test('getServers filters by only parameter', () async {
-    test('getServers filters by only parameter', () async {
       final configFile = File('${tempDir.path}/servers.yaml');
       await configFile.writeAsString('''
 servers:

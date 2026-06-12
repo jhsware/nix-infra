@@ -16,7 +16,7 @@ abstract class McpTool {
 
   /// Timeout for establishing SSH connections from MCP tools. Kept short
   /// by default so unreachable servers fail fast. Override with the
-  /// --ssh-timeout=<seconds> CLI argument when on a slow connection.
+  /// `--ssh-timeout=<seconds>` CLI argument when on a slow connection.
   final Duration sshConnectTimeout;
 
   McpTool({

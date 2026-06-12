@@ -14,6 +14,7 @@ import 'package:nix_infra/helpers.dart';
 void main(List<String> arguments) async {
   String? projectDir;
   String dotEnvFile = '.env';
+  int sshTimeoutSeconds = 10;
 
   // Parse arguments
   for (final arg in arguments) {
@@ -23,7 +24,16 @@ void main(List<String> arguments) async {
     if (arg.startsWith('--env=')) {
       dotEnvFile = arg.substring('--env='.length);
     }
+    if (arg.startsWith('--ssh-timeout=')) {
+      sshTimeoutSeconds =
+          int.tryParse(arg.substring('--ssh-timeout='.length)) ?? 10;
+    }
   }
+
+  // Timeout for establishing SSH connections from MCP tools. Short by
+  // default (10s) so unreachable servers fail fast. Increase with
+  // --ssh-timeout=<seconds> when on a poor internet connection.
+  final sshConnectTimeout = Duration(seconds: sshTimeoutSeconds);
 
   late final Directory workingDir;
   try {
@@ -71,6 +81,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    sshConnectTimeout: sshConnectTimeout,
   );
 
   server.tool(
@@ -116,6 +127,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    sshConnectTimeout: sshConnectTimeout,
   );
 
   server.tool(
@@ -131,6 +143,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    sshConnectTimeout: sshConnectTimeout,
   );
 
   server.tool(
@@ -171,6 +184,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    sshConnectTimeout: sshConnectTimeout,
   );
 
   server.tool(
@@ -186,6 +200,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    sshConnectTimeout: sshConnectTimeout,
   );
 
   server.tool(

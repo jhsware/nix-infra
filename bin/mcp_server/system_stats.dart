@@ -33,6 +33,7 @@ Operations:
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    super.sshConnectTimeout,
   });
 
   @override
@@ -96,7 +97,8 @@ Operations:
     // Run command on all nodes in parallel
     final List<Future<String>> futures = nodes.map((node) async {
       try {
-        final output = await runCommandOverSsh(workingDir, node, command);
+        final output = await runCommandOverSsh(workingDir, node, command,
+            connectTimeout: sshConnectTimeout);
         return '--- ${node.name} (${node.ipAddr}) ---\n$output';
       } catch (e) {
         return '--- ${node.name} (${node.ipAddr}) ---\nError: $e';

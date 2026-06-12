@@ -184,6 +184,43 @@ void main() {
       final config = SelfHostedServerConfig.fromYaml('static-server', yaml);
       expect(config.isCloudManaged, isFalse);
     });
+
+    test('fromYaml parses vpn as profile name', () {
+      final yaml = {
+        'ip': '192.168.1.10',
+        'ssh_key': './ssh/key',
+        'vpn': 'office-wg',
+      };
+
+      final config = SelfHostedServerConfig.fromYaml('vpn-server', yaml);
+      expect(config.vpn, equals('office-wg'));
+    });
+
+    test('fromYaml parses vpn boolean true as "default"', () {
+      final yaml = {
+        'ip': '192.168.1.10',
+        'ssh_key': './ssh/key',
+        'vpn': true,
+      };
+
+      final config = SelfHostedServerConfig.fromYaml('vpn-server', yaml);
+      expect(config.vpn, equals('default'));
+    });
+
+    test('vpn is null when absent or false', () {
+      final yamlAbsent = {
+        'ip': '192.168.1.10',
+        'ssh_key': './ssh/key',
+      };
+      expect(SelfHostedServerConfig.fromYaml('s1', yamlAbsent).vpn, isNull);
+
+      final yamlFalse = {
+        'ip': '192.168.1.10',
+        'ssh_key': './ssh/key',
+        'vpn': false,
+      };
+      expect(SelfHostedServerConfig.fromYaml('s2', yamlFalse).vpn, isNull);
+    });
   });
 
   group('SelfHosting', () {
@@ -318,6 +355,33 @@ servers:
       expect(servers.length, equals(3));
     });
 
+    test('getServers propagates vpn to ClusterNode', () async {
+      final configFile = File('${tempDir.path}/servers.yaml');
+      await configFile.writeAsString('''
+servers:
+  vpn-server:
+    ip: 192.168.1.10
+    ssh_key: ./ssh/key1
+    vpn: office-wg
+  public-server:
+    ip: 192.168.1.20
+    ssh_key: ./ssh/key2
+''');
+
+      final provider = await SelfHosting.load(tempDir);
+      final servers = (await provider.getServers()).toList();
+
+      final vpnServer = servers.firstWhere((s) => s.name == 'vpn-server');
+      expect(vpnServer.vpn, equals('office-wg'));
+      expect(vpnServer.requiresVpn, isTrue);
+
+      final publicServer =
+          servers.firstWhere((s) => s.name == 'public-server');
+      expect(publicServer.vpn, isNull);
+      expect(publicServer.requiresVpn, isFalse);
+    });
+
+    test('getServers filters by only parameter', () async {
     test('getServers filters by only parameter', () async {
       final configFile = File('${tempDir.path}/servers.yaml');
       await configFile.writeAsString('''

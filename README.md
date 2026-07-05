@@ -56,6 +56,19 @@ Comprehensive documentation is available in the [`docs/`](./docs/) directory:
 | [Secrets](./docs/SECRETS.md) | Secrets management — encryption, storage, deployment, pre-build secrets |
 | [Security](./docs/SECURITY.md) | Security model — transport, encryption, PKI, known limitations, recommendations |
 
+## Using nix-infra as a Dart Library
+
+Besides the CLI and MCP binaries, this package is consumed as a **Dart library** by other tools. Known consumers:
+
+- **sysops_server** (`terminal_module`) — uses the provider API to discover fleet hosts for interactive SSH terminals, so host discovery follows exactly the same rules as the CLI (`servers.yaml` self-hosting first, cloud provider fallback) without duplicating inventory logic.
+
+Treat the following as public API — avoid breaking changes, and note any change in the CHANGELOG:
+
+- `ProviderFactory.autoDetect` / `detectProviderType` (`lib/providers/provider_factory.dart`)
+- `InfrastructureProvider.getServers` (`lib/providers/provider.dart`)
+- `ClusterNode` (`lib/types.dart`) — notably `name`, `ipAddr`, `username`, and `getEffectiveSshKeyPath`
+- `SelfHosting` servers.yaml parsing (`lib/providers/self_hosting.dart`)
+
 ## Building From Source
 
 1. Install Nix (choose one):

@@ -49,6 +49,14 @@
 /// 3. Add a new entry to the `ProviderType` enum
 /// 4. Update `ProviderFactory` to support the new provider
 /// 5. Export the new provider from this file
+/// 
+/// ## External library consumers
+/// 
+/// This provider API is consumed as a Dart library by external tools —
+/// notably sysops_server's `terminal_module`, which uses
+/// `ProviderFactory.autoDetect` + `getServers()` for fleet-host discovery.
+/// See "Using nix-infra as a Dart Library" in the README before making
+/// breaking changes here or in `ClusterNode` (lib/types.dart).
 library;
 
 

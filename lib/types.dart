@@ -32,8 +32,16 @@ class ClusterNode {
   /// in non-standard locations.
   String? sshKeyPath;
 
+  /// Optional name of the VPN connection required to reach this server.
+  /// Loaded from the `vpn` field in servers.yaml. When set and SSH is not
+  /// reachable, the consuming agent should ask the user to start this VPN.
+  String? vpn;
+
   ClusterNode(this.name, this.ipAddr, this.id, this.sshKeyName,
-      {this.sshKeyPath});
+      {this.sshKeyPath, this.vpn});
+
+  /// Whether a VPN connection is required to reach this server.
+  bool get requiresVpn => vpn != null;
 
   /// Get the effective SSH key path, resolving relative to workingDir if needed.
   String getEffectiveSshKeyPath(String workingDirPath) {

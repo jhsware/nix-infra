@@ -1,5 +1,9 @@
 NOTE: This are pre 1.0 releases, this means there can be breaking changes on minor releases without clear warnings.
 
+## Unreleased
+- added optional `vpn` parameter per server in servers.yaml (name of VPN connection required to reach the server), exposed by the MCP list-available-nodes tool and in SSH connection error hints so agents can ask the user to start the VPN
+- MCP tools now use a 10s SSH connect timeout by default (fail fast when a server is unreachable); override with --ssh-timeout=<seconds> on poor connections
+
 ## 0.17.0-beta
 - added support for converting RHEL-based servers to NixOS (self hosting)
 - fixed bug in ascii progress bar that made it wander to the bottom of the screen

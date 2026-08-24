@@ -14,10 +14,16 @@ abstract class McpTool {
   final String sshKeyName;
   final InfrastructureProvider provider;
 
+  /// Timeout for establishing SSH connections from MCP tools. Kept short
+  /// by default so unreachable servers fail fast. Override with the
+  /// `--ssh-timeout=<seconds>` CLI argument when on a slow connection.
+  final Duration sshConnectTimeout;
+
   McpTool({
     required this.workingDir,
     required this.provider,
     required this.sshKeyName,
+    this.sshConnectTimeout = const Duration(seconds: 10),
   });
   
   /// Callback method that executes the tool's functionality

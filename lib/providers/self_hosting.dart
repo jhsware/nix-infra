@@ -13,6 +13,7 @@ class SelfHostedServerConfig {
   final String? description;
   final String? username;
   final String? provider;
+  final String? vpn;
   final Map<String, dynamic>? metadata;
 
   SelfHostedServerConfig({
@@ -22,6 +23,7 @@ class SelfHostedServerConfig {
     this.description,
     this.username,
     this.provider,
+    this.vpn,
     this.metadata,
   });
 
@@ -37,10 +39,22 @@ class SelfHostedServerConfig {
       description: yaml['description'] as String?,
       username: yaml['username'] as String?,
       provider: yaml['provider'] as String?,
+      vpn: _vpnFromYaml(yaml['vpn']),
       metadata: yaml['metadata'] != null 
           ? Map<String, dynamic>.from(yaml['metadata'] as Map)
           : null,
     );
+  }
+
+  /// Parse the optional `vpn` field.
+  ///
+  /// Accepts a string naming the VPN connection/profile required to reach
+  /// the server (e.g. `vpn: office-wg`), or `true` for an unnamed VPN
+  /// requirement. Absent or `false` means no VPN is needed.
+  static String? _vpnFromYaml(dynamic value) {
+    if (value == null || value == false) return null;
+    if (value == true) return 'default';
+    return value.toString();
   }
 }
 
@@ -70,6 +84,7 @@ class SelfHostedServerConfig {
 ///     ip: 192.168.1.20
 ///     ssh_key: ./ssh/db-server-1
 ///     description: Primary database server
+///     vpn: office-wg  # optional, name of VPN connection required to reach it
 /// ```
 class SelfHosting implements InfrastructureProvider {
   final Directory _workingDir;
@@ -252,6 +267,7 @@ class SelfHosting implements InfrastructureProvider {
         config.name.hashCode, // Use name hash as ID
         sshKeyName,
         sshKeyPath: config.sshKeyPath,
+        vpn: config.vpn,
       );
       // Set custom username if specified
       if (config.username != null) {

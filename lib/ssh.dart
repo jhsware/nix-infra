@@ -10,13 +10,24 @@ import 'package:dartssh2/dartssh2.dart';
 
 final sshTimeoutDuration = Duration(milliseconds: 1000);
 
+/// Hint appended to SSH connection errors for nodes that require a VPN
+/// connection (the `vpn` field in servers.yaml). Lets a consuming agent
+/// know it should ask the user to start the VPN and retry.
+String vpnRequiredHint(ClusterNode node) => node.requiresVpn
+    ? '\nNOTE: This node requires the VPN connection "${node.vpn}" to be '
+        'active on this machine. If the server is unreachable, ask the user '
+        'to start the VPN connection and retry.'
+    : '';
+
 Future<String> runCommandOverSsh(
-    Directory workingDir, ClusterNode node, String cmd) async {
+    Directory workingDir, ClusterNode node, String cmd,
+    {Duration? connectTimeout}) async {
   SSHSocket? socket;
   SSHClient? sshClient;
 
   try {
-    socket = await SSHSocket.connect(node.ipAddr, 22);
+    socket =
+        await SSHSocket.connect(node.ipAddr, 22, timeout: connectTimeout);
 
     sshClient = SSHClient(
       socket,
@@ -42,11 +53,13 @@ Future<String> runCommandOverSsh(
     if (errorMsg.contains('Connection refused')) {
       throw Exception(
           'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
-          'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22');
+          'Reason: Connection refused - SSH service may not be running or firewall is blocking port 22'
+          '${vpnRequiredHint(node)}');
     } else if (errorMsg.contains('timed out') || errorMsg.contains('timeout')) {
       throw Exception(
           'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n'
-          'Reason: Connection timeout - server may be unreachable or offline');
+          'Reason: Connection timeout - server may be unreachable or offline'
+          '${vpnRequiredHint(node)}');
     } else if (errorMsg.contains('Authentication failed') ||
         errorMsg.contains('auth')) {
       throw Exception(
@@ -55,7 +68,7 @@ Future<String> runCommandOverSsh(
     } else {
       throw Exception(
           'Failed to execute command on server "${node.name}" at ${node.ipAddr}:22\n'
-          'Reason: $errorMsg');
+          'Reason: $errorMsg${vpnRequiredHint(node)}');
     }
   }
 }
@@ -199,8 +212,14 @@ Future<void> waitForSsh(Iterable<ClusterNode> nodes) async {
 }
 
 Future<SSHSocket> waitAndGetSshConnection(ClusterNode node,
-    {maxTries = 20}) async {
+    {int maxTries = 20, Duration? totalBudget}) async {
   Exception? lastError;
+
+  if (totalBudget != null) {
+    // Each attempt takes up to ~1.5s (1s connect timeout + 500ms delay).
+    final tries = (totalBudget.inMilliseconds / 1500).floor();
+    maxTries = tries > 0 ? tries : 1;
+  }
 
   while (maxTries-- > 0) {
     try {
@@ -239,7 +258,7 @@ Future<SSHSocket> waitAndGetSshConnection(ClusterNode node,
     errorMsg += 'Reason: $errorDetails';
   }
 
-  throw Exception(errorMsg);
+  throw Exception(errorMsg + vpnRequiredHint(node));
 }
 
 Future<SSHClient> getSshClient(

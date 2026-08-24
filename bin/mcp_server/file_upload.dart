@@ -29,6 +29,7 @@ class FileUpload extends McpTool {
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    super.sshConnectTimeout,
   });
 
   @override
@@ -69,7 +70,8 @@ class FileUpload extends McpTool {
       final List<String> uploadedFiles = [];
 
       try {
-        final connection = await waitAndGetSshConnection(node);
+        final connection =
+            await waitAndGetSshConnection(node, totalBudget: sshConnectTimeout);
         final sshClient = await getSshClient(workingDir, node, connection);
         final sftp = await sshClient.sftp();
 

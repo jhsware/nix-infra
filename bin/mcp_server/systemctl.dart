@@ -30,6 +30,7 @@ class SystemCtl extends McpTool {
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    super.sshConnectTimeout,
   });
 
   @override
@@ -85,9 +86,9 @@ class SystemCtl extends McpTool {
     final tmpTargets = target.split(',');
     final nodes = await provider.getServers(only: tmpTargets);
     
-    final Iterable<Future<String>> futures = nodes
-        .toList()
-        .map((node) => runCommandOverSsh(workingDir, node, cmd.join(' ')));
+    final Iterable<Future<String>> futures = nodes.toList().map((node) =>
+        runCommandOverSsh(workingDir, node, cmd.join(' '),
+            connectTimeout: sshConnectTimeout));
     final result = (await Future.wait(futures)).join('\n');
 
     return CallToolResult.fromContent(

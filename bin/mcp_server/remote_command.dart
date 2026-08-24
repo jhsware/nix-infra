@@ -20,6 +20,7 @@ class RemoteCommand extends McpTool {
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    super.sshConnectTimeout,
   });
 
   @override
@@ -47,9 +48,9 @@ class RemoteCommand extends McpTool {
       );
     }
 
-    final Iterable<Future<String>> futures = nodes
-        .toList()
-        .map((node) => runCommandOverSsh(workingDir, node, command));
+    final Iterable<Future<String>> futures = nodes.toList().map((node) =>
+        runCommandOverSsh(workingDir, node, command,
+            connectTimeout: sshConnectTimeout));
     final result = (await Future.wait(futures)).join('\n');
 
     return CallToolResult.fromContent(

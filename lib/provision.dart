@@ -163,12 +163,20 @@ test -x /nix/var/nix/profiles/system/bin/switch-to-configuration || { echo "NIX_
 
 # Some picks from the nixos-infect script
 /nix/var/nix/profiles/system/sw/bin/nix-collect-garbage 2>/dev/null || true
-/nix/var/nix/profiles/system/bin/switch-to-configuration boot || { echo "NIX_INFRA_FAIL ${node.name}: bootloader install failed"; exit 1; }
+# NIXOS_INSTALL_BOOTLOADER=1 forces a full bootloader install on every run.
+# A retried install wipes the ESP, and without this flag install-grub skips
+# grub-install because its state file is unchanged, which leaves the ESP
+# without an EFI boot file.
+NIXOS_INSTALL_BOOTLOADER=1 /nix/var/nix/profiles/system/bin/switch-to-configuration boot || { echo "NIX_INFRA_FAIL ${node.name}: bootloader install failed"; exit 1; }
 
 if [ -f /boot/grub/grub.cfg ]; then
   grep -q NixOS /boot/grub/grub.cfg || { echo "NIX_INFRA_FAIL ${node.name}: no NixOS entry in /boot/grub/grub.cfg"; exit 1; }
 else
   echo "NIX_INFRA_FACT ${node.name}: no /boot/grub/grub.cfg, menu check skipped"
+fi
+
+if [ -d /sys/firmware/efi ]; then
+  find /boot -maxdepth 4 -ipath '*/efi/boot/boot*.efi' 2>/dev/null | grep -q . || { echo "NIX_INFRA_FAIL ${node.name}: no EFI boot file found under /boot"; exit 1; }
 fi
 
 echo "NIX_INFRA_OK ${node.name}"

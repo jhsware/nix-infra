@@ -106,6 +106,15 @@ class ProvisionCommand extends Command {
       return;
     }
 
+    // In debug mode the install script does not reboot the node, so the
+    // NixOS check below would always see the old OS and retry the install.
+    // A rerun of the install wipes the ESP, so retries must not happen here.
+    if (debug) {
+      echo('NOTE: --debug is set. The nodes were NOT rebooted and the '
+          'conversion check is skipped. Reboot the nodes manually.');
+      return;
+    }
+
     final allServers = await provider.getServers(only: nodeNames);
     int triesLeft = 3;
     List<ClusterNode> failedConversions =

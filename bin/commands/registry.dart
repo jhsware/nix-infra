@@ -21,7 +21,9 @@ class RegistryCommand extends Command {
           help: 'Name of machine hosting the registry', mandatory: true)
       ..addOption('ssh-key', help: 'SSH key name')
       ..addOption('env', help: 'Path to environment file')
-      ..addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
+      ..addFlag('debug',
+          defaultsTo: false,
+          help: 'Verbose debug logging (also available as global --debug)');
 
     addSubcommand(PublishImageCommand());
     addSubcommand(ListImagesCommand());
@@ -52,7 +54,8 @@ class PublishImageCommand extends Command {
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
-    final bool debug = parent?.argResults!['debug'];
+    final bool debug = (globalResults?['debug'] == true) ||
+        (parent?.argResults?['debug'] == true);
     final List<String> targets = parent?.argResults!['target'].split(' ');
     final String fileName = argResults!['file'];
     final String imageName = argResults!['image-name'];

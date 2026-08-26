@@ -51,7 +51,8 @@ class ProvisionCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = parent?.argResults!['debug'];
+    final bool debug = (globalResults?['debug'] == true) ||
+        (parent?.argResults?['debug'] == true);
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY']!;
     final List<String> nodeNames = argResults!['node-names'].split(' ');
     final String location = argResults!['location'];
@@ -485,7 +486,8 @@ class ActionCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final bool debug = parent?.argResults!['debug'];
+    final bool debug = (globalResults?['debug'] == true) ||
+        (parent?.argResults?['debug'] == true);
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');

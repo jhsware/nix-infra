@@ -97,6 +97,7 @@ class ProvisionCommand extends Command {
       sshKeyName: sshKeyName,
       debug: debug,
       mutation: mutation,
+      provider: provider,
     );
     echo('Done!');
 
@@ -117,6 +118,7 @@ class ProvisionCommand extends Command {
         nixVersion: nixOsVersion,
         sshKeyName: sshKeyName,
         debug: debug,
+        provider: provider,
       );
       failedConversions = await getServersWithoutNixos(
           workingDir, provisioningServers,

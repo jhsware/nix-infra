@@ -105,15 +105,20 @@ Future<void> installNixos(
   required String nixVersion,
   required String sshKeyName,
   String? mutation,
+  InfrastructureProvider? provider,
   bool debug = true,
 }) async {
   final progressBar = AsciiProgressBar();
 
   final nixChannel = 'nixos-$nixVersion';
   final muteUnlessDebug = debug ? "" : "2>/dev/null";
+  // nixos-infect no longer autodetects the provider (upstream elitak#226),
+  // so we set PROVIDER explicitly. On Hetzner this enables doNetConf=y,
+  // which generates the networking.nix that our configuration.nix imports.
+  final infectProvider = provider is HetznerCloud ? 'PROVIDER=hetznercloud ' : '';
   final installCommand = mutation != null
-      ? "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/ki-dev/mutations/$mutation | NO_DAEMON=true NIX_CHANNEL=$nixChannel bash -s -- --apply $muteUnlessDebug"
-      : "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | NO_DAEMON=true NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug";
+      ? "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/ki-dev/mutations/$mutation | ${infectProvider}NO_DAEMON=true NIX_CHANNEL=$nixChannel bash -s -- --apply $muteUnlessDebug"
+      : "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | ${infectProvider}NO_DAEMON=true NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug";
   final rebootCommand = debug
       ? "echo 'When --debug is set you are required to reboot the server manually."
       : "reboot";
@@ -179,7 +184,7 @@ $rebootCommand;
             // + /nix/var/nix/profiles/system/sw/bin/nix-collect-garbage
             progressBarId['current'] =
                 progressBar.update(progressBarId['current'], 'GC');
-          } else if (str == "renamed '/boot' -> '/boot.bak'") {
+          } else if (str.contains("renamed '/boot")) {
             // mv -v /boot /boot.bak
             progressBarId['current'] =
                 progressBar.update(progressBarId['current'], '@');

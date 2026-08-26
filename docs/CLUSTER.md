@@ -107,6 +107,7 @@ This creates cloud servers, waits for them to be ready, and converts them to Nix
 | `--location` | Yes* | Data center location (e.g., `fsn1`) |
 | `--placement-group` | No | Place nodes in a spread group (Hetzner Cloud only) |
 | `--mutation` | No | Use a nixos-infect mutation for non-standard OS |
+| `--provider` | No | Override provider auto-detection: `hcloud` or `self-hosting` |
 
 *Required for cloud providers; ignored for self-hosted servers.
 

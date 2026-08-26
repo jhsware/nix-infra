@@ -109,9 +109,28 @@ class ProvisionCommand extends Command {
     // In debug mode the install script does not reboot the node, so the
     // NixOS check below would always see the old OS and retry the install.
     // A rerun of the install wipes the ESP, so retries must not happen here.
+    // Instead we pause for a manual reboot and run the check once.
     if (debug) {
-      echo('NOTE: --debug is set. The nodes were NOT rebooted and the '
-          'conversion check is skipped. Reboot the nodes manually.');
+      final bool batch = argResults!['batch'];
+      if (batch) {
+        echo('NOTE: --debug is set. The nodes were NOT rebooted and the '
+            'conversion check is skipped (--batch). Reboot the nodes manually.');
+        return;
+      }
+      echo('NOTE: --debug is set, the nodes were NOT rebooted.');
+      stdout.write('Reboot the nodes manually now, then press Enter to run '
+          'the conversion check (Ctrl+C to skip): ');
+      stdin.readLineSync();
+      await waitForSsh(provisioningServers);
+      final notConverted = await getServersWithoutNixos(
+          workingDir, provisioningServers,
+          debug: true);
+      if (notConverted.isNotEmpty) {
+        echo('ERROR! Some nodes are still running the old OS: '
+            '${notConverted.map((n) => n.name).join(', ')}');
+        exit(2);
+      }
+      echo('All nodes are running NixOS.');
       return;
     }
 

@@ -1,6 +1,7 @@
 NOTE: This are pre 1.0 releases, this means there can be breaking changes on minor releases without clear warnings.
 
 ## Unreleased
+- `provision --debug` now pauses after the install so you can reboot the nodes manually, then runs the conversion check once (no retries); with `--batch` the check is skipped
 - the install script now runs `switch-to-configuration boot` with `NIXOS_INSTALL_BOOTLOADER=1`, so the bootloader is reinstalled on every run; a retried install wipes the ESP and previously left it without an EFI boot file
 - on EFI nodes the install verifies that an EFI boot file exists under `/boot` after the bootloader step, `NIX_INFRA_FAIL` otherwise
 - `provision --debug` no longer runs the conversion check and retry loop; the nodes are not rebooted in debug mode, so the check always saw the old OS and the retries destroyed a good install

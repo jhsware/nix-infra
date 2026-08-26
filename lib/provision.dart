@@ -113,7 +113,7 @@ Future<void> installNixos(
   final nixChannel = 'nixos-$nixVersion';
   final muteUnlessDebug = debug ? "" : "2>/dev/null";
   final rebootCommand = debug
-      ? "echo 'When --debug is set you are required to reboot the server manually."
+      ? "echo 'When --debug is set you are required to reboot the server manually.'"
       : "reboot";
 
   // nixos-infect no longer autodetects the provider (upstream elitak#226),
@@ -135,25 +135,54 @@ Future<void> installNixos(
   String makeInstallScript(ClusterNode node) {
     final infectProvider = infectEnv(node);
     final installCommand = mutation != null
-        ? "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/ki-dev/mutations/$mutation | ${infectProvider}NO_DAEMON=true NIX_CHANNEL=$nixChannel bash -s -- --apply $muteUnlessDebug"
-        : "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | ${infectProvider}NO_DAEMON=true NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug";
+        ? "curl -fsS https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/ki-dev/mutations/$mutation | ${infectProvider}NO_DAEMON=true NIX_CHANNEL=$nixChannel bash -s -- --apply $muteUnlessDebug"
+        : "curl -fsS https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | ${infectProvider}NO_DAEMON=true NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug";
 
+    // The script stops before the reboot when a step fails. A failed node is
+    // not rebooted and stays reachable over SSH. Sentinels in the output:
+    //   NIX_INFRA_FACT <node>: boot facts (EFI/BIOS, disks, efibootmgr)
+    //   NIX_INFRA_FAIL <node>: a step failed, the node was not rebooted
+    //   NIX_INFRA_OK <node>:   all checks passed, reboot follows
     return """#!/usr/bin/env bash
+set -euo pipefail
+
+# Node boot facts, printed before muting so they are always visible
+if [ -d /sys/firmware/efi ]; then echo "NIX_INFRA_FACT ${node.name}: boot_mode=EFI"; else echo "NIX_INFRA_FACT ${node.name}: boot_mode=BIOS"; fi
+echo "NIX_INFRA_FACT ${node.name}: disks=\$(lsblk -dno NAME,SIZE,TYPE 2>/dev/null | tr '\\n' ' ')"
+if [ -d /sys/firmware/efi ] && command -v efibootmgr >/dev/null 2>&1; then
+  efibootmgr 2>/dev/null | sed "s/^/NIX_INFRA_FACT ${node.name}: efi /" || true
+fi
+
 echo "mute=on"
-$installCommand;
-  
+$installCommand || { echo "NIX_INFRA_FAIL ${node.name}: nixos-infect exited with an error"; exit 1; }
+
 # Make sure we use custom configuration on reboot
-cp -f /root/configuration.nix /etc/nixos/configuration.nix;
+cp -f /root/configuration.nix /etc/nixos/configuration.nix || { echo "NIX_INFRA_FAIL ${node.name}: could not install configuration.nix"; exit 1; }
+
+test -x /nix/var/nix/profiles/system/bin/switch-to-configuration || { echo "NIX_INFRA_FAIL ${node.name}: no NixOS system profile"; exit 1; }
 
 # Some picks from the nixos-infect script
-/nix/var/nix/profiles/system/sw/bin/nix-collect-garbage 2>/dev/null;
-/nix/var/nix/profiles/system/bin/switch-to-configuration boot $muteUnlessDebug;
-$rebootCommand;
-  """;
+/nix/var/nix/profiles/system/sw/bin/nix-collect-garbage 2>/dev/null || true
+/nix/var/nix/profiles/system/bin/switch-to-configuration boot || { echo "NIX_INFRA_FAIL ${node.name}: bootloader install failed"; exit 1; }
+
+if [ -f /boot/grub/grub.cfg ]; then
+  grep -q NixOS /boot/grub/grub.cfg || { echo "NIX_INFRA_FAIL ${node.name}: no NixOS entry in /boot/grub/grub.cfg"; exit 1; }
+else
+  echo "NIX_INFRA_FACT ${node.name}: no /boot/grub/grub.cfg, menu check skipped"
+fi
+
+echo "NIX_INFRA_OK ${node.name}"
+# Give the sentinel time to flush over SSH before the connection drops
+sleep 2
+$rebootCommand
+""";
   }
+
+  final failedNodes = <String>{};
 
   final installNixos = nodes.map((node) async {
     final progressBarId = <String, int?>{"current": null};
+    final nodeOutput = StringBuffer();
 // begore GC:
 // NIXOS_CONFIG=/etc/nixos/configuration.nix nix-env --set -I nixpkgs=\$(realpath \$HOME/.nix-defexpr/channels/nixos) -f '<nixpkgs/nixos>' -p /nix/var/nix/profiles/system -A system;
 
@@ -187,6 +216,7 @@ $rebootCommand;
       final controller = StreamController<List<int>>();
       controller.stream.listen((inp) {
         final str = utf8.decode(inp);
+        nodeOutput.write(str);
         // stdout.write('+');
         // return;
 
@@ -197,7 +227,10 @@ $rebootCommand;
         }
 
         if (!debug && mute) {
-          if (str.contains('bin/nix-collect-garbage')) {
+          if (str.contains('NIX_INFRA_')) {
+            // Sentinels and boot facts are always shown
+            stdout.write('\n$str');
+          } else if (str.contains('bin/nix-collect-garbage')) {
             // + /nix/var/nix/profiles/system/sw/bin/nix-collect-garbage
             progressBarId['current'] =
                 progressBar.update(progressBarId['current'], 'GC');
@@ -240,17 +273,30 @@ $rebootCommand;
       if (debug) echoDebug(err.toString());
     }
 
-    // TODO: Mark done?
-    // stdout.write(node.name);
+    final out = nodeOutput.toString();
+    if (out.contains('NIX_INFRA_FAIL') || !out.contains('NIX_INFRA_OK')) {
+      failedNodes.add(node.name);
+      echo('ERROR! Install did not complete on ${node.name}. '
+          'The node was not rebooted and is still reachable over SSH. '
+          'Look for NIX_INFRA_FAIL in the output above.');
+    }
   });
 
   await Future.wait(installNixos);
 
+  final okNodes =
+      nodes.where((node) => !failedNodes.contains(node.name)).toList();
+  if (failedNodes.isNotEmpty) {
+    echo('WARN! Install failed on: ${failedNodes.join(', ')}. '
+        'These nodes were not rebooted and are still reachable over SSH.');
+  }
+  if (okNodes.isEmpty) return;
+
   await Future.delayed(const Duration(seconds: 5));
 
-  await waitForSsh(nodes);
+  await waitForSsh(okNodes);
 
-  final rebuildWaiters = nodes.map((node) async {
+  final rebuildWaiters = okNodes.map((node) async {
     try {
       final controller = StreamController<List<int>>();
       final shell = Shell(stdout: controller.sink);

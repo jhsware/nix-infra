@@ -85,6 +85,8 @@ nix-infra fleet provision \
 
 This creates cloud servers (Hetzner Cloud), waits for them to be ready, and converts them to NixOS using nixos-infect. For self-hosted servers defined in `servers.yaml`, provisioning installs NixOS on existing machines.
 
+During the install each node prints `NIX_INFRA_FACT` lines with its boot facts (boot mode EFI/BIOS, disks, efibootmgr entries), also without `--debug`. The install script verifies each step; on failure the node prints `NIX_INFRA_FAIL <node>: <reason>`, is NOT rebooted, and stays reachable over SSH for inspection. On success it prints `NIX_INFRA_OK <node>` and reboots into NixOS.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `--node-names` | Yes | Space-separated list of node names to create |

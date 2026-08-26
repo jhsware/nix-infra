@@ -111,8 +111,8 @@ direction LR
 
 1. **createNodes()** — For cloud providers (HetznerCloud), creates new servers via the API. Handles placement groups for HA. Skips existing nodes.
 2. **waitForServers()** — Polls the cloud API until servers report ready. For self-hosted servers, this step is skipped.
-3. **installNixos()** — Converts the base OS to NixOS using [nixos-infect](https://github.com/jhsware/nixos-infect). Uploads an install script and a base `configuration.nix` via SFTP, then executes the install over SSH. Supports a `--mutation` option for VMware and other non-standard environments.
-4. **waitForSsh()** — Waits for SSH to become available after the server reboots into NixOS.
+3. **installNixos()** — Converts the base OS to NixOS using [nixos-infect](https://github.com/jhsware/nixos-infect). Uploads an install script and a base `configuration.nix` via SFTP, then executes the install over SSH. The install script is built per node: nodes hosted on Hetzner Cloud (created via the API, or `provider: hetzner` in `servers.yaml`) run nixos-infect with `PROVIDER=hetznercloud`, static self-hosted nodes without it. The script runs with `set -euo pipefail` and verifies each step (nixos-infect exit code, `configuration.nix` install, NixOS system profile, bootloader install, NixOS entry in the GRUB menu). Before the install it prints node boot facts (`NIX_INFRA_FACT`: boot mode EFI/BIOS, disks, efibootmgr entries). On failure it prints `NIX_INFRA_FAIL <node>: <reason>` and exits without rebooting, so the node stays reachable over SSH; on success it prints `NIX_INFRA_OK <node>` and reboots. Supports a `--mutation` option for VMware and other non-standard environments.
+4. **waitForSsh()** — Waits for SSH to become available after the server reboots into NixOS. Nodes that failed the install checks are skipped here and reported instead.
 5. **nixos-rebuild switch** — Runs the initial NixOS rebuild to apply the configuration.
 
 ## Configuration Deployment

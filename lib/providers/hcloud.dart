@@ -130,7 +130,8 @@ class HetznerCloud implements InfrastructureProvider {
     }
 
     return servers.map((node) => ClusterNode(
-        node['name'], node['public_net']['ipv4']['ip'], node['id'], _sshKey!));
+        node['name'], node['public_net']['ipv4']['ip'], node['id'], _sshKey!,
+        cloudProvider: 'hetzner'));
   }
 
   @override

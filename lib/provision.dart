@@ -112,21 +112,33 @@ Future<void> installNixos(
 
   final nixChannel = 'nixos-$nixVersion';
   final muteUnlessDebug = debug ? "" : "2>/dev/null";
-  // nixos-infect no longer autodetects the provider (upstream elitak#226),
-  // so we set PROVIDER explicitly. Hetzner Cloud is the default; only
-  // self-hosted servers omit PROVIDER. On Hetzner this enables doNetConf=y,
-  // which generates the networking.nix that our configuration.nix imports.
-  final infectProvider = provider == null || provider is HetznerCloud
-      ? 'PROVIDER=hetznercloud '
-      : '';
-  final installCommand = mutation != null
-      ? "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/ki-dev/mutations/$mutation | ${infectProvider}NO_DAEMON=true NIX_CHANNEL=$nixChannel bash -s -- --apply $muteUnlessDebug"
-      : "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | ${infectProvider}NO_DAEMON=true NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug";
   final rebootCommand = debug
       ? "echo 'When --debug is set you are required to reboot the server manually."
       : "reboot";
 
-  final installScript = """#!/usr/bin/env bash
+  // nixos-infect no longer autodetects the provider (upstream elitak#226),
+  // so we set PROVIDER explicitly, per node. servers.yaml is the source of
+  // truth: a node with `provider: hetzner` gets PROVIDER=hetznercloud, a
+  // static self-hosted node gets none. Nodes without cloud provider info
+  // (external callers) default to hetznercloud unless they come from the
+  // self-hosting provider. On Hetzner this enables doNetConf=y, which
+  // generates the networking.nix that our configuration.nix imports.
+  String infectEnv(ClusterNode node) {
+    if (node.cloudProvider == 'hetzner') return 'PROVIDER=hetznercloud ';
+    if (node.cloudProvider == null &&
+        (provider == null || provider is HetznerCloud)) {
+      return 'PROVIDER=hetznercloud ';
+    }
+    return '';
+  }
+
+  String makeInstallScript(ClusterNode node) {
+    final infectProvider = infectEnv(node);
+    final installCommand = mutation != null
+        ? "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/ki-dev/mutations/$mutation | ${infectProvider}NO_DAEMON=true NIX_CHANNEL=$nixChannel bash -s -- --apply $muteUnlessDebug"
+        : "curl -s https://raw.githubusercontent.com/jhsware/nixos-infect/refs/heads/master/nixos-infect | ${infectProvider}NO_DAEMON=true NO_REBOOT=true NIX_CHANNEL=$nixChannel bash -x $muteUnlessDebug";
+
+    return """#!/usr/bin/env bash
 echo "mute=on"
 $installCommand;
   
@@ -138,12 +150,14 @@ cp -f /root/configuration.nix /etc/nixos/configuration.nix;
 /nix/var/nix/profiles/system/bin/switch-to-configuration boot $muteUnlessDebug;
 $rebootCommand;
   """;
+  }
 
   final installNixos = nodes.map((node) async {
     final progressBarId = <String, int?>{"current": null};
 // begore GC:
 // NIXOS_CONFIG=/etc/nixos/configuration.nix nix-env --set -I nixpkgs=\$(realpath \$HOME/.nix-defexpr/channels/nixos) -f '<nixpkgs/nixos>' -p /nix/var/nix/profiles/system -A system;
 
+    final installScript = makeInstallScript(node);
     final authorizedKey =
         await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
 

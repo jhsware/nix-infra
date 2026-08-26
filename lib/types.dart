@@ -37,8 +37,14 @@ class ClusterNode {
   /// reachable, the consuming agent should ask the user to start this VPN.
   String? vpn;
 
+  /// Optional name of the cloud provider that hosts this server
+  /// (e.g. 'hetzner'). Loaded from the `provider` field in servers.yaml,
+  /// or set by the cloud provider that listed the server. Used to select
+  /// the PROVIDER environment variable for nixos-infect per node.
+  String? cloudProvider;
+
   ClusterNode(this.name, this.ipAddr, this.id, this.sshKeyName,
-      {this.sshKeyPath, this.vpn});
+      {this.sshKeyPath, this.vpn, this.cloudProvider});
 
   /// Whether a VPN connection is required to reach this server.
   bool get requiresVpn => vpn != null;

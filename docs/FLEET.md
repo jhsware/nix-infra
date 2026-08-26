@@ -93,7 +93,6 @@ This creates cloud servers (Hetzner Cloud), waits for them to be ready, and conv
 | `--location` | Yes* | Data center location (e.g., `fsn1`, `nbg1`, `hel1`) |
 | `--placement-group` | No | Place nodes in a placement group (Hetzner Cloud only) |
 | `--mutation` | No | Use a nixos-infect mutation for non-standard OS (e.g., VMware) |
-| `--provider` | No | Override provider auto-detection: `hcloud` or `self-hosting` |
 
 *Required for cloud providers; ignored for self-hosted servers.
 

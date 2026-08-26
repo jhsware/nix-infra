@@ -268,6 +268,7 @@ class SelfHosting implements InfrastructureProvider {
         sshKeyName,
         sshKeyPath: config.sshKeyPath,
         vpn: config.vpn,
+        cloudProvider: config.provider,
       );
       // Set custom username if specified
       if (config.username != null) {

@@ -44,9 +44,11 @@ When provisioning via Hetzner Cloud:
 
 > **Note:** nixos-infect no longer autodetects the hosting provider
 > (upstream elitak#226). nix-infra therefore passes `PROVIDER=hetznercloud`
-> to nixos-infect explicitly. This is the default; it is omitted only for
-> self-hosted servers. On Hetzner it sets `doNetConf=y`, which generates
-> the `networking.nix` that the node configuration imports.
+> to nixos-infect explicitly, per node. servers.yaml is the source of truth:
+> servers with `provider: hetzner` get it, servers with a static `ip` do not.
+> Servers created directly on Hetzner Cloud always get it. On Hetzner it
+> sets `doNetConf=y`, which generates the `networking.nix` that the node
+> configuration imports.
 
 ### Provisioning Example
 

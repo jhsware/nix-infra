@@ -59,7 +59,7 @@ Common options shared across command groups:
 - `--working-dir` / `-d` — Project directory (default: `.`)
 - `--env` — Path to `.env` file
 - `--ssh-key` — SSH key name
-- `--debug` — Verbose debug logging
+- `--debug` — Verbose debug logging (global: `nix-infra --debug cluster ...`, or per command group)
 - `--batch` — Non-interactive mode (skips confirmations)
 
 ## Provider Abstraction

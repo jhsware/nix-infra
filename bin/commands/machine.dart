@@ -20,7 +20,9 @@ class FleetCommand extends Command {
           abbr: 'd', defaultsTo: '.', help: 'Working directory')
       ..addOption('ssh-key', help: 'SSH key name')
       ..addOption('env', help: 'Path to .env file')
-      ..addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
+      ..addFlag('debug',
+          defaultsTo: false,
+          help: 'Verbose debug logging (also available as global --debug)');
 
     addSubcommand(ProvisionCommand());
 
@@ -201,7 +203,8 @@ class DeployAppsCommand extends Command {
     final testDir = argResults!['test-dir'] != null ?
         await getWorkingDirectory(argResults!['test-dir']) : null;
 
-    final bool debug = parent?.argResults!['debug'];
+    final bool debug = (globalResults?['debug'] == true) ||
+        (parent?.argResults?['debug'] == true);
     final bool batch = argResults!['batch'];
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final List<String> targets = argResults!['target'].split(' ');

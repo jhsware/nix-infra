@@ -22,6 +22,8 @@ void main(List<String> arguments) async {
       ..addCommand(RegistryCommand())
       ..addCommand(EtcdCommand())
       ..addCommand(SecretsCommand());
+    cmd.argParser
+        .addFlag('debug', defaultsTo: false, help: 'Verbose debug logging');
     await cmd.run(arguments).catchError((error) {
       if (error is! UsageException && error is! ArgumentError) throw error;
       echo(error.toString());

@@ -1,6 +1,7 @@
 NOTE: This are pre 1.0 releases, this means there can be breaking changes on minor releases without clear warnings.
 
 ## Unreleased
+- `--debug` is now a global option on the root command (`nix-infra --debug cluster provision ...`); the group-level flag still works as an alias
 - hardened the provision install script: every step must succeed (nixos-infect, configuration.nix install, system profile, bootloader install, GRUB menu check); on failure the node is NOT rebooted and stays reachable over SSH, and the output contains a `NIX_INFRA_FAIL <node>: <reason>` line
 - the install now prints node boot facts as `NIX_INFRA_FACT` lines (boot_mode EFI/BIOS, disks, efibootmgr entries), visible also without `--debug`
 - synced jhsware/nixos-infect with upstream elitak/nixos-infect (EFI sysmount support, non-EFI fixes, default channel 25.11)

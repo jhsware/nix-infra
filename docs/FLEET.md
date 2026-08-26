@@ -270,7 +270,7 @@ These options are available on all fleet subcommands:
 | `--working-dir`, `-d` | Working directory (default: `.`) |
 | `--ssh-key` | SSH key name (overrides `SSH_KEY` from `.env`) |
 | `--env` | Path to `.env` file |
-| `--debug` | Enable verbose debug logging |
+| `--debug` | Enable verbose debug logging (also accepted as a global option before the command group) |
 | `--batch` | Run non-interactively (skip confirmation prompts) |
 
 ## MCP Integration

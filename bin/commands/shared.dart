@@ -114,8 +114,10 @@ class ProvisionCommand extends Command {
       final bool batch = argResults!['batch'];
       if (batch) {
         echo('NOTE: --debug is set. The nodes were NOT rebooted and the '
-            'conversion check is skipped (--batch). Reboot the nodes manually.');
-        return;
+            'conversion check is skipped (--batch). Reboot the nodes '
+            'manually, then rerun the remaining steps. Exiting with code 3 '
+            'so chained scripts stop here.');
+        exit(3);
       }
       echo('NOTE: --debug is set, the nodes were NOT rebooted.');
       stdout.write('Reboot the nodes manually now, then press Enter to run '

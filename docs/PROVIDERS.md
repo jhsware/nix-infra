@@ -42,6 +42,12 @@ When provisioning via Hetzner Cloud:
 3. **Placement groups** — For HA clusters, servers can be placed in spread placement groups to ensure they run on different physical hosts
 4. **NixOS conversion** — After the Ubuntu server is ready, nixos-infect converts it to NixOS
 
+> **Note:** nixos-infect no longer autodetects the hosting provider
+> (upstream elitak#226). nix-infra therefore passes `PROVIDER=hetznercloud`
+> to nixos-infect explicitly. This is the default; it is omitted only for
+> self-hosted servers. On Hetzner it sets `doNetConf=y`, which generates
+> the `networking.nix` that the node configuration imports.
+
 ### Provisioning Example
 
 ```sh

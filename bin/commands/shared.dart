@@ -38,7 +38,10 @@ class ProvisionCommand extends Command {
     argParser
       ..addFlag('batch', defaultsTo: false)
       ..addOption('node-names', mandatory: true)
-      ..addOption('provider')
+      ..addOption('provider',
+          allowed: ['hcloud', 'self-hosting'],
+          help: 'Override provider auto-detection '
+              '(default: self-hosting if servers.yaml exists, else hcloud)')
       ..addOption('nixos-version')
       ..addOption('machine-type')
       ..addOption('location')
@@ -61,7 +64,17 @@ class ProvisionCommand extends Command {
     final String nixOsVersion = argResults!['nixos-version'];
     final String? mutation = argResults!['mutation'];
 
-    final provider = await getProvider(workingDir, env, sshKeyName);
+    final String? providerOverride = argResults!['provider'];
+    final provider = providerOverride == null
+        ? await getProvider(workingDir, env, sshKeyName)
+        : await ProviderFactory.create(
+            type: providerOverride == 'hcloud'
+                ? ProviderType.hcloud
+                : ProviderType.selfHosting,
+            workingDir: workingDir,
+            env: env,
+            sshKeyName: sshKeyName,
+          );
 
     final createdNodeNames = await createNodes(workingDir, nodeNames,
         provider: provider,

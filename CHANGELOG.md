@@ -1,6 +1,9 @@
 NOTE: This are pre 1.0 releases, this means there can be breaking changes on minor releases without clear warnings.
 
 ## Unreleased
+- synced jhsware/nixos-infect with upstream elitak/nixos-infect (EFI sysmount support, non-EFI fixes, default channel 25.11)
+- nixos-infect PROVIDER is now passed explicitly because upstream removed working autodetection; `PROVIDER=hetznercloud` is the default, omitted for self-hosted servers
+- wired up the `--provider` option on `provision` to override provider auto-detection (`hcloud` or `self-hosting`)
 - added optional `vpn` parameter per server in servers.yaml (name of VPN connection required to reach the server), exposed by the MCP list-available-nodes tool and in SSH connection error hints so agents can ask the user to start the VPN
 - MCP tools now use a 10s SSH connect timeout by default (fail fast when a server is unreachable); override with --ssh-timeout=<seconds> on poor connections
 

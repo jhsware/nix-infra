@@ -97,7 +97,7 @@ Future<void> bootstrapNetrcOnRemote(
 Future<void> deployMachine(
   Directory workingDir,
   Iterable<ClusterNode> nodes, {
-  required String nixVersion,
+  String? nixVersion,
   required String nodeType,
   required String secretsPwd,
   bool debug = false,
@@ -111,19 +111,31 @@ Future<void> deployMachine(
         await getSshClient(workingDir, node, connection);
     final sftp = await sshClient.sftp();
 
+    // When no version is given, keep the version the node is currently
+    // running so an update never changes the NixOS version as a side
+    // effect. Only provision/init-machine and upgrade-nixos (which pass
+    // an explicit version) change it.
+    // `nixos-version` prints e.g. "25.11.20260630.b6018f8 (Xantusia)";
+    // the first two components are the channel version the templates need.
+    final String effectiveNixVersion = nixVersion ??
+        (await runCommandOverSsh(workingDir, node, 'nixos-version'))
+            .trim()
+            .split('.')
+            .take(2)
+            .join('.');
+
     // Deploy base NixOS configuration
     await sftpSend(sftp, '${workingDir.path}/configuration.nix',
         '/etc/nixos/configuration.nix',
         substitutions: {
           'sshKey': authorizedKey,
           'nodeName': node.name,
-          'nixVersion': nixVersion,
+          'nixVersion': effectiveNixVersion,
         });
 
     await sftpSend(sftp, '${workingDir.path}/flake.nix', '/etc/nixos/flake.nix',
         substitutions: {
-          'nixVersion':
-              nixVersion, // This is neither a secret or a node specific value, should probably not be a variable
+          'nixVersion': effectiveNixVersion,
           'nodeName': node.name,
           'hwArch':
               'x86_64-linux', // QUESTION: Should we read variables from target node?

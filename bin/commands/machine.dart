@@ -99,7 +99,10 @@ class UpdateCommand extends Command {
     argParser.addFlag('batch', defaultsTo: false);
     argParser.addOption('target', mandatory: true);
     argParser.addOption('node-module', mandatory: true);
-    argParser.addOption('nixos-version', mandatory: true);
+    argParser.addOption('nixos-version',
+        mandatory: false,
+        help: 'Force a NixOS version. When omitted, the version the node '
+            'currently runs is kept.');
     argParser.addFlag('rebuild', defaultsTo: true);
   }
 
@@ -114,7 +117,7 @@ class UpdateCommand extends Command {
     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
     final String nodeType = argResults!['node-module'];
     final List<String> targets = argResults!['target'].split(' ');
-    final String nixOsVersion = argResults!['nixos-version'];
+    final String? nixOsVersion = argResults!['nixos-version'];
     final bool rebuild = argResults!['rebuild'];
 
     areYouSure('Are you sure you want to update the nodes?', batch);

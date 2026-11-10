@@ -9,7 +9,7 @@ nix-infra is an SSH-based configuration management tool. Like Ansible, Terraform
 This means:
 
 - The local project directory contains sensitive material (CA keys, encrypted secrets, SSH keys)
-- The secrets password (`SECRETS_PWD`) unlocks all encrypted secrets
+- The files key (`SECRETS_PASS`) unlocks all encrypted secrets
 - All remote operations are performed as root over SSH
 - There is no multi-user access control — a single operator (or CI pipeline) manages the fleet
 
@@ -27,20 +27,21 @@ All communication between the operator's workstation and managed nodes uses SSH.
 
 ## Secrets at Rest
 
-Secrets are stored locally in the `secrets/` directory, encrypted with OpenSSL pbkdf2:
-
-```
-openssl enc -pbkdf2 -pass env:SECRETS_PASS -a -out secrets/<name>
-```
+Secrets are stored locally in the `secrets/` directory as `nix-infra-secret/v2` files, encrypted in the nix-infra process with AES-256-GCM (the file header is authenticated). See [SECRETS.md](./SECRETS.md#encryption) for the format.
 
 Key properties:
 
-- Encryption uses PBKDF2 key derivation with a password you provide (`SECRETS_PWD`)
-- Encrypted files are base64-encoded for safe storage and version control
+- The key is `SECRETS_PASS`: a generated files key (`nisk1_...`, HKDF-SHA256, recommended) or a password (PBKDF2-HMAC-SHA256, 600000 iterations)
+- A wrong key or a modified file makes decryption fail; a damaged secret stops the deployment of the node instead of being skipped
+- Files are written atomically (temporary file, read back and checked, rename); the value is never written to disk in plaintext
 - File permissions are set to mode `400` (owner read-only)
 - The `secrets/` directory is set to mode `700`
 
-The encryption key (`SECRETS_PWD`) is either typed interactively at each command invocation or set as an environment variable. See [Known Limitations](#known-limitations) for the implications of this.
+**Files made before 0.18.0-beta are not encrypted.** Earlier versions ran `openssl enc -pbkdf2 -a` without a cipher, which only encodes the value as base64. nix-infra still reads these files and prints a warning; convert them with `nix-infra secrets migrate` and rotate the values if the folder was ever committed, copied or shared. See [Migrating existing secrets](./SECRETS.md#migrating-existing-secrets).
+
+**The `secrets/` directory must stay ignored in git.** The project templates have `secrets/*` in `.gitignore`. Secret files are not meant for version control: legacy files are readable by anyone, and v2 files are only as strong as the key.
+
+The files key (`SECRETS_PASS`) is either typed interactively at each command invocation or set as an environment variable. See [Known Limitations](#known-limitations) for the implications of this.
 
 ## Secrets in Transit
 
@@ -160,16 +161,16 @@ AppArmor profiles for services are not yet implemented. This is a planned improv
 All management operations run as root. This is standard for configuration management tools but means a compromised operator workstation has full access to all nodes. A defense-in-depth analysis was performed — see `lib/analysis/ARCHITECTURE_DEFENSE_IN_DEPTH_SSH.md`.
 
 ### No Config Folder Encryption at Rest
-The project directory (containing CA keys, encrypted secrets, SSH keys) is not encrypted at rest. It relies on the operator's filesystem-level encryption (e.g., FileVault, LUKS). If the project directory is committed to a git repository, ensure the repository is private and access-controlled.
+The project directory (containing CA keys, encrypted secrets, SSH keys) is not encrypted at rest. It relies on the operator's filesystem-level encryption (e.g., FileVault, LUKS). If the project directory is committed to a git repository, ensure the repository is private and access-controlled, and keep `secrets/` ignored.
 
 ### No Secret Rotation
-There is no built-in mechanism for rotating secrets. To rotate a secret, you must re-encrypt it with `nix-infra store-secret` and redeploy. Certificate rotation requires regenerating certificates and redeploying them to nodes.
+There is no built-in mechanism for rotating secret values. To rotate a secret, store the new value with `nix-infra secrets store --overwrite` and redeploy. The files key itself can be changed with `nix-infra secrets migrate --new-key-env <VAR>` (see [SECRETS.md](./SECRETS.md#changing-the-files-key)). Certificate rotation requires regenerating certificates and redeploying them to nodes.
 
 ### No Virtual TPM on Hetzner Cloud
 Hetzner Cloud does not provide virtual TPM, so `systemd-creds encrypt` falls back to machine-ID-based encryption rather than hardware-backed encryption. This means the encrypted secrets on a node are only as secure as the machine ID.
 
-### SECRETS_PWD Exposure Risk
-The secrets password is either typed interactively or set as an environment variable. If set as an environment variable, it may appear in shell history, process listings, or CI logs. Use care with how you provide this value.
+### SECRETS_PASS Exposure Risk
+The files key is either typed interactively or set as an environment variable. If set as an environment variable, it may appear in shell history, process listings, or CI logs. Use care with how you provide this value.
 
 
 
@@ -198,14 +199,15 @@ The project directory is the trust anchor. It contains SSH keys, CA keys, and en
 
 - Use full-disk encryption on the operator workstation
 - If stored in git, use a private repository with strict access controls
+- Keep `secrets/` ignored in git (`secrets/*` in `.gitignore`, as in the project templates)
 - Consider encrypting the directory with an additional layer (e.g., `git-crypt`)
 - Back up the `ca/` directory separately — losing it means regenerating all certificates
 
-### Handle SECRETS_PWD Carefully
-- Prefer typing the password interactively over setting it as an environment variable
+### Handle SECRETS_PASS Carefully
+- Prefer a generated files key (`nix-infra secrets new-key`) over a password
+- Prefer typing the key interactively over setting it as an environment variable
 - If using environment variables in CI, use the CI system's secret management (e.g., GitHub Actions secrets)
 - Avoid storing it in `.env` files that might be committed to version control
-- Add `.env` to `.gitignore`
 
 ### SSH Key Hygiene
 - Generate separate SSH key pairs for separate environments (production, staging)
@@ -219,6 +221,6 @@ The project directory is the trust anchor. It contains SSH keys, CA keys, and en
 
 ### Backup
 - Back up the `ca/` directory — it contains your certificate authority
-- Back up the `secrets/` directory — it contains your encrypted secrets
+- Back up the `secrets/` directory — it contains your encrypted secrets (run `nix-infra secrets migrate` first, so the backup holds no base64-only files)
 - Test restoring from backup periodically
-- The `SECRETS_PWD` must be stored separately from the backup (e.g., in a password manager)
+- `SECRETS_PASS` must be stored separately from the backup (e.g., in a password manager or the sysops vault)

@@ -31,7 +31,7 @@ systemd --> application : decrypt
 ```
 
 
-1. **Store** — Secrets are encrypted with OpenSSL and saved in the local `secrets/` directory
+1. **Store** — Secrets are encrypted with AES-256-GCM (`nix-infra-secret/v2`, see [Encryption](#encryption)) and saved in the local `secrets/` directory
 2. **Deploy** — During deployment, secrets are decrypted locally, sent over SSH, and re-encrypted on the target using `systemd-creds encrypt`
 3. **Runtime** — systemd services decrypt secrets at startup using systemd-creds
 
@@ -59,15 +59,23 @@ cat ./github-netrc | nix-infra secrets store --name="github-netrc"
 
 The `--secret` and `--secret-file` options are mutually exclusive. If neither is provided and stdin has piped data, it will be read automatically. If no secret is provided from any source, the command exits with an error.
 
+### Replacing a secret
+
+`secrets store` does not replace an existing secret; it exits with an error. Add `--overwrite` to replace it:
+
+```sh
+nix-infra secrets store --name="api-key" --secret="sk-yyyyyyyyyyyyy" --overwrite
+```
+
 ## Reading Secrets
 
 The `secrets read` command decrypts and displays a stored secret. This is useful for verifying secret contents without deploying.
 
 ```sh
-nix-infra secrets read --name="secrets.netrc/github-netrc"
+nix-infra secrets read --name="github-netrc"
 ```
 
-The secret is decrypted using `SECRETS_PWD` and printed to stdout. Use `--batch` to suppress interactive prompts (reads password from `.env` only).
+The secret is decrypted using `SECRETS_PASS` and printed to stdout. Use `--batch` to suppress interactive prompts (reads the key from `.env` or the environment only). A secret that cannot be read (wrong key, damaged file, unknown format) prints an error and exits with code 1.
 
 ## Storing Action Output as Secrets
 
@@ -93,18 +101,113 @@ The action's stdout output is captured, encrypted, and stored as a secret. This 
 
 ## Encryption
 
-Secrets are encrypted locally using OpenSSL with PBKDF2 key derivation:
+Secrets are encrypted locally, in the nix-infra process (OpenSSL is no longer used), and written to `secrets/<name>` as `nix-infra-secret/v2` files. The value is never passed to a child process and never written to disk in plaintext.
 
+```text
+nix-infra-secret/v2
+kind: text | github-netrc
+created: <UTC ISO 8601, seconds>
+kdf: hkdf-sha256 | pbkdf2-hmac-sha256
+iterations: <only for pbkdf2>
+salt: <base64, 16 bytes>
+cipher: aes-256-gcm
+nonce: <base64, 12 bytes>
+key_id: <8 hex, only for hkdf>
+---
+<base64 of ciphertext and 16-byte tag, 64 characters per line>
 ```
-openssl enc -pbkdf2 -pass env:SECRETS_PASS -a -out secrets/<name>
-```
 
-The encryption password is sourced from:
+- **Cipher** — AES-256-GCM with a new random salt and nonce for every file. The header (everything before `---`) is the authenticated data, so a changed header or body makes decryption fail instead of returning a wrong value.
+- **kind** — `github-netrc` when the value is one netrc entry `machine api.github.com login x-access-token password <token>`, else `text`.
+- **created** — When the value was stored. `secrets migrate` keeps it, or uses the modification time of the old file.
 
-1. `SECRETS_PWD` in your `.env` file (recommended for automation)
+The key is `SECRETS_PASS`, sourced from:
+
+1. `SECRETS_PASS` in your `.env` file or the environment (recommended for automation; `SECRETS_PWD` still works but is deprecated)
 2. Interactive prompt (when running manually)
 
-Encrypted secrets are stored in the `secrets/` directory with file mode `400` (owner read-only). The directory itself is created with mode `700` if it doesn't exist.
+### Generated files key or password
+
+`SECRETS_PASS` can be one of two kinds of key:
+
+| | Generated files key (recommended) | Password |
+|---|---|---|
+| Looks like | `nisk1_` followed by 43 base64url characters (256 random bits) | Any other text |
+| Made with | `nix-infra secrets new-key` | You choose it |
+| Key derivation | HKDF-SHA256 (instant) | PBKDF2-HMAC-SHA256, 600000 iterations |
+| Time per secret | Milliseconds | About 2.4 s per derivation (measured on a developer laptop); storing a secret derives twice (encrypt and read-back check), about 5 s |
+| `key_id` in the header | Yes: a wrong key is reported before decryption | No |
+
+A generated key is stronger and much faster. A password is accepted so that existing projects keep working; to change to a generated key, see [Changing the files key](#changing-the-files-key).
+
+Secret files are stored in the `secrets/` directory with file mode `400` (owner read-only). The directory itself is created with mode `700` if it doesn't exist. Each file is written atomically: to a temporary file `secrets/.tmp-<random>` (mode 600), read back and decrypted to check it, then renamed into place.
+
+**Keep `secrets/` out of version control.** The project templates (`nix-infra-machine`, `nix-infra-ha-cluster`) have `secrets/*` in `.gitignore`; keep it there. Files made by earlier versions are not encrypted (see below), and even v2 files are only as strong as the key.
+
+## Formats that nix-infra reads
+
+nix-infra reads three formats and writes only v2:
+
+| Format | `secrets list` shows | What it is | Key needed to read |
+|---|---|---|---|
+| `nix-infra-secret/v2` | `v2` | AES-256-GCM, described above | Yes |
+| Legacy OpenSSL | `openssl` | `openssl enc -aes-256-cbc [-pbkdf2] -a` output (`Salted__`, AES-256-CBC). nix-infra tries, in order, PBKDF2-HMAC-SHA256 with 10000 iterations, EVP_BytesToKey with SHA-256 and EVP_BytesToKey with MD5 | Yes |
+| Legacy base64 | `plain` | Base64 of the plain value | No |
+
+> **Warning: secret files made by nix-infra before 0.18.0-beta are NOT encrypted.** Earlier versions ran `openssl enc -pbkdf2 -a` without a cipher, which only encodes the value as base64. Anyone who can read such a file can read the secret. nix-infra prints a warning that lists these files when it reads one. Run `nix-infra secrets migrate` (see below).
+
+An OpenSSL file made with another cipher (for example AES-128) cannot be read. Decrypt it manually with `openssl enc -d -a -<cipher> [-pbkdf2] [-md <digest>] -in <file>` and store the value again.
+
+`readSecret` returns the same value as earlier versions for every format (line breaks normalized to `\n`, the final line break removed), so deployed secrets do not change when a file is migrated.
+
+## Migrating existing secrets
+
+1. **Upgrade nix-infra on every computer that deploys** (and in CI) first. An older nix-infra cannot read v2 files and skips such a secret during deployment, so the node runs without it.
+2. **Check the folder:**
+
+   ```sh
+   nix-infra secrets list
+   nix-infra secrets migrate --dry-run
+   ```
+
+3. **Migrate:**
+
+   ```sh
+   nix-infra secrets migrate
+   ```
+
+   The command lists the files it will change (name, current format, action) and asks for confirmation (`--batch` skips the question). Each legacy file is decrypted (`SECRETS_PASS` is needed for OpenSSL files, and for all files to write v2), encrypted as v2 with `SECRETS_PASS`, and replaced atomically with mode 400. v2 files are not changed. No plaintext and no backup copy is written. A file that cannot be read is reported and left unchanged, and the command exits with code 1; fix it and run the command again.
+4. **Rotate the secrets that were exposed.** If the `secrets/` folder was ever committed, copied or shared while it held base64 files, treat those values as public: change them at the source (database passwords, API tokens, ...), store the new values with `nix-infra secrets store --overwrite`, and deploy.
+
+### Changing the files key
+
+To move to a new key (for example from a password to a generated key):
+
+```sh
+nix-infra secrets new-key > new-key.txt   # the key on stdout, instructions on stderr
+export NEW_SECRETS_PASS="$(cat new-key.txt)"
+nix-infra secrets migrate --new-key-env NEW_SECRETS_PASS
+```
+
+`--new-key-env <VAR>` re-encrypts every file (v2 and legacy) from the key in `SECRETS_PASS` to the key in `<VAR>`. It refuses when the variable is missing, empty, equal to `SECRETS_PASS`, or starts with `nisk1_` but is not a valid generated key. Files that the new key already opens are skipped, so after a failure you can run the command again until it succeeds; keep both keys until then.
+
+When it succeeds, store the new key as `SECRETS_PASS` (in `.env`, or in the sysops vault), remove `NEW_SECRETS_PASS` and delete `new-key.txt`. Every computer that deploys needs the new key.
+
+## Listing secrets
+
+```sh
+nix-infra secrets list
+```
+
+Prints one line per file in `secrets/`: name, format (`v2`, `openssl`, `plain`, `unknown`, or `link` for a symbolic link, which is not followed), kind and created (v2 only), and the modification time. Names that start with `.` are ignored. No key is needed and nothing is decrypted.
+
+## Generating a files key
+
+```sh
+nix-infra secrets new-key
+```
+
+Prints a new generated files key (`nisk1_...`) on stdout, once, and the instructions on stderr, so `nix-infra secrets new-key > key.txt` captures only the key. In a new project, store it as `SECRETS_PASS`. In a project that already has secret files, follow [Changing the files key](#changing-the-files-key).
 
 ## Secret Placeholders in Configuration
 
@@ -153,13 +256,15 @@ When `deploy-apps` runs, the deployment pipeline handles secrets automatically:
 1. **Scan config files** — The `substitute()` function scans node config files for `[%%secrets/...%%]` and `[%%secrets.netrc/...%%]` placeholders, building a list of expected secrets (and a separate list of netrc secrets)
 
 2. **Sync secrets** — `syncSecrets()` processes each expected secret:
-   - Reads and decrypts the secret locally using `SECRETS_PWD`
+   - Reads and decrypts the secret locally using `SECRETS_PASS`
    - Applies variable substitutions (node IPs, overlay IPs, etc.)
    - Deploys the secret encrypted via `systemd-creds encrypt` on the remote node to `/root/secrets/`
 3. **Bootstrap netrc** — If any `secrets.netrc/` placeholders were found, nix-infra decrypts and combines them into `/run/keys/combined-netrc` (chmod 0400) on the remote machine via SSH. This happens before `nixos-rebuild` so that Nix can authenticate to private repos during the build.
 4. **Garbage collect** — Any secrets on the remote node that are not in the expected list are removed
 
 If a referenced secret doesn't exist in the local `secrets/` directory, the deployment prints a warning and continues. The warning includes instructions for creating the missing secret.
+
+If a referenced secret exists but cannot be read (wrong key, damaged file, unknown format), the deployment prints `ERROR! Secret '<name>' could not be read: <reason>` (never the value) and stops for that node, before any secret is removed from the node. Earlier versions skipped such a secret silently.
 
 ## Netrc Credentials for Private Repositories
 
@@ -323,13 +428,15 @@ During deployment, nix-infra will:
 
 ## Security Properties
 
-- **Encryption at rest** — Secrets are encrypted with OpenSSL PBKDF2 in the local `secrets/` directory
+- **Encryption at rest** — Secret files written by this version are `nix-infra-secret/v2` files: AES-256-GCM with the header as authenticated data (see [Encryption](#encryption)). Files written by earlier versions are base64 only until you run `nix-infra secrets migrate`
 - **Encryption in transit** — Secrets are transmitted over SSH
 - **Encryption at runtime** — Secrets are encrypted on the target with systemd-creds and only decrypted by the owning systemd service
 
-- **File permissions** — All secret files are mode `0400` (root read-only)
+- **File permissions** — All secret files are mode `0400` (owner read-only), the `secrets/` directory is mode `0700`
+- **Atomic writes** — A secret file is written to a temporary file, read back and checked, then renamed into place; the value is never written to disk in plaintext
+- **Not in version control** — Keep `secrets/` ignored in git (the project templates have `secrets/*` in `.gitignore`)
 - **Garbage collection** — Unused secrets are automatically removed from target nodes during deployment
-- **SECRETS_PWD isolation** — The encryption password is sourced from `.env` or interactive prompt, never stored in configuration files
+- **SECRETS_PASS isolation** — The files key is sourced from `.env`, the environment or an interactive prompt, never stored in configuration files
 
 ## Troubleshooting
 
@@ -337,6 +444,12 @@ During deployment, nix-infra will:
 
 **"WARNING! Secret 'name' not found in secrets directory, skipping deployment"** — The node config references a secret that doesn't exist locally. The deployment continues but the secret won't be available on the node.
 
-**Wrong SECRETS_PWD** — If the decryption password doesn't match, OpenSSL will produce garbled output or fail. Ensure `SECRETS_PWD` in your `.env` matches what was used when storing the secrets.
+**"ERROR! Secret 'name' could not be read: ..."** — The secret file exists but cannot be decrypted: the key in `SECRETS_PASS` is wrong (a v2 file reports the `key_id` it expects), the file was modified or damaged, or the format is not known. The deployment of that node stops before anything is removed from `/root/secrets`. Earlier versions skipped such a secret silently. Check the key, run `nix-infra secrets list` to see the format of the file, and store the value again if the file is damaged.
+
+**"ERROR! Secret "name" exists. Use --overwrite to replace it."** — `secrets store` and `--save-as-secret` do not replace an existing secret. Use `nix-infra secrets store --overwrite` to replace it.
+
+**"WARNING! These secret files are not encrypted, run `nix-infra secrets migrate`"** — Some files are legacy base64 files. See [Migrating existing secrets](#migrating-existing-secrets).
+
+**Wrong SECRETS_PASS** — A v2 file fails with a clear error (`SecretKeyMismatch` or `SecretDecryptFailed`), never with garbled output. Ensure `SECRETS_PASS` in your `.env` matches the key the secrets were stored with.
 
 **"Cannot specify both --secret and --secret-file"** — The two options are mutually exclusive. Use `--secret` for inline values or `--secret-file` for file contents.

@@ -1,94 +1,254 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/secret_codec.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:process_run/shell.dart';
-// systemd-creds encrypt - /root/secrets/[app-name].enc <<<"secret goes here"
 
-// 1. Make sure "/root/secrets" exists
-// 2. Make sure "ca/secrets" exists
-// 3. Create a new secret file with "systemd-creds encrypt - /root/secrets/[secret-namespaced].enc <<<"secret"
-// - store the secret encrypted in "ca/secrets", encrypted with systemd-creds encrypt
-// - use that secret to
+// Secrets are stored in [project]/secrets/<name> (see lib/secret_codec.dart
+// for the file formats), encrypted with the files key (SECRETS_PASS).
+//
+// When deploying apps on a node, the secrets the node configuration refers
+// to are decrypted locally and encrypted again on the node with
+// `systemd-creds encrypt - /root/secrets/<name>`. Secrets in /root/secrets
+// that are no longer needed are removed.
 
-// Encrypt stdin to a file
-// openssl enc -pbkdf2 -pass pass:thisisatest1 -a -out test3.enc <<<"secret"
-// Decrypt file to stdout
-// openssl enc -pbkdf2 -pass pass:thisisatest1 -d -in test3.enc -a -d
+/// Thrown by [readSecret] when `secrets/<name>` does not exist.
+class SecretNotFound implements Exception {
+  const SecretNotFound(this.name);
 
-/*
-1. Make sure we have [cluster_root]/secrets
-2. Generate a secret and encrypt it in [cluster_root]/secrets/[secret.namespace].enc
-3. When deploying apps on node, figure out what secrets are needed and deploy them in /root/secrets 400, clear those not needed
-4. 
+  final String name;
 
-use action command to create secrets
+  @override
+  String toString() => 'SecretNotFound: Secret "$name" not found';
+}
 
-*/
-import 'dart:io';
+/// Thrown by [saveSecret] when `secrets/<name>` exists and `overwrite` is
+/// false.
+class SecretExists implements Exception {
+  const SecretExists(this.name);
 
+  final String name;
+
+  @override
+  String toString() => 'SecretExists: Secret "$name" exists';
+}
+
+/// Where secret warnings are written. Tests can replace it to capture the
+/// output.
+void Function(String message) secretWarningSink = stderrLog;
+
+bool _legacyWarningShown = false;
+
+/// Lets the next legacy base64 read print the warning again (for tests).
+void resetLegacySecretWarning() {
+  _legacyWarningShown = false;
+}
+
+final _random = Random.secure();
+
+Directory _secretsDir(Directory workingDir) =>
+    Directory('${workingDir.path}/secrets');
+
+/// Refuses names that would leave the secrets folder or that are reserved
+/// (dot files, such as the temporary files of [saveSecret]).
+void _checkSecretName(String name) {
+  if (name.isEmpty || name.contains('/') || name.startsWith('.')) {
+    throw ArgumentError.value(name, 'name',
+        'must not be empty, contain "/" or start with "."');
+  }
+}
+
+/// True when `secrets/<name>` exists.
+bool secretExists(Directory workingDir, String name) {
+  _checkSecretName(name);
+  return File('${_secretsDir(workingDir).path}/$name').existsSync();
+}
+
+/// The `kind` stored in a v2 file: [kSecretKindGithubNetrc] when [value] is
+/// one netrc entry
+/// `machine api.github.com login x-access-token password <token>`,
+/// else [kSecretKindText].
+String detectSecretKind(String value) {
+  final tokens =
+      value.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+  if (tokens.length != 6 || tokens.first != 'machine') return kSecretKindText;
+  final fields = <String, String>{};
+  for (var i = 0; i < tokens.length; i += 2) {
+    final key = tokens[i];
+    if (!const {'machine', 'login', 'password'}.contains(key) ||
+        fields.containsKey(key)) {
+      return kSecretKindText;
+    }
+    fields[key] = tokens[i + 1];
+  }
+  return fields['machine'] == 'api.github.com' &&
+          fields['login'] == 'x-access-token'
+      ? kSecretKindGithubNetrc
+      : kSecretKindText;
+}
+
+Future<void> _chmod(String mode, String path) async {
+  // Only the mode and the path are passed to the child process, never a
+  // secret value.
+  final res = await Process.run('chmod', [mode, path]);
+  if (res.exitCode != 0) {
+    throw FileSystemException('chmod $mode failed: ${res.stderr}', path);
+  }
+}
+
+String _randomHex(int bytes) => List.generate(
+        bytes, (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'))
+    .join();
+
+/// Encrypts [secret] with [secretsPassword] (the files key or a password)
+/// and writes it as a `nix-infra-secret/v2` file to `secrets/<name>`.
+///
+/// The write is atomic: the file is written to `secrets/.tmp-<random>`
+/// (mode 600), read back and decrypted to check it, then renamed onto
+/// `secrets/<name>` and set to mode 400. The value is never written to disk
+/// in plaintext and never passed to a child process.
+///
+/// Throws [SecretExists] when the secret exists and [overwrite] is false.
 Future<void> saveSecret(Directory workingDir, String secretsPassword,
     String secretNamespace, String secret,
-    {bool debug = false}) async {
-  final secretsDir = Directory('${workingDir.path}/secrets');
+    {bool overwrite = false, bool debug = false}) async {
+  _checkSecretName(secretNamespace);
+  final secretsDir = _secretsDir(workingDir);
 
   if (!secretsDir.existsSync()) {
     echo('Create secrets dir');
-    final shell = Shell(
-      runInShell: true,
-      verbose: debug,
-    );
-    mkdir(secretsDir.path);
-    await shell.run('chmod 700 ${secretsDir.path}');
+    await secretsDir.create(recursive: true);
+    await _chmod('700', secretsDir.path);
   }
 
-  final controller = StreamController<List<int>>();
+  final target = File('${secretsDir.path}/$secretNamespace');
+  if (!overwrite && target.existsSync()) {
+    throw SecretExists(secretNamespace);
+  }
 
-  final shell1 = Shell(
-    environment: {
-      'SECRETS_PASS': secretsPassword,
-    },
-    runInShell: true,
-    verbose: debug,
-    stdin: controller.stream,
+  final encrypted = await encryptSecretV2(
+    plaintext: secret,
+    key: secretsPassword,
+    kind: detectSecretKind(secret),
+    created: DateTime.now().toUtc(),
   );
 
-  controller.add(utf8.encode(secret));
-  controller.close();
-  await shell1.run(
-      'openssl enc -pbkdf2 -pass env:SECRETS_PASS -a -out ${secretsDir.path}/$secretNamespace');
+  final tmpFile = File('${secretsDir.path}/.tmp-${_randomHex(8)}');
+  try {
+    // Created empty and restricted before any content is written.
+    await tmpFile.create(exclusive: true);
+    await _chmod('600', tmpFile.path);
+    final raf = await tmpFile.open(mode: FileMode.writeOnly);
+    try {
+      await raf.writeFrom(encrypted);
+      await raf.flush();
+    } finally {
+      await raf.close();
+    }
 
-  final shell2 = Shell(
-    runInShell: true,
-    verbose: debug,
-  );
-  await shell2.run('chmod 400 ${secretsDir.path}/$secretNamespace');
+    final readBack = await tmpFile.readAsBytes();
+    final check = await decryptSecret(readBack, key: secretsPassword);
+    if (check.plaintext != secret) {
+      throw FileSystemException(
+          'Secret "$secretNamespace" did not read back correctly',
+          tmpFile.path);
+    }
+
+    if (!overwrite && target.existsSync()) {
+      throw SecretExists(secretNamespace);
+    }
+    await tmpFile.rename(target.path);
+    await _chmod('400', target.path);
+  } catch (_) {
+    if (tmpFile.existsSync()) tmpFile.deleteSync();
+    rethrow;
+  }
 }
 
+/// Reads and decrypts `secrets/<name>` (v2, legacy OpenSSL or legacy
+/// base64).
+///
+/// Throws [SecretNotFound] when the file does not exist, and passes through
+/// [SecretDecryptFailed], [SecretKeyMismatch] and [SecretFormatUnknown].
 Future<String> readSecret(
     Directory workingDir, String secretsPassword, String secretNamespace,
     {bool debug = false}) async {
-  final secretsDir = Directory('${workingDir.path}/secrets');
+  _checkSecretName(secretNamespace);
+  final secretsDir = _secretsDir(workingDir);
   final secretFile = File('${secretsDir.path}/$secretNamespace');
-  if (!secretFile.existsSync()) {
-    throw Exception(
-        'Secret file "$secretNamespace" not found at "${secretsDir.path}"');
+
+  final Uint8List bytes;
+  try {
+    bytes = await secretFile.readAsBytes();
+  } on PathNotFoundException {
+    throw SecretNotFound(secretNamespace);
   }
 
-  final shell = Shell(
-    environment: {
-      'SECRETS_PASS': secretsPassword,
-    },
-    runInShell: true,
-    verbose: debug,
-  );
+  final result = await decryptSecret(bytes, key: secretsPassword);
+  if (result.format == SecretFileFormat.legacyBase64) {
+    _warnLegacySecrets(secretsDir);
+  }
 
-  final res = await shell.run(
-      'openssl enc -pbkdf2 -pass env:SECRETS_PASS -d -a -in ${secretsDir.path}/$secretNamespace');
+  // Earlier versions decrypted with `openssl enc -d` and returned the
+  // process_run `outText` of it, which splits the output into lines and
+  // joins them with '\n': CRLF and CR become LF and the last line break is
+  // removed. Return exactly that value, so deployed secrets do not change.
+  return const LineSplitter().convert(result.plaintext).join('\n');
+}
 
-  return res.outText;
+/// Prints one warning per process that lists the legacy base64 (not
+/// encrypted) files in [secretsDir]. Only names are printed, no values.
+void _warnLegacySecrets(Directory secretsDir) {
+  if (_legacyWarningShown) return;
+  _legacyWarningShown = true;
+
+  final names = <String>[];
+  for (final entry in secretsDir.listSync()) {
+    if (entry is! File) continue;
+    final name = entry.uri.pathSegments.last;
+    if (name.startsWith('.')) continue;
+    try {
+      if (detectSecretFormat(entry.readAsBytesSync()) ==
+          SecretFileFormat.legacyBase64) {
+        names.add(name);
+      }
+    } on FileSystemException {
+      // Not readable: not listed.
+    }
+  }
+  names.sort();
+  secretWarningSink(
+      'WARNING! These secret files are not encrypted, run `nix-infra secrets migrate`: '
+      '${names.join(', ')}');
+}
+
+/// Loads a secret for deployment to [nodeName].
+///
+/// Returns null and prints a warning when the secret does not exist. Any
+/// other error (wrong key, damaged file, unknown format) prints an error
+/// without the value and is rethrown, so the deployment of the node stops.
+Future<String?> loadSecretForDeploy(
+    Directory workingDir, String secretsPwd, String secretName,
+    {required String nodeName}) async {
+  try {
+    return await readSecret(workingDir, secretsPwd, secretName);
+  } on SecretNotFound {
+    echo(
+        "WARNING! Secret '$secretName' not found in secrets directory, skipping deployment to $nodeName");
+    echo(
+        "  Add it with: nix-infra store-secret --secret=\"<value>\" --store-as-secret=\"$secretName\"");
+    return null;
+  } catch (err) {
+    final reason = err is SecretCodecException ? err.message : '$err';
+    echo("ERROR! Secret '$secretName' could not be read: $reason");
+    rethrow;
+  }
 }
 
 Future<void> deploySecretOnRemote(
@@ -151,23 +311,23 @@ Future<void> syncSecrets(
   if (expectedSecrets.isNotEmpty) {
     if (debug) echoDebug("Deploy secrets on node ${node.name}");
     if (debug) echoDebug('Expected secrets: $expectedSecrets');
-    // Deploy secrets to target node
+    // Deploy secrets to target node. A missing secret is skipped with a
+    // warning; a secret that exists but cannot be read stops the deployment
+    // of this node before anything is removed from /root/secrets.
     for (final secretName in expectedSecrets) {
-      try {
-        final secret = await readSecret(workingDir, secretsPwd, secretName);
-        final newSecret =
-            substitute(secret, substitutions, expectedSecrets: expectedSecrets);
-        await deploySecretOnRemote(
-          workingDir,
-          secretName,
-          newSecret,
-          node,
-          sshClient: sshClient,
-        );
-      } catch (err) {
-        echo("WARNING! Secret '$secretName' not found in secrets directory, skipping deployment to ${node.name}");
-        echo("  Add it with: nix-infra store-secret --secret=\"<value>\" --store-as-secret=\"$secretName\"");
-      }
+      final secret = await loadSecretForDeploy(
+          workingDir, secretsPwd, secretName,
+          nodeName: node.name);
+      if (secret == null) continue;
+      final newSecret =
+          substitute(secret, substitutions, expectedSecrets: expectedSecrets);
+      await deploySecretOnRemote(
+        workingDir,
+        secretName,
+        newSecret,
+        node,
+        sshClient: sshClient,
+      );
     }
   }
 

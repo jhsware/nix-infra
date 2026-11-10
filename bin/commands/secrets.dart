@@ -31,6 +31,8 @@ class StoreCommand extends Command {
 
   StoreCommand() {
     argParser.addFlag('batch', defaultsTo: false);
+    argParser.addFlag('overwrite',
+        defaultsTo: false, help: 'Replace an existing secret with this name');
     argParser.addOption('secret',
         help: 'Secret value as a string (for single-line secrets)');
     argParser.addOption('secret-file',
@@ -45,6 +47,7 @@ class StoreCommand extends Command {
 
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
+    final bool overwrite = argResults!['overwrite'];
     final String? secretOption = argResults!['secret'];
     final String? secretFilePath = argResults!['secret-file'];
     final String secretName = argResults!['name'];
@@ -57,8 +60,13 @@ class StoreCommand extends Command {
 
     final secretsPwd = getSecretsPassword(env, batch);
 
-
-    await saveSecret(workingDir, secretsPwd, secretName, secret);
+    try {
+      await saveSecret(workingDir, secretsPwd, secretName, secret,
+          overwrite: overwrite);
+    } on SecretExists {
+      echo('ERROR! Secret "$secretName" exists. Use --overwrite to replace it.');
+      exit(2);
+    }
     echo('Secret saved as $secretName');
   }
 }

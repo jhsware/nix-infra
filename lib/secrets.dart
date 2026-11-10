@@ -423,7 +423,7 @@ List<SecretListRow> listSecretFiles(Directory workingDir) {
     Uint8List? bytes;
     DateTime? modified;
     try {
-      modified = entry.lastModifiedSync();
+      modified = entry.lastModifiedSync().toUtc();
       bytes = entry.readAsBytesSync();
     } on FileSystemException {
       bytes = null;

@@ -171,6 +171,151 @@ Future<void> saveSecret(Directory workingDir, String secretsPassword,
   }
 }
 
+/// The format label `nix-infra secrets list` prints for a file.
+String secretFormatLabel(SecretFileFormat format) => switch (format) {
+      SecretFileFormat.v2 => 'v2',
+      SecretFileFormat.opensslSalted => 'openssl',
+      SecretFileFormat.legacyBase64 => 'plain',
+      SecretFileFormat.unknown => 'unknown',
+    };
+
+/// Formats [time] as UTC ISO 8601 with seconds, like the v2 `created` field.
+String formatSecretTime(DateTime time) {
+  final t = time.toUtc();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${t.year.toString().padLeft(4, '0')}-${two(t.month)}-${two(t.day)}'
+      'T${two(t.hour)}:${two(t.minute)}:${two(t.second)}Z';
+}
+
+/// One line of `nix-infra secrets list`. No value and no key is read to
+/// build it.
+class SecretListRow {
+  const SecretListRow({
+    required this.name,
+    required this.format,
+    this.kind,
+    this.created,
+    this.modified,
+    this.secretFormat,
+  });
+
+  final String name;
+
+  /// `v2`, `openssl`, `plain`, `unknown` or `link`.
+  final String format;
+
+  /// The `kind` of a v2 file, `(bad header)` when the v2 header cannot be
+  /// parsed, else null.
+  final String? kind;
+
+  /// The `created` time of a v2 file, else null.
+  final DateTime? created;
+
+  /// The modification time of a regular file; null for a symbolic link.
+  final DateTime? modified;
+
+  /// The detected format; null for a symbolic link.
+  final SecretFileFormat? secretFormat;
+
+  bool get isLink => secretFormat == null;
+}
+
+/// Builds the list row of one entry in the secrets folder.
+///
+/// [bytes] is the content of a regular file, or null when it could not be
+/// read; [isLink] is true for a symbolic link (which is not followed). Only
+/// the format is detected and the v2 header is parsed; nothing is decrypted.
+SecretListRow buildSecretListRow(
+  String name, {
+  Uint8List? bytes,
+  bool isLink = false,
+  DateTime? modified,
+}) {
+  if (isLink) {
+    return SecretListRow(name: name, format: 'link');
+  }
+  final format =
+      bytes == null ? SecretFileFormat.unknown : detectSecretFormat(bytes);
+  String? kind;
+  DateTime? created;
+  if (format == SecretFileFormat.v2) {
+    try {
+      final header = parseSecretV2Header(bytes!);
+      kind = header.kind;
+      created = header.created;
+    } on SecretFormatUnknown {
+      kind = '(bad header)';
+    }
+  }
+  return SecretListRow(
+    name: name,
+    format: secretFormatLabel(format),
+    kind: kind,
+    created: created,
+    modified: modified,
+    secretFormat: format,
+  );
+}
+
+/// The rows for every entry in `secrets/` whose name does not start with
+/// `.`, sorted by name. Regular files are read (not decrypted); symbolic
+/// links are listed as `link` and not followed; other entries (folders) are
+/// left out. Returns an empty list when the folder does not exist.
+List<SecretListRow> listSecretFiles(Directory workingDir) {
+  final secretsDir = _secretsDir(workingDir);
+  if (!secretsDir.existsSync()) return [];
+  final rows = <SecretListRow>[];
+  for (final entry in secretsDir.listSync(followLinks: false)) {
+    final name = entry.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+    if (name.startsWith('.')) continue;
+    if (entry is Link) {
+      rows.add(buildSecretListRow(name, isLink: true));
+      continue;
+    }
+    if (entry is! File) continue;
+    Uint8List? bytes;
+    DateTime? modified;
+    try {
+      modified = entry.lastModifiedSync();
+      bytes = entry.readAsBytesSync();
+    } on FileSystemException {
+      bytes = null;
+    }
+    rows.add(buildSecretListRow(name, bytes: bytes, modified: modified));
+  }
+  rows.sort((a, b) => a.name.compareTo(b.name));
+  return rows;
+}
+
+/// Formats [rows] as aligned columns NAME, FORMAT, KIND, CREATED, MODIFIED
+/// with a header line. Empty cells are `-`.
+List<String> formatSecretListRows(List<SecretListRow> rows) {
+  final table = <List<String>>[
+    ['NAME', 'FORMAT', 'KIND', 'CREATED', 'MODIFIED'],
+    for (final row in rows)
+      [
+        row.name,
+        row.format,
+        row.kind ?? '-',
+        row.created != null ? formatSecretTime(row.created!) : '-',
+        row.modified != null ? formatSecretTime(row.modified!) : '-',
+      ],
+  ];
+  final widths = List.filled(5, 0);
+  for (final cells in table) {
+    for (var i = 0; i < cells.length; i++) {
+      widths[i] = max(widths[i], cells[i].length);
+    }
+  }
+  return [
+    for (final cells in table)
+      [
+        for (var i = 0; i < cells.length; i++)
+          i == cells.length - 1 ? cells[i] : cells[i].padRight(widths[i]),
+      ].join('  '),
+  ];
+}
+
 /// Reads and decrypts `secrets/<name>` (v2, legacy OpenSSL or legacy
 /// base64).
 ///

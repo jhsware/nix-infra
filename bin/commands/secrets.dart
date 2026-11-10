@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/secret_codec.dart';
 import 'package:nix_infra/secrets.dart';
 import 'utils.dart';
 
@@ -20,6 +21,55 @@ class SecretsCommand extends Command {
 
     addSubcommand(StoreCommand());
     addSubcommand(ReadCommand());
+    addSubcommand(ListCommand());
+    addSubcommand(NewKeyCommand());
+  }
+}
+
+class ListCommand extends Command {
+  @override
+  final name = 'list';
+  @override
+  final description =
+      'List the secret files with format, kind, created and modified time '
+      '(no key needed, nothing is decrypted)';
+
+  @override
+  void run() async {
+    final workingDir =
+        await getWorkingDirectory(parent?.argResults!['working-dir']);
+    final rows = listSecretFiles(workingDir);
+    if (rows.isEmpty) {
+      stderr.writeln('No secret files in ${workingDir.path}/secrets');
+      return;
+    }
+    for (final line in formatSecretListRows(rows)) {
+      stdout.writeln(line);
+    }
+  }
+}
+
+class NewKeyCommand extends Command {
+  @override
+  final name = 'new-key';
+  @override
+  final description =
+      'Print a new generated files key (the key on stdout, instructions on stderr)';
+
+  @override
+  void run() async {
+    stdout.writeln(generateFilesKey());
+    stderr.writeln('''
+
+This is a new files key. It is shown only once: store it now.
+
+In a new project, store it as SECRETS_PASS (in .env, or in the sysops vault).
+
+To use it in a project that already has secret files:
+  1. Put the old key in SECRETS_PASS and the new key in NEW_SECRETS_PASS.
+  2. Run: nix-infra secrets migrate --new-key-env NEW_SECRETS_PASS
+  3. Store the new key as SECRETS_PASS (in .env, or in the sysops vault)
+     and remove NEW_SECRETS_PASS.''');
   }
 }
 

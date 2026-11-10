@@ -557,6 +557,14 @@ class ActionCommand extends Command {
         echo('ERROR! Cannot save multiple secrets at once');
         exit(2);
       }
+      // Refuse an existing name before the action runs on the node.
+      final existsMessage =
+          'ERROR! Secret "$secretNamespace" exists. Use --overwrite to replace it '
+          '(nix-infra secrets store --overwrite).';
+      if (secretExists(workingDir, secretNamespace)) {
+        echo(existsMessage);
+        exit(2);
+      }
       final node = nodes.first;
       final secret = await runActionScriptOverSsh(
         workingDir,
@@ -567,7 +575,12 @@ class ActionCommand extends Command {
         envVars: envVars,
         overlayNetwork: overlayNetwork,
       );
-      await saveSecret(workingDir, secretsPwd, secretNamespace, secret);
+      try {
+        await saveSecret(workingDir, secretsPwd, secretNamespace, secret);
+      } on SecretExists {
+        echo(existsMessage);
+        exit(2);
+      }
       echo('Output saved as secret: $secretNamespace');
     }
   }

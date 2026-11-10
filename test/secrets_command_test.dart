@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:nix_infra/secret_codec.dart';
+import 'package:nix_infra/secrets.dart';
 import 'package:test/test.dart';
 
 // We test resolveSecret logic inline since the function uses exit() for errors,
@@ -63,14 +65,18 @@ void main() {
     });
 
     test('multi-line netrc secret round-trips through saveSecret/readSecret', () async {
-      // This tests that the encryption/decryption in lib/secrets.dart
-      // properly handles multi-line content when piped via stdin/file
       final netrcContent = 'machine github.com\n'
           'login x-access-token\n'
           'password ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n';
+      final key = generateFilesKey();
 
-      // Verify the content structure is valid netrc format
-      final lines = netrcContent.trim().split('\n');
+      await saveSecret(tempDir, key, 'github-netrc', netrcContent);
+      final readBack = await readSecret(tempDir, key, 'github-netrc');
+
+      // readSecret returns the value as earlier versions did (process_run
+      // outText): the lines are kept, the final line break is removed.
+      expect(readBack, equals(netrcContent.substring(0, netrcContent.length - 1)));
+      final lines = readBack.split('\n');
       expect(lines.length, equals(3));
       expect(lines[0], startsWith('machine '));
       expect(lines[1], startsWith('login '));

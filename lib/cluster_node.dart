@@ -41,6 +41,20 @@ List<String> scanForNetrcSecrets(String filePath) {
   return expectedNetrcSecrets;
 }
 
+/// The shell commands that decrypt each netrc secret in /root/secrets and
+/// append it to /run/keys/combined-netrc.
+///
+/// The deployed values have no final line break (readSecret returns the
+/// value as process_run `outText` did), so a line break is written after
+/// each entry. Otherwise two entries would join on one line. Blank lines
+/// are allowed in netrc.
+String buildNetrcDecryptCommands(List<String> netrcSecretNames) =>
+    netrcSecretNames
+        .map((name) =>
+            'systemd-creds decrypt /root/secrets/$name - >> /run/keys/combined-netrc'
+            ' && echo >> /run/keys/combined-netrc')
+        .join('\n');
+
 /// Bootstrap netrc credentials on a remote node.
 ///
 /// Decrypts the specified secrets from /root/secrets/ and combines them
@@ -62,10 +76,7 @@ Future<void> bootstrapNetrcOnRemote(
   if (debug) echoDebug("Bootstrap netrc on $nodeName");
   if (debug) echoDebug('Netrc secrets: $netrcSecretNames');
 
-  final decryptCmds = netrcSecretNames
-      .map((name) =>
-          'systemd-creds decrypt /root/secrets/$name - >> /run/keys/combined-netrc')
-      .join('\n');
+  final decryptCmds = buildNetrcDecryptCommands(netrcSecretNames);
   await sshClient.run('''
     mkdir -p /run/keys
     rm -f /run/keys/combined-netrc

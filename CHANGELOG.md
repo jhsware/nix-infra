@@ -1,6 +1,17 @@
 NOTE: This are pre 1.0 releases, this means there can be breaking changes on minor releases without clear warnings.
 
-## Unreleased
+## 0.18.0-beta
+- SECURITY: secret files made by earlier versions are NOT encrypted. `secrets store` and `--save-as-secret` ran `openssl enc -pbkdf2 -a` without a cipher, which only encodes the value as base64, and the documentation wrongly said the files were encrypted and safe for version control. Upgrade nix-infra on every computer that deploys, run `nix-infra secrets migrate`, and rotate the secrets if the `secrets/` folder was ever committed, copied or shared. Keep `secrets/` ignored in git. See docs/SECRETS.md "Migrating existing secrets"
+- secrets are now written as `nix-infra-secret/v2` files: AES-256-GCM with an authenticated header, encrypted in-process (no openssl child process, the value never on a command line or on disk in plaintext), atomic write with a read-back check, mode 400
+- `SECRETS_PASS` can be a generated files key (`nisk1_...`, HKDF-SHA256, recommended) or a password (PBKDF2-HMAC-SHA256, 600000 iterations, about 2.4 s per derivation)
+- legacy files are still read: base64 (with a warning that lists them) and OpenSSL `Salted__` AES-256-CBC files (PBKDF2, EVP_BytesToKey SHA-256 or MD5); deployed values are byte-for-byte the same as before
+- BREAKING: a secret that exists but cannot be read (wrong key, damaged file, unknown format) now stops the deployment of the node with `ERROR! Secret '<name>' could not be read: <reason>`; earlier versions skipped it silently
+- BREAKING: `secrets store` and `--save-as-secret` no longer replace an existing secret; use `secrets store --overwrite`
+- added `nix-infra secrets migrate` (`--dry-run`, `--batch`) to encrypt legacy files as v2, and `--new-key-env <VAR>` to re-encrypt all files with a new key (can be run again after a failure)
+- added `nix-infra secrets list` (name, format, kind, created, modified; no key needed)
+- added `nix-infra secrets new-key` to print a generated files key
+- the netrc bootstrap writes a line break after each decrypted entry, so two netrc secrets no longer join on one line
+- an older nix-infra cannot read v2 files and skips them during deployment: upgrade every computer that deploys before storing or migrating secrets
 - `provision --debug --batch` now exits with code 3 after the install because the nodes are not rebooted; this stops chained scripts from running later steps against the old OS
 - `provision --debug` now pauses after the install so you can reboot the nodes manually, then runs the conversion check once (no retries); with `--batch` the check is skipped
 - the install script now runs `switch-to-configuration boot` with `NIXOS_INSTALL_BOOTLOADER=1`, so the bootloader is reinstalled on every run; a retried install wipes the ESP and previously left it without an EFI boot file

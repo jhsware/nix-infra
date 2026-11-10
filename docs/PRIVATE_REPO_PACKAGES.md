@@ -328,7 +328,7 @@ nix-infra secrets read --name="secrets.netrc/my-app-github-netrc"
 
 - The GitHub PAT should have minimal scopes — only `repo` (or fine-grained `contents:read`) for the specific repository
 - The netrc file at `/run/keys/combined-netrc` is mode `0400` (root read-only) on tmpfs (never persisted to disk)
-- Secrets are encrypted at rest in `secrets/` using OpenSSL PBKDF2
+- Secrets are encrypted at rest in `secrets/` with AES-256-GCM (`nix-infra-secret/v2`); files made before 0.18.0-beta are base64 only until you run `nix-infra secrets migrate` (see [SECRETS.md](./SECRETS.md#migrating-existing-secrets))
 - Secrets are encrypted on the server using `systemd-creds encrypt` (tied to the machine's TPM or `/var/lib/systemd/credential.secret`)
 - The plaintext netrc only exists in memory (tmpfs) at runtime
 

@@ -139,6 +139,31 @@ Future<void> saveSecret(Directory workingDir, String secretsPassword,
     created: DateTime.now().toUtc(),
   );
 
+  await _writeSecretAtomic(secretsDir, secretNamespace, encrypted,
+      key: secretsPassword,
+      plaintext: secret,
+      beforeRename: () {
+        if (!overwrite && target.existsSync()) {
+          throw SecretExists(secretNamespace);
+        }
+      });
+}
+
+/// Writes [encrypted] to `secrets/<name>` atomically: a new temporary file
+/// `secrets/.tmp-<random>` (created empty, mode 600, before any content is
+/// written) is written, read back and decrypted with [key]; the plaintext
+/// must equal [plaintext]. Then [beforeRename] runs (it may throw to stop),
+/// the temporary file is renamed onto `secrets/<name>` and set to mode 400.
+/// The temporary file is removed on any error.
+Future<void> _writeSecretAtomic(
+  Directory secretsDir,
+  String name,
+  Uint8List encrypted, {
+  required String key,
+  required String plaintext,
+  void Function()? beforeRename,
+}) async {
+  final target = File('${secretsDir.path}/$name');
   final tmpFile = File('${secretsDir.path}/.tmp-${_randomHex(8)}');
   try {
     // Created empty and restricted before any content is written.
@@ -153,22 +178,144 @@ Future<void> saveSecret(Directory workingDir, String secretsPassword,
     }
 
     final readBack = await tmpFile.readAsBytes();
-    final check = await decryptSecret(readBack, key: secretsPassword);
-    if (check.plaintext != secret) {
+    final check = await decryptSecret(readBack, key: key);
+    if (check.plaintext != plaintext) {
       throw FileSystemException(
-          'Secret "$secretNamespace" did not read back correctly',
-          tmpFile.path);
+          'Secret "$name" did not read back correctly', tmpFile.path);
     }
 
-    if (!overwrite && target.existsSync()) {
-      throw SecretExists(secretNamespace);
-    }
+    beforeRename?.call();
     await tmpFile.rename(target.path);
     await _chmod('400', target.path);
   } catch (_) {
     if (tmpFile.existsSync()) tmpFile.deleteSync();
     rethrow;
   }
+}
+
+/// The outcome of [migrateSecret] for one file.
+enum MigrateStatus {
+  /// The file was written again as v2 with the new key.
+  converted,
+
+  /// Nothing to do: the file is v2 and already opens with the new key (or
+  /// is v2 and no new key was given).
+  skipped,
+
+  /// The file could not be migrated and was left unchanged; see
+  /// [MigrateResult.reason].
+  failed,
+}
+
+/// The result of [migrateSecret]. Never contains a value or a key.
+class MigrateResult {
+  const MigrateResult(this.name, this.status, {this.format, this.reason});
+
+  final String name;
+  final MigrateStatus status;
+
+  /// The format of the file before the migration; null when it could not be
+  /// read.
+  final SecretFileFormat? format;
+
+  /// Why the file failed (or why it was skipped).
+  final String? reason;
+
+  @override
+  String toString() => 'MigrateResult($name, ${status.name}'
+      '${format != null ? ', ${format!.name}' : ''}'
+      '${reason != null ? ', $reason' : ''})';
+}
+
+/// Rewrites `secrets/<name>` as a v2 file encrypted with [newKey].
+///
+/// The file is decrypted with [oldKey] (a legacy base64 file needs no key).
+/// The `kind` of a v2 file is kept; for a legacy file it is detected like
+/// [saveSecret] does. `created` is kept from a v2 header; for a legacy file
+/// it is the modification time of the old file. The file is replaced with
+/// the same atomic write as [saveSecret] (temporary file, read back and
+/// compared, rename, mode 400), and only when its content did not change
+/// since it was read. No plaintext and no backup copy is written.
+///
+/// Returns [MigrateStatus.skipped] for a v2 file when [newKey] equals
+/// [oldKey], or when [newKey] already opens it (so an interrupted key change
+/// can be run again). Returns [MigrateStatus.failed] with a reason, and
+/// leaves the file unchanged, when it cannot be read, decrypted or written.
+Future<MigrateResult> migrateSecret(
+  Directory workingDir,
+  String name, {
+  required String oldKey,
+  required String newKey,
+}) async {
+  _checkSecretName(name);
+  final secretsDir = _secretsDir(workingDir);
+  final file = File('${secretsDir.path}/$name');
+  SecretFileFormat? format;
+  try {
+    if (FileSystemEntity.isLinkSync(file.path)) {
+      return MigrateResult(name, MigrateStatus.failed,
+          reason: 'is a symbolic link, not changed');
+    }
+    if (!file.existsSync()) {
+      return MigrateResult(name, MigrateStatus.failed, reason: 'not found');
+    }
+    final modified = file.lastModifiedSync();
+    final bytes = await file.readAsBytes();
+    format = detectSecretFormat(bytes);
+
+    if (format == SecretFileFormat.v2) {
+      if (newKey == oldKey) {
+        return MigrateResult(name, MigrateStatus.skipped,
+            format: format, reason: 'already v2');
+      }
+      try {
+        await decryptSecret(bytes, key: newKey);
+        return MigrateResult(name, MigrateStatus.skipped,
+            format: format, reason: 'already encrypted with the new key');
+      } on SecretCodecException {
+        // Not yet under the new key: decrypt with the old key below.
+      }
+    }
+
+    final decrypted = await decryptSecret(bytes, key: oldKey);
+    final plaintext = decrypted.plaintext;
+    final encrypted = await encryptSecretV2(
+      plaintext: plaintext,
+      key: newKey,
+      kind: decrypted.kind ?? detectSecretKind(plaintext),
+      created: decrypted.created ?? modified.toUtc(),
+    );
+
+    await _writeSecretAtomic(secretsDir, name, encrypted,
+        key: newKey,
+        plaintext: plaintext,
+        beforeRename: () {
+          final current = file.readAsBytesSync();
+          if (!_sameBytes(current, bytes)) {
+            throw FileSystemException(
+                'Secret "$name" changed during the migration', file.path);
+          }
+        });
+    return MigrateResult(name, MigrateStatus.converted, format: format);
+  } on SecretCodecException catch (e) {
+    return MigrateResult(name, MigrateStatus.failed,
+        format: format, reason: e.message);
+  } on FileSystemException catch (e) {
+    return MigrateResult(name, MigrateStatus.failed,
+        format: format,
+        reason: '${e.message}${e.osError != null ? ': ${e.osError!.message}' : ''}');
+  } on ArgumentError catch (e) {
+    return MigrateResult(name, MigrateStatus.failed,
+        format: format, reason: 'invalid ${e.name ?? 'argument'}: ${e.message}');
+  }
+}
+
+bool _sameBytes(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// The format label `nix-infra secrets list` prints for a file.

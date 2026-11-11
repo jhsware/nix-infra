@@ -305,7 +305,7 @@ String multi(Iterable<String> lines) {
 DotEnv envWithProcessPrecedence(File? envFile,
     {Map<String, String>? processEnvironment}) {
   final process = processEnvironment ?? Platform.environment;
-  final env = DotEnv(); // includePlatformEnvironment: false
+  final env = DotEnv(); // without the platform environment; added below
   // Check first: dotenv prints "[dotenv] Load failed" for a missing file.
   if (envFile != null && envFile.existsSync()) env.load([envFile.path]);
   env.addAll({

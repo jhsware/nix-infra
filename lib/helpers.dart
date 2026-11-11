@@ -292,17 +292,42 @@ String multi(Iterable<String> lines) {
   return lines.toList().join('\n');
 }
 
-Future<DotEnv> loadEnv(String? envFileName, Directory workingDir) async {
-  envFileName ??= '.env';
-  
-  // Load environment variables
-  final env = DotEnv(includePlatformEnvironment: true);
-  final envFile =
-      File(path.normalize('${workingDir.path}/$envFileName'));
-  if (await envFile.exists()) {
-    env.load([envFile.path]);
-  }
+/// The configuration of one nix-infra invocation: the variables of
+/// [envFile] (when it exists) overlaid with the process environment.
+///
+/// - A non-empty process variable wins over the same name in the file.
+/// - An empty process variable never shadows a file value; it is only
+///   kept when the file does not define the name.
+/// - `$VAR` interpolation inside the file is done by the dotenv parser and
+///   is unchanged.
+///
+/// [processEnvironment] defaults to [Platform.environment]; tests pass a map.
+DotEnv envWithProcessPrecedence(File? envFile,
+    {Map<String, String>? processEnvironment}) {
+  final process = processEnvironment ?? Platform.environment;
+  final env = DotEnv(); // without the platform environment; added below
+  // Check first: dotenv prints "[dotenv] Load failed" for a missing file.
+  if (envFile != null && envFile.existsSync()) env.load([envFile.path]);
+  env.addAll({
+    for (final e in process.entries)
+      if (e.value.isNotEmpty || env[e.key] == null) e.key: e.value,
+  });
   return env;
+}
+
+/// Loads the configuration from [envFileName] (default `.env`, resolved
+/// relative to [workingDir]) and the process environment.
+///
+/// A non-empty variable in the process environment wins over the same name
+/// in the file; an empty one does not hide a file value. See
+/// [envWithProcessPrecedence]. [processEnvironment] defaults to
+/// [Platform.environment] and exists for tests and library callers.
+Future<DotEnv> loadEnv(String? envFileName, Directory workingDir,
+    {Map<String, String>? processEnvironment}) async {
+  envFileName ??= '.env';
+  final envFile = File(path.normalize('${workingDir.path}/$envFileName'));
+  return envWithProcessPrecedence(envFile,
+      processEnvironment: processEnvironment);
 }
 
 Future<Directory> getWorkingDirectory(String dirName) async {

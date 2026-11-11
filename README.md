@@ -61,6 +61,7 @@ Comprehensive documentation is available in the [`docs/`](./docs/) directory:
 Besides the CLI and MCP binaries, this package is consumed as a **Dart library** by other tools. Known consumers:
 
 - **sysops_server** (`terminal_module`) — uses the provider API to discover fleet hosts for interactive SSH terminals, so host discovery follows exactly the same rules as the CLI (`servers.yaml` self-hosting first, cloud provider fallback) without duplicating inventory logic.
+- **sysops_server** (`fleet_inventory`) — builds the discovery environment with `loadEnv`, so `.env` and the process environment are combined with the same precedence as in the CLI.
 
 Treat the following as public API — avoid breaking changes, and note any change in the CHANGELOG:
 
@@ -68,7 +69,7 @@ Treat the following as public API — avoid breaking changes, and note any chang
 - `InfrastructureProvider.getServers` (`lib/providers/provider.dart`)
 - `ClusterNode` (`lib/types.dart`) — notably `name`, `ipAddr`, `username`, and `getEffectiveSshKeyPath`
 - `SelfHosting` servers.yaml parsing (`lib/providers/self_hosting.dart`)
-
+- `loadEnv(envFileName, workingDir, {processEnvironment})` and `envWithProcessPrecedence` (`lib/helpers.dart`) — see [Configuration and `.env`](./docs/ARCHITECTURE.md#configuration-and-env)
 ## Building From Source
 
 1. Install Nix (choose one):

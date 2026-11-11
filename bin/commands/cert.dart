@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:path/path.dart' as path;
-import 'package:dotenv/dotenv.dart';
 
 
 class CertCommand extends Command {
@@ -41,12 +40,11 @@ class CertCommand extends Command {
       exit(2);
     }
 
-    // Load environment variables
-    final env = DotEnv(includePlatformEnvironment: true);
-    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
-    if (await envFile.exists()) {
-      env.load([envFile.path]);
-    }
+    // Load environment variables (a non-empty process variable wins over .env).
+    // The commented-out implementation below reads env.
+    // ignore: unused_local_variable
+    final env = envWithProcessPrecedence(
+        File(argResults!['env'] ?? '${workingDir.path}/.env'));
 
     // final batch = argResults!['batch'] as bool;
     // final target = argResults!['target'] as String;

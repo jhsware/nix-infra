@@ -4,7 +4,6 @@ import 'package:nix_infra/certificates.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:path/path.dart' as path;
-import 'package:dotenv/dotenv.dart';
 import './utils.dart';
 
 class InitCommand extends Command {
@@ -42,12 +41,9 @@ class InitCommand extends Command {
       exit(2);
     }
 
-    // Load environment variables
-    final env = DotEnv(includePlatformEnvironment: true);
-    final envFile = File(argResults!['env'] ?? '${workingDir.path}/.env');
-    if (await envFile.exists()) {
-      env.load([envFile.path]);
-    }
+    // Load environment variables (a non-empty process variable wins over .env)
+    final env = envWithProcessPrecedence(
+        File(argResults!['env'] ?? '${workingDir.path}/.env'));
 
     final batch = argResults!['batch'] as bool;
 

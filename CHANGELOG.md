@@ -7,6 +7,8 @@ NOTE: This are pre 1.0 releases, this means there can be breaking changes on min
 - legacy files are still read: base64 (with a warning that lists them) and OpenSSL `Salted__` AES-256-CBC files (PBKDF2, EVP_BytesToKey SHA-256 or MD5); deployed values are byte-for-byte the same as before
 - BREAKING: a secret that exists but cannot be read (wrong key, damaged file, unknown format) now stops the deployment of the node with `ERROR! Secret '<name>' could not be read: <reason>`; earlier versions skipped it silently
 - BREAKING: `secrets store` and `--save-as-secret` no longer replace an existing secret; use `secrets store --overwrite`
+- BREAKING: a variable set in the process environment now wins over the same name in `.env` (before, `.env` won). This applies to every command, the MCP servers, `init` and `cert`. An empty variable does not hide a `.env` value. If you export a variable (for example `HCLOUD_TOKEN` or `SECRETS_PASS` for another project) and relied on `.env` to replace it, unset it. A wrapper script that sources `.env` still replaces exported values before nix-infra starts. See docs/SECRETS.md "The key (SECRETS_PASS)" and docs/ARCHITECTURE.md "Configuration and `.env`"
+- `loadEnv` has an optional `processEnvironment` parameter, and the new `envWithProcessPrecedence` (`lib/helpers.dart`) builds the env for library callers
 - added `nix-infra secrets migrate` (`--dry-run`, `--batch`) to encrypt legacy files as v2, and `--new-key-env <VAR>` to re-encrypt all files with a new key (can be run again after a failure)
 - added `nix-infra secrets list` (name, format, kind, created, modified; no key needed)
 - added `nix-infra secrets new-key` to print a generated files key

@@ -75,7 +75,7 @@ The `secrets read` command decrypts and displays a stored secret. This is useful
 nix-infra secrets read --name="github-netrc"
 ```
 
-The secret is decrypted using `SECRETS_PASS` and printed to stdout. Use `--batch` to suppress interactive prompts (reads the key from `.env` or the environment only). A secret that cannot be read (wrong key, damaged file, unknown format) prints an error and exits with code 1.
+The secret is decrypted using `SECRETS_PASS` and printed to stdout. Use `--batch` to suppress interactive prompts (reads the key from the environment or `.env` only; the environment wins, see [The key](#the-key-secrets_pass)). A secret that cannot be read (wrong key, damaged file, unknown format) prints an error and exits with code 1.
 
 ## Storing Action Output as Secrets
 
@@ -121,10 +121,20 @@ key_id: <8 hex, only for hkdf>
 - **kind** — `github-netrc` when the value is one netrc entry `machine api.github.com login x-access-token password <token>`, else `text`.
 - **created** — When the value was stored. `secrets migrate` keeps it, or uses the modification time of the old file.
 
-The key is `SECRETS_PASS`, sourced from:
+### The key (SECRETS_PASS)
 
-1. `SECRETS_PASS` in your `.env` file or the environment (recommended for automation; `SECRETS_PWD` still works but is deprecated)
-2. Interactive prompt (when running manually)
+nix-infra looks for the files key in this order and uses the first non-empty value:
+
+1. `SECRETS_PASS` in the process environment, for example `SECRETS_PASS=… nix-infra …`, an exported variable, a CI secret, or a sysops terminal that has `SECRETS_PASS` in its grants;
+2. `SECRETS_PASS` in the project `.env` (or the file given with `--env`);
+3. `SECRETS_PWD` (deprecated), process environment then `.env`;
+4. the interactive prompt, which is not used with `--batch`.
+
+An empty variable in the environment (`SECRETS_PASS=`) does not hide the `.env` value. A `SECRETS_PASS` in `.env` still wins over a `SECRETS_PWD` in the environment. Before 0.18.0-beta, `.env` won over the environment.
+
+#### Wrapper scripts
+
+A script that runs `source .env` (or `. "$ENV"`) before it calls nix-infra replaces an exported `SECRETS_PASS` with the `.env` value before nix-infra starts, so the environment no longer wins. The project `cli` scripts of the nix-infra-machine and nix-infra-ha-cluster templates do this. When the key is supplied another way (CI, the sysops vault), remove `SECRETS_PASS` from `.env`, or make the script keep an existing value, for example with `: "${SECRETS_PASS:=…}"` or by skipping the line when the variable is set.
 
 ### Generated files key or password
 
@@ -191,7 +201,7 @@ nix-infra secrets migrate --new-key-env NEW_SECRETS_PASS
 
 `--new-key-env <VAR>` re-encrypts every file (v2 and legacy) from the key in `SECRETS_PASS` to the key in `<VAR>`. It refuses when the variable is missing, empty, equal to `SECRETS_PASS`, or starts with `nisk1_` but is not a valid generated key. Files that the new key already opens are skipped, so after a failure you can run the command again until it succeeds; keep both keys until then.
 
-When it succeeds, store the new key as `SECRETS_PASS` (in `.env`, or in the sysops vault), remove `NEW_SECRETS_PASS` and delete `new-key.txt`. Every computer that deploys needs the new key.
+When it succeeds, store the new key as `SECRETS_PASS` (in `.env`, or in the sysops vault) and remove the old value from every place that supplies it. A stale `.env` line is used whenever the environment has no `SECRETS_PASS`. Then remove `NEW_SECRETS_PASS` and delete `new-key.txt`. Every computer that deploys needs the new key.
 
 ## Listing secrets
 
@@ -436,7 +446,7 @@ During deployment, nix-infra will:
 - **Atomic writes** — A secret file is written to a temporary file, read back and checked, then renamed into place; the value is never written to disk in plaintext
 - **Not in version control** — Keep `secrets/` ignored in git (the project templates have `secrets/*` in `.gitignore`)
 - **Garbage collection** — Unused secrets are automatically removed from target nodes during deployment
-- **SECRETS_PASS isolation** — The files key is sourced from `.env`, the environment or an interactive prompt, never stored in configuration files
+- **SECRETS_PASS isolation** — The files key is sourced from the environment, `.env` or an interactive prompt (the environment wins over `.env`), never stored in configuration files
 
 ## Troubleshooting
 
@@ -450,6 +460,10 @@ During deployment, nix-infra will:
 
 **"WARNING! These secret files are not encrypted, run `nix-infra secrets migrate`"** — Some files are legacy base64 files. See [Migrating existing secrets](#migrating-existing-secrets).
 
-**Wrong SECRETS_PASS** — A v2 file fails with a clear error (`SecretKeyMismatch` or `SecretDecryptFailed`), never with garbled output. Ensure `SECRETS_PASS` in your `.env` matches the key the secrets were stored with.
+**Wrong SECRETS_PASS** — A v2 file fails with a clear error (`SecretKeyMismatch` or `SecretDecryptFailed`), never with garbled output. Check which key nix-infra got: a non-empty `SECRETS_PASS` in the environment wins, else the one in `.env`, else `SECRETS_PWD` (see [The key](#the-key-secrets_pass)). It must match the key the secrets were stored with.
+
+**"SecretKeyMismatch: The file was encrypted with the generated files key `<id>`, but the given key is not a generated files key"** — The file needs a generated files key (`nisk1_...`), but nix-infra got a password. Usually an old password is still in `SECRETS_PASS` in `.env`, while the key is meant to come from the environment or the sysops vault: the environment had no `SECRETS_PASS` (or an empty one), or a wrapper script sourced `.env` and replaced it (see [Wrapper scripts](#wrapper-scripts)). Fix: delete the old `SECRETS_PASS` line from `.env`, or set the right key.
+
+**"SecretKeyMismatch: The file was encrypted with the files key `<a>`, but the given key is `<b>`"** — nix-infra got a generated files key, but not the one the file was encrypted with. Find the key with id `<a>` (for example in the sysops vault) and supply that one.
 
 **"Cannot specify both --secret and --secret-file"** — The two options are mutually exclusive. Use `--secret` for inline values or `--secret-file` for file contents.

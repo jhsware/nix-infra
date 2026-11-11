@@ -7,7 +7,7 @@ nix-infra supports multiple infrastructure providers through a pluggable abstrac
 When you run any nix-infra command, the provider is selected automatically:
 
 1. If `servers.yaml` exists in your working directory → **Self-Hosting** provider
-2. If `HCLOUD_TOKEN` is set in `.env` or environment → **Hetzner Cloud** provider
+2. If `HCLOUD_TOKEN` is set in `.env` or environment (the environment wins) → **Hetzner Cloud** provider
 3. If neither is configured → error with instructions
 
 If `servers.yaml` exists, it always takes precedence — even if `HCLOUD_TOKEN` is also set. This allows hybrid setups where some servers in `servers.yaml` delegate to Hetzner Cloud for dynamic IP resolution.
@@ -23,6 +23,8 @@ Add your Hetzner Cloud API token to the `.env` file in your project:
 ```sh
 HCLOUD_TOKEN=your-hetzner-api-token
 ```
+
+An `HCLOUD_TOKEN` exported in your shell overrides the `.env` value, so a token for another project is used instead. Unset it or use a separate shell. See [Configuration and `.env`](./ARCHITECTURE.md#configuration-and-env).
 
 ### Capabilities
 
@@ -150,6 +152,8 @@ When using hybrid mode, you also need the cloud provider credentials in your `.e
 ```sh
 HCLOUD_TOKEN=your-hetzner-api-token
 ```
+
+An `HCLOUD_TOKEN` exported in your shell overrides the `.env` value, so a token for another project is used instead. Unset it or use a separate shell.
 
 The cloud-managed servers must already exist in Hetzner Cloud — the self-hosting provider does not create them. This mode is useful when you want to manage a mix of on-premise and cloud servers from a single configuration, or when migrating between providers.
 

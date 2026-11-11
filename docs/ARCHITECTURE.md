@@ -57,10 +57,20 @@ nix-infra
 Common options shared across command groups:
 
 - `--working-dir` / `-d` — Project directory (default: `.`)
-- `--env` — Path to `.env` file
+- `--env` — Path to `.env` file (values from the environment win; see [Configuration and `.env`](#configuration-and-env))
 - `--ssh-key` — SSH key name
 - `--debug` — Verbose debug logging (global: `nix-infra --debug cluster ...`, or per command group)
 - `--batch` — Non-interactive mode (skips confirmations)
+
+### Configuration and `.env`
+
+nix-infra reads its configuration (`SECRETS_PASS`, `SSH_KEY`, `HCLOUD_TOKEN`, `CA_PASS`, ...) from the project `.env` (or the file given with `--env`) and from the process environment:
+
+- A non-empty variable in the process environment wins over the same name in `.env`.
+- An empty variable in the process environment (`FOO=`) does not hide a `.env` value.
+- `$VAR` references inside `.env` are expanded by the dotenv parser, from earlier lines of the file first.
+
+Every command, the MCP servers, `init` and `cert` follow this rule. It is implemented once, in `envWithProcessPrecedence` / `loadEnv` in `lib/helpers.dart`. Before 0.18.0-beta, `.env` won over the environment. A wrapper script that sources `.env` before it calls nix-infra replaces exported values first; see [Wrapper scripts](./SECRETS.md#wrapper-scripts).
 
 ## Provider Abstraction
 
@@ -81,7 +91,7 @@ Each provider declares its capabilities (`supportsCreateServer`, `supportsDestro
 The `ProviderFactory` automatically selects the right provider:
 
 1. If `servers.yaml` exists in the working directory → **SelfHosting** provider
-2. If `HCLOUD_TOKEN` is set in `.env` → **HetznerCloud** provider
+2. If `HCLOUD_TOKEN` is set in the environment or `.env` → **HetznerCloud** provider
 3. Otherwise → error
 
 ### Hybrid Mode

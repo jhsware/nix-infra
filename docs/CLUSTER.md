@@ -17,7 +17,7 @@ Before setting up a cluster, you need:
 - The `nix-infra` binary installed
 - SSH and OpenSSL available on your workstation
 - A provider configured — either a Hetzner Cloud API token (`HCLOUD_TOKEN`) or `servers.yaml` for self-hosted servers (see [Providers](./PROVIDERS.md))
-- A `.env` file with your environment variables
+- A `.env` file with your environment variables (or set them in your shell; a value set in the shell wins over `.env`, see [Configuration and `.env`](./ARCHITECTURE.md#configuration-and-env))
 
 ## Project Structure
 
@@ -65,7 +65,7 @@ nix-infra init --batch
 
 This creates SSH keys and a full certificate authority (root CA + intermediate CA) for etcd TLS communication.
 
-Required environment variables:
+Required environment variables (in `.env` or shell; a value set in the shell wins over `.env`):
 
 | Variable | Description |
 |----------|-------------|
@@ -439,7 +439,7 @@ These options are available on all cluster subcommands:
 |--------|-------------|
 | `--working-dir`, `-d` | Working directory (default: `.`) |
 | `--ssh-key` | SSH key name (overrides `SSH_KEY` from `.env`) |
-| `--env` | Path to `.env` file |
+| `--env` | Path to `.env` file (values from the environment win) |
 | `--debug` | Enable verbose debug logging (also accepted as a global option before the command group) |
 | `--batch` | Run non-interactively (skip confirmation prompts) |
 

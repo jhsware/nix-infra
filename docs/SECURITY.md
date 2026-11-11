@@ -41,7 +41,7 @@ Key properties:
 
 **The `secrets/` directory must stay ignored in git.** The project templates have `secrets/*` in `.gitignore`. Secret files are not meant for version control: legacy files are readable by anyone, and v2 files are only as strong as the key.
 
-The files key (`SECRETS_PASS`) is either typed interactively at each command invocation or set as an environment variable. See [Known Limitations](#known-limitations) for the implications of this.
+The files key (`SECRETS_PASS`) is typed interactively at each command invocation, set as an environment variable, or read from `.env`; the environment wins over `.env` (see [SECRETS.md](./SECRETS.md#the-key-secrets_pass)). See [Known Limitations](#known-limitations) for the implications of this.
 
 ## Secrets in Transit
 
@@ -170,7 +170,7 @@ There is no built-in mechanism for rotating secret values. To rotate a secret, s
 Hetzner Cloud does not provide virtual TPM, so `systemd-creds encrypt` falls back to machine-ID-based encryption rather than hardware-backed encryption. This means the encrypted secrets on a node are only as secure as the machine ID.
 
 ### SECRETS_PASS Exposure Risk
-The files key is either typed interactively or set as an environment variable. If set as an environment variable, it may appear in shell history, process listings, or CI logs. Use care with how you provide this value.
+The files key is either typed interactively, set as an environment variable, or read from `.env`. If set as an environment variable, it may appear in shell history, process listings, or CI logs. Use care with how you provide this value. `.env` is a plaintext file, and a stale key there is used whenever the environment has no `SECRETS_PASS`.
 
 
 
@@ -208,6 +208,7 @@ The project directory is the trust anchor. It contains SSH keys, CA keys, and en
 - Prefer typing the key interactively over setting it as an environment variable
 - If using environment variables in CI, use the CI system's secret management (e.g., GitHub Actions secrets)
 - Avoid storing it in `.env` files that might be committed to version control
+- When the key is supplied by the environment (for example a sysops vault grant or a CI secret), delete `SECRETS_PASS` from `.env`, and rotate the key if that file was ever shared
 
 ### SSH Key Hygiene
 - Generate separate SSH key pairs for separate environments (production, staging)

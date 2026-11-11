@@ -25,7 +25,7 @@ Before getting started, you need:
 - The `nix-infra` binary installed
 - SSH and OpenSSL available on your workstation
 - A provider configured — either a Hetzner Cloud API token (`HCLOUD_TOKEN`) or a `servers.yaml` file for self-hosted servers (see [Providers](./PROVIDERS.md))
-- A `.env` file with your environment variables (or set them in your shell)
+- A `.env` file with your environment variables (or set them in your shell; a value set in the shell wins over `.env`, see [Configuration and `.env`](./ARCHITECTURE.md#configuration-and-env))
 
 ## Project Structure
 
@@ -66,7 +66,7 @@ nix-infra init --no-cert-auth --batch
 
 This creates SSH keys for node authentication. The `--no-cert-auth` flag skips certificate authority creation since fleet mode doesn't use etcd or TLS certificates.
 
-Required environment variables (in `.env` or shell):
+Required environment variables (in `.env` or shell; a value set in the shell wins over `.env`):
 
 | Variable | Description |
 |----------|-------------|
@@ -271,7 +271,7 @@ These options are available on all fleet subcommands:
 |--------|-------------|
 | `--working-dir`, `-d` | Working directory (default: `.`) |
 | `--ssh-key` | SSH key name (overrides `SSH_KEY` from `.env`) |
-| `--env` | Path to `.env` file |
+| `--env` | Path to `.env` file (values from the environment win) |
 | `--debug` | Enable verbose debug logging (also accepted as a global option before the command group) |
 | `--batch` | Run non-interactively (skip confirmation prompts) |
 

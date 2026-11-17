@@ -350,7 +350,7 @@ Future<void> deployEtcdCertsOnClusterNode(
       await SSHSocket.connect(node.ipAddr, 22),
       username: 'root',
       identities: [
-        ...SSHKeyPair.fromPem(await getSshKeyAsPem(workingDir, node.sshKeyName))
+        ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
       ],
     );
     final sftp = await sshClient.sftp();

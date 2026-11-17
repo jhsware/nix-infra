@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:nix_infra/helpers.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
+import 'package:path/path.dart' as path;
 
+import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'provider.dart';
 
@@ -213,6 +215,24 @@ class HetznerCloud implements InfrastructureProvider {
     return servers.first.ipAddr;
   }
 
+  /// The public key that [addSshKeyToCloudProvider] registers as [keyName]:
+  /// `<workingDir>/ssh/<keyName>.pub` when it exists; else, with
+  /// SSH_KEY_PATH, `<SSH_KEY_PATH>.pub` or the line derived from that
+  /// private key. Without SSH_KEY_PATH a missing project file throws a
+  /// [FileSystemException], as before.
+  Future<String> publicKeyForRegistration(
+      Directory workingDir, String keyName) async {
+    final projectPubFile = File('${workingDir.path}/ssh/$keyName.pub');
+    final keyPath = _sshKeyPath;
+    if (keyPath == null || await projectPubFile.exists()) {
+      return await projectPubFile.readAsString();
+    }
+    final absoluteKeyPath = path.isAbsolute(keyPath)
+        ? path.normalize(keyPath)
+        : path.normalize(path.join(workingDir.path, keyPath));
+    return await publicKeyOfKeyFile(absoluteKeyPath);
+  }
+
   @override
   Future<void> addSshKeyToCloudProvider(
       Directory workingDir, String keyName) async {
@@ -233,8 +253,7 @@ class HetznerCloud implements InfrastructureProvider {
     );
 
     if (sshKey == null) {
-      final publicKeyPath = '${workingDir.path}/ssh/$keyName.pub';
-      final pubKeyBody = await File(publicKeyPath).readAsString();
+      final pubKeyBody = await publicKeyForRegistration(workingDir, keyName);
 
       final response = await http.post(url,
           headers: _getHeaders(),

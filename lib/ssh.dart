@@ -187,7 +187,7 @@ Future<void> waitForSsh(Iterable<ClusterNode> nodes) async {
     //         timeout: sshTimeoutDuration,),
     //   username: 'root',
     //   identities: [
-    //     ...SSHKeyPair.fromPem(await getSshKeyAsPem(workingDir, node.sshKeyName))
+    //     ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
     //   ],
     // );
     var maxTries = 20;

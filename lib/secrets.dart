@@ -552,7 +552,7 @@ Future<void> deploySecretOnRemote(
   bool debug = false,
 }) async {
   final sshCmd =
-      'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr}';
+      'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr}';
 
   final controller = StreamController<List<int>>();
 

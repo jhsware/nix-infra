@@ -254,8 +254,7 @@ class UpgradeNixOsCommand extends Command {
 
       // If we do a major upgrade we need to perform some extra steps
       if (nixVersion != null && !outp.startsWith(nixVersion)) {
-        final authorizedKey =
-            await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
+        final authorizedKey = await publicKeyOf(workingDir, node);
 
         final SSHSocket connection = await waitAndGetSshConnection(node);
         final SSHClient sshClient =

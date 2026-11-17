@@ -74,7 +74,7 @@ class InitCtrlCommand extends Command {
     final bool debug = (globalResults?['debug'] == true) ||
         (parent?.argResults?['debug'] == true);
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
     final String clusterUuid = argResults!['cluster-uuid'];
@@ -144,7 +144,7 @@ class UpdateCtrlCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
     final String clusterUuid = argResults!['cluster-uuid'];
@@ -193,7 +193,7 @@ class InitNodeCommand extends Command {
     final bool debug = (globalResults?['debug'] == true) ||
         (parent?.argResults?['debug'] == true);
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
@@ -287,7 +287,7 @@ class UpdateNodeCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
@@ -344,7 +344,7 @@ class DestroyCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> ctrlNodeNames =
         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
     final List<String> targets = argResults!['target'].split(' ');
@@ -399,7 +399,7 @@ class DeployAppsCommand extends Command {
     final bool debug = (globalResults?['debug'] == true) ||
         (parent?.argResults?['debug'] == true);
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final bool rebuild = argResults!['rebuild'];
 
@@ -450,7 +450,7 @@ class PortForwardCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final localPort = int.parse(argResults!['local-port']);
     final remotePort = int.parse(argResults!['remote-port']);
@@ -493,7 +493,7 @@ class PortForwardCommand extends Command {
 //         await getWorkingDirectory(parent?.argResults!['working-dir']);
 //     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-//     final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+//     final sshKeyName = resolveSshKeyName(parent?.argResults, env);
 //     final List<String> ctrlNodeNames =
 //         argResults!['ctrl-nodes']?.split(' ') ?? env['CTRL_NODES']?.split(' ');
 //     final String cmd = argResults!.rest.join(' ');

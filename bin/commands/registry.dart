@@ -53,7 +53,7 @@ class PublishImageCommand extends Command {
 
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final bool debug = (globalResults?['debug'] == true) ||
         (parent?.argResults?['debug'] == true);
     final List<String> targets = parent?.argResults!['target'].split(' ');
@@ -88,7 +88,7 @@ class ListImagesCommand extends Command {
 
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = parent?.argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to publish this image?', batch);

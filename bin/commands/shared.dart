@@ -53,7 +53,8 @@ class ProvisionCommand extends Command {
 
     final bool debug = (globalResults?['debug'] == true) ||
         (parent?.argResults?['debug'] == true);
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY']!;
+    final sshKeyName =
+        resolveSshKeyName(parent?.argResults, env, requireName: true);
     final List<String> nodeNames = argResults!['node-names'].split(' ');
     final String location = argResults!['location'];
     final String machineType = argResults!['machine-type'];
@@ -181,7 +182,7 @@ class GCCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -225,7 +226,7 @@ class UpgradeNixOsCommand extends Command {
 
     final bool batch = argResults!['batch'];
     final String? nixVersion = argResults!['nixos-version'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to upgrade to NixOS $nixVersion?', batch);
@@ -313,7 +314,7 @@ class RollbackCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to rollback?', batch);
@@ -350,7 +351,7 @@ class SSHCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -387,7 +388,7 @@ class UploadCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final List<String> files = argResults!['file'].split(' ');
 
@@ -472,7 +473,7 @@ class CmdCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -519,7 +520,7 @@ class ActionCommand extends Command {
     final bool debug = (globalResults?['debug'] == true) ||
         (parent?.argResults?['debug'] == true);
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final String appModule = argResults?['app-module'];
     final String cmd = argResults?['cmd'];

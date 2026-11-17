@@ -125,6 +125,8 @@ Key details:
 - For self-hosted servers, keys must be manually deployed
 - `StrictHostKeyChecking=no` is used for SSH connections (nodes are frequently reprovisioned with new host keys)
 
+A private key can also stay outside the project folder, for example the key file that sysops decrypts from its vault for one terminal. `SSH_KEY_PATH=<private key file>` makes a CLI command use that one file for every machine; the public key comes from `<file>.pub` or is derived from the private key, so no key file is needed in `ssh/`. There is no fallback to another key: a machine that does not accept this key refuses the connection, so a terminal with one key reaches only the machines that accept that key. A missing file (for example after the vault was locked) stops the command before any connection. The errors of the path check and of the public key derivation name the path of the file, never its content. The MCP servers do not read `SSH_KEY_PATH`.
+
 ## MCP Server Safety
 
 nix-infra includes experimental MCP (Model Context Protocol) servers for AI-assisted infrastructure management. These have deliberate safety restrictions:

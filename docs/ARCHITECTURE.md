@@ -58,19 +58,31 @@ Common options shared across command groups:
 
 - `--working-dir` / `-d` — Project directory (default: `.`)
 - `--env` — Path to `.env` file (values from the environment win; see [Configuration and `.env`](#configuration-and-env))
-- `--ssh-key` — SSH key name
+- `--ssh-key` — SSH key name (overrides `SSH_KEY`; see [SSH keys](#ssh-keys) for `SSH_KEY_PATH`)
 - `--debug` — Verbose debug logging (global: `nix-infra --debug cluster ...`, or per command group)
 - `--batch` — Non-interactive mode (skips confirmations)
 
 ### Configuration and `.env`
 
-nix-infra reads its configuration (`SECRETS_PASS`, `SSH_KEY`, `HCLOUD_TOKEN`, `CA_PASS`, ...) from the project `.env` (or the file given with `--env`) and from the process environment:
+nix-infra reads its configuration (`SECRETS_PASS`, `SSH_KEY`, `SSH_KEY_PATH`, `HCLOUD_TOKEN`, `CA_PASS`, ...) from the project `.env` (or the file given with `--env`) and from the process environment:
 
 - A non-empty variable in the process environment wins over the same name in `.env`.
 - An empty variable in the process environment (`FOO=`) does not hide a `.env` value.
 - `$VAR` references inside `.env` are expanded by the dotenv parser, from earlier lines of the file first.
 
 Every command, the MCP servers, `init` and `cert` follow this rule. It is implemented once, in `envWithProcessPrecedence` / `loadEnv` in `lib/helpers.dart`. Before 0.18.0-beta, `.env` won over the environment. A wrapper script that sources `.env` before it calls nix-infra replaces exported values first; see [Wrapper scripts](./SECRETS.md#wrapper-scripts).
+
+### SSH keys
+
+nix-infra authenticates with a private key file (dartssh2 has no `ssh-agent` client). For each machine the CLI uses, in this order:
+
+1. `SSH_KEY_PATH` — when it is set and not empty, this private key file is used for **every** machine of the command. It wins over `ssh_key` of `servers.yaml` and over `ssh/<SSH_KEY>`. There is no fallback to another key: a machine that does not accept it refuses the connection.
+2. `ssh_key` of the machine in `servers.yaml` (absolute, or relative to the project).
+3. `<project>/ssh/<SSH_KEY>` (or `--ssh-key`).
+
+`SSH_KEY_PATH` is absolute, relative to the project folder, or starts with `~/` (the home directory; a `.env` value is not expanded by a shell). A file that does not exist stops the command before any connection. The public key (root's authorized key, `[%%sshKey%%]` in `configuration.nix`, and the key registered at Hetzner) is `<private key>.pub` when that file exists, else it is derived from the private key. A key with a passphrase cannot be used.
+
+With `SSH_KEY_PATH`, `SSH_KEY` is optional for the commands that only connect (`cmd`, `ssh`, `upload`, `update`, `deploy-apps`, `init-machine`, ...). `provision` still needs the key name (`SSH_KEY` or `--ssh-key`), because it gives the name to the cloud provider. The MCP servers (`nix-infra-*-mcp`) do not read `SSH_KEY_PATH`; they need `SSH_KEY` and `ssh/<SSH_KEY>`. `ProviderFactory.autoDetect` takes the resolved path as an optional `sshKeyPath` parameter and does not read the variable itself.
 
 ## Provider Abstraction
 

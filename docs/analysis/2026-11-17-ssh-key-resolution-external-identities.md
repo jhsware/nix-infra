@@ -1,7 +1,7 @@
 # SSH key resolution and keys held by a caller (sysops vault) — analysis
 
 **Date:** 2026-11-17
-**Status:** Analysis and proposal. Nothing in this note is implemented. §4 to §6 were revised on 2026-11-17 after the decisions of the operator (no key of the vault for MCP servers; `SSH_KEY_PATH` in place of a JSON manifest; one key per sysops terminal, chosen at its creation).
+**Status:** Implemented on 2026-11-17: §5.1 in branch `fix/ssh-key-name-missing-error`, §5.2 to §5.7 in branch `feat/ssh-key-path` (commits `1684f65`, `318612c`, `bb9c6b1`, `ffc5f9c`, `79a3dc0`, and the docs commit). Two deviations from this note, marked where they apply: the providers carry `sshKeyPath` instead of a wrapper provider (§5.3), and the message of `provision` (§5.1). §4 to §6 were revised on 2026-11-17 after the decisions of the operator (no key of the vault for MCP servers; `SSH_KEY_PATH` in place of a JSON manifest; one key per sysops terminal, chosen at its creation).
 **Code reviewed:** nix-infra `bf872e2` (main, 0.18.0-beta), dartssh2 2.14.0 (locked) and 2.22.0, sysops_server `cf2c8f5`.
 **Companion note:** `sysops_server/docs/analysis/2026-11-17-vault-ssh-keys-nix-infra.md` (the sysops side: terminals, agent sessions, security review).
 
@@ -41,7 +41,7 @@ $ env -u SSH_KEY dart run --verbosity=error bin/nix_infra_machine_mcp.dart --pro
 ERROR! env-var SSH_KEY is missing                          (exit 2)
 ```
 
-Dart 3.11.6, 2026-11-17. The proposal of §5 is not implemented and not tested.
+Dart 3.11.6, 2026-11-17. At the time of this reproduction the proposal of §5 was not implemented (see Status).
 
 ---
 
@@ -121,6 +121,8 @@ String resolveSshKeyName(ArgResults? parentArgs, DotEnv env, {bool requireName =
 
 Message: `No SSH key configured. Set SSH_KEY in .env or the environment, pass --ssh-key=<name>, or set SSH_KEY_PATH=<private key file>.` It is thrown as an `Exception`, so `main` prints it as `ERROR: …`. `provision`, `init` and the `ssh-key` commands pass `requireName: true`: they give the name to the cloud provider.
 
+As implemented: only `provision` calls the helper with `requireName: true` (`init` and `ssh-key` read their names themselves). Its message does not offer `SSH_KEY_PATH`, which cannot replace the name there: `No SSH key configured. Set SSH_KEY in .env or the environment, or pass --ssh-key=<name>. This command gives the key name to the cloud provider, so SSH_KEY_PATH alone is not enough.`
+
 ### 5.2 `SSH_KEY_PATH`
 
 - Read from the same `env` as the other settings (`loadEnv`: `.env`, and a non-empty variable of the process environment wins).
@@ -134,7 +136,7 @@ Message: `No SSH key configured. Set SSH_KEY in .env or the environment, pass --
 ### 5.3 Where it goes in the code
 
 - **Key name:** `resolveSshKeyName` (§5.1) in every command.
-- **Key path, applied at the edge, not in `ProviderFactory`:** `getProvider()` (`bin/commands/shared.dart:19`) wraps the provider. The wrapper changes `getServers()` only: with `SSH_KEY_PATH`, it sets `node.sshKeyPath` of each node to the resolved path. Every `getSshKeyAsPemFromNode` call site then works unchanged. `ProviderFactory.autoDetect` stays as it is, so library users (sysops host discovery, which makes its own selection) are not affected.
+- **Key path, carried by the providers (as implemented; the first version of this note proposed a wrapper):** `getProvider()` (`bin/commands/shared.dart`) resolves `SSH_KEY_PATH` and passes it to `ProviderFactory.autoDetect(sshKeyPath:)`, which gives it to `SelfHosting.load(sshKeyPath:)` and to every `HetznerCloud(sshKeyPath:)` it builds. The providers set `node.sshKeyPath` (and `node.sshKeyPathFromEnv`, for the error text) on every node they list, so every `getSshKeyAsPemFromNode` call site works unchanged. The parameter defaults to null, so library users that omit it (sysops host discovery, the MCP servers) are not affected. A wrapper provider in `getProvider()` was not used: `lib/provision.dart` checks `provider is HetznerCloud` (placement groups in `createNodes`, the nixos-infect `PROVIDER` in `installNixos`, `waitForServers`), and a wrapper would fail those checks.
 - **The eight private key sites that build `ssh/<name>`** (`provision.dart` ×4, `docker_registry.dart` ×2, `secrets.dart`, `certificates.dart`) use `node.getEffectiveSshKeyPath(workingDir.path)`. This also corrects the `servers.yaml` inconsistency of §3.2.
 - **The five public key sites** call one new function, `publicKeyOf(workingDir, node)` (§5.2).
 - **`HetznerCloud`:** accepts an empty key name for listing servers. `addSshKeyToCloudProvider` gets the public key in the same way (file, else derived from `SSH_KEY_PATH`), so that provisioning does not need `ssh/<name>.pub`. `createServer` still needs a real name.
@@ -159,8 +161,8 @@ Provisioning and the `ssh-agent`. `installNixos` reads `ssh/<name>.pub` (`lib/pr
 
 ### 5.6 Tests
 
-- Unit: `resolveSshKeyName` (option, variable, `SSH_KEY_PATH` only, nothing, `requireName`); the path rules of §5.2 (absolute, relative, `~/`, missing file); the wrapper sets `sshKeyPath` on every node and only with `SSH_KEY_PATH`.
-- Public key derivation equals `ssh-keygen -y -f <file>` (without the comment) for RSA, ed25519 and ECDSA nistp256 test keys.
+- Unit: `resolveSshKeyName` (option, variable, `SSH_KEY_PATH` only, nothing, `requireName`); the path rules of §5.2 (absolute, relative, `~/`, missing file); the providers set `sshKeyPath` on every node and only with `SSH_KEY_PATH` (implemented: §5.3 has no wrapper).
+- Public key derivation equals `ssh-keygen -y -f <file>` (without the comment) for RSA, ed25519 and ECDSA nistp256 test keys. (Implemented with keys that `ssh-keygen` makes in a temporary folder for each test run, so no private key is committed; `test/ssh_key_path_test.dart`.)
 - CLI regression tests in the style of the `SECRETS_PASS` precedence test: no key name → the message of §5.1, exit 1; `SSH_KEY_PATH` and no `SSH_KEY` → `fleet cmd` gets past key resolution; `SSH_KEY_PATH` wins over `ssh/<SSH_KEY>`.
 - The authentication error of §5.2 names `SSH_KEY_PATH` when it is set, and has the old text when it is not.
 

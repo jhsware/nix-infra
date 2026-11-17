@@ -78,6 +78,8 @@ Required environment variables (in `.env` or shell; a value set in the shell win
 | `CERT_STATE_PROVINCE` | State/province for certificates |
 | `CERT_COMPANY` | Organization name for certificates |
 
+The later commands can use a private key that is kept outside the project instead: set `SSH_KEY_PATH=<private key file>` (absolute, relative to the project, or `~/...`). It is used for every node of a command, and the public key is taken from `<file>.pub` or derived from the private key. `init` does not read it. See [Global Options](#global-options).
+
 ### Step 2: Provision Nodes
 
 ```bash
@@ -442,6 +444,8 @@ These options are available on all cluster subcommands:
 | `--env` | Path to `.env` file (values from the environment win) |
 | `--debug` | Enable verbose debug logging (also accepted as a global option before the command group) |
 | `--batch` | Run non-interactively (skip confirmation prompts) |
+
+`SSH_KEY_PATH=<private key file>` (in `.env` or the environment) makes every cluster, etcd and registry subcommand use that file as the private key for every node, in place of `ssh/<SSH_KEY>` (and `ssh_key` of `servers.yaml`). With it, `SSH_KEY` and `--ssh-key` are optional, except for `provision`, which gives the key name to the cloud provider. A node that does not accept the key is not reached; no other key is tried. See [Architecture — SSH keys](./ARCHITECTURE.md#ssh-keys).
 
 ## MCP Integration
 

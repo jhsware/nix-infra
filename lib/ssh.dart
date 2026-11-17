@@ -19,6 +19,23 @@ String vpnRequiredHint(ClusterNode node) => node.requiresVpn
         'to start the VPN connection and retry.'
     : '';
 
+/// The text of a failed SSH authentication to [node].
+///
+/// When the node uses the key of SSH_KEY_PATH ([ClusterNode.sshKeyPathFromEnv]),
+/// there is no other key to try: the machine does not accept that key.
+/// Otherwise the text is the one nix-infra always gave.
+String sshAuthenticationFailedMessage(ClusterNode node) {
+  final where =
+      'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n';
+  if (node.sshKeyPathFromEnv) {
+    return '${where}Reason: the machine does not accept the key of '
+        'SSH_KEY_PATH. It may belong to another SSH key (in sysops: open a '
+        'terminal with the key of this machine).';
+  }
+  return '${where}Reason: SSH authentication failed - check SSH key '
+      'permissions and configuration';
+}
+
 Future<String> runCommandOverSsh(
     Directory workingDir, ClusterNode node, String cmd,
     {Duration? connectTimeout}) async {
@@ -62,9 +79,7 @@ Future<String> runCommandOverSsh(
           '${vpnRequiredHint(node)}');
     } else if (errorMsg.contains('Authentication failed') ||
         errorMsg.contains('auth')) {
-      throw Exception(
-          'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n'
-          'Reason: SSH authentication failed - check SSH key permissions and configuration');
+      throw Exception(sshAuthenticationFailedMessage(node));
     } else {
       throw Exception(
           'Failed to execute command on server "${node.name}" at ${node.ipAddr}:22\n'
@@ -351,9 +366,7 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
           'Reason: Connection timeout - server may be unreachable or offline');
     } else if (errorMsg.contains('Authentication failed') ||
         errorMsg.contains('auth')) {
-      throw Exception(
-          'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n'
-          'Reason: SSH authentication failed - check SSH key permissions and configuration');
+      throw Exception(sshAuthenticationFailedMessage(node));
     } else {
       throw Exception(
           'Failed to open SSH shell to server "${node.name}" at ${node.ipAddr}:22\n'

@@ -5,6 +5,7 @@ import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/types.dart';
 import './shared.dart';
+import './utils.dart';
 
 
 Future<Iterable<String>> runEtcdCtlCommand(
@@ -63,7 +64,7 @@ class EtcdctlCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final String? cmd = argResults?.rest.join(' ');
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     if (cmd == null) {
@@ -100,7 +101,7 @@ class ListNodesCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -133,7 +134,7 @@ class ListServicesCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -166,7 +167,7 @@ class ListBackendsCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -199,7 +200,7 @@ class ListFrontendsCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -232,7 +233,7 @@ class ShowNetworkCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);

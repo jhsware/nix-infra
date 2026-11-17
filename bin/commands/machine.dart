@@ -63,7 +63,7 @@ class InitMachineCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final String nodeType = argResults!['node-module'];
     final List<String> targets = argResults!['target'].split(' ');
     final String nixOsVersion = argResults!['nixos-version'];
@@ -114,7 +114,7 @@ class UpdateCommand extends Command {
 
     // final bool debug = parent?.argResults!['debug'];
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final String nodeType = argResults!['node-module'];
     final List<String> targets = argResults!['target'].split(' ');
     final String? nixOsVersion = argResults!['nixos-version'];
@@ -160,7 +160,7 @@ class DestroyCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     areYouSure('Are you sure you want to destroy these nodes?', batch);
@@ -209,7 +209,7 @@ class DeployAppsCommand extends Command {
     final bool debug = (globalResults?['debug'] == true) ||
         (parent?.argResults?['debug'] == true);
     final bool batch = argResults!['batch'];
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final bool rebuild = argResults!['rebuild'];
 
@@ -261,7 +261,7 @@ class PortForwardCommand extends Command {
         await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = parent?.argResults!['ssh-key'] ?? env['SSH_KEY'];
+    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
     final localPort = int.parse(argResults!['local-port']);
     final remotePort = int.parse(argResults!['remote-port']);

@@ -1,5 +1,8 @@
 NOTE: This are pre 1.0 releases, this means there can be breaking changes on minor releases without clear warnings.
 
+## Unreleased
+- a missing SSH key name (`SSH_KEY` / `--ssh-key`) is reported as `No SSH key configured. Set SSH_KEY in .env or the environment, or pass --ssh-key=<name>.` and the command exits with code 1; earlier versions failed with `type 'Null' is not a subtype of type 'String'` (`provision`: `Null check operator used on a null value`). An empty `--ssh-key` or `SSH_KEY` counts as not set
+
 ## 0.18.0-beta
 - SECURITY: secret files made by earlier versions are NOT encrypted. `secrets store` and `--save-as-secret` ran `openssl enc -pbkdf2 -a` without a cipher, which only encodes the value as base64, and the documentation wrongly said the files were encrypted and safe for version control. Upgrade nix-infra on every computer that deploys, run `nix-infra secrets migrate`, and rotate the secrets if the `secrets/` folder was ever committed, copied or shared. Keep `secrets/` ignored in git. See docs/SECRETS.md "Migrating existing secrets"
 - secrets are now written as `nix-infra-secret/v2` files: AES-256-GCM with an authenticated header, encrypted in-process (no openssl child process, the value never on a command line or on disk in plaintext), atomic write with a read-back check, mode 400

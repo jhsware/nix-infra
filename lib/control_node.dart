@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 
@@ -11,7 +12,7 @@ Future<void> deployControlNode(
   final deployments = ctrlNodes.map((node) async {
     // Update configuration.nix by adding imported configuration file
     // for control plane services such as etcd.
-    final authorizedKey = await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
+    final authorizedKey = await publicKeyOf(workingDir, node);
 
     final SSHSocket connection = await waitAndGetSshConnection(node);
     final SSHClient sshClient = await getSshClient(workingDir, node, connection);

@@ -68,15 +68,22 @@ String getSecretsPassword(DotEnv env, bool batch) {
 }
 
 /// The SSH key name of a command: --ssh-key of the parent command, else a
-/// non-empty SSH_KEY of [env]. Throws a readable Exception when neither is set.
+/// non-empty SSH_KEY of [env].
 ///
 /// [parentArgs] are the parsed arguments of the parent command (fleet,
 /// cluster, etcd, registry). They may be null, and a parent without an
 /// `ssh-key` option counts as "option not given". An empty value counts as
 /// not set, both for the option and for `SSH_KEY`.
 ///
-/// [requireName]: the command gives the name to the cloud provider
-/// (provision). It has no effect yet; the SSH_KEY_PATH task uses it.
+/// Without a name:
+/// - `SSH_KEY_PATH` set (not empty) and [requireName] false: returns `''`.
+///   The command only connects, and SSH_KEY_PATH gives the key file of
+///   every machine.
+/// - [requireName] true (provision: the command gives the name to the
+///   cloud provider): throws a readable Exception, also when SSH_KEY_PATH
+///   is set.
+/// - Otherwise: throws a readable Exception that names the three ways to
+///   configure a key.
 String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
     {bool requireName = false}) {
   final fromOption = parentArgs?.options.contains('ssh-key') == true
@@ -91,8 +98,20 @@ String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
     return fromEnv;
   }
 
+  if (requireName) {
+    throw Exception('No SSH key configured. Set SSH_KEY in .env or the '
+        'environment, or pass --ssh-key=<name>. This command gives the key '
+        'name to the cloud provider, so SSH_KEY_PATH alone is not enough.');
+  }
+
+  final keyPath = env['SSH_KEY_PATH']?.trim();
+  if (keyPath != null && keyPath.isNotEmpty) {
+    return '';
+  }
+
   throw Exception('No SSH key configured. Set SSH_KEY in .env or the '
-      'environment, or pass --ssh-key=<name>.');
+      'environment, pass --ssh-key=<name>, or set '
+      'SSH_KEY_PATH=<private key file>.');
 }
 
 

@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:nix_infra/helpers.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
+import 'package:path/path.dart' as path;
 
+import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'provider.dart';
 
@@ -14,10 +16,19 @@ const BOOTSTRAP_OS = 'ubuntu-22.04';
 class HetznerCloud implements InfrastructureProvider {
   String? _token;
   String? _sshKey;
+  String? _sshKeyPath;
 
-  HetznerCloud({required String token, required String sshKey}) {
+  /// [sshKey] is the name of the SSH key at Hetzner. It may be empty when
+  /// the command only connects and [sshKeyPath] is set.
+  ///
+  /// [sshKeyPath]: the private key file of `SSH_KEY_PATH`. When set, every
+  /// listed server uses it, and [addSshKeyToCloudProvider] takes the public
+  /// key from it when `<project>/ssh/<name>.pub` does not exist.
+  HetznerCloud(
+      {required String token, required String sshKey, String? sshKeyPath}) {
     _token = token;
     _sshKey = sshKey;
+    _sshKeyPath = sshKeyPath;
   }
 
   Map<String, String> _getHeaders() {
@@ -129,10 +140,17 @@ class HetznerCloud implements InfrastructureProvider {
       servers = servers.where((node) => only.contains(node['name'])).toList();
     }
 
-    return servers.map((node) => ClusterNode(
-        node['name'], node['public_net']['ipv4']['ip'], node['id'], _sshKey!,
-        cloudProvider: 'hetzner'));
+    return servers.map(nodeFromApiServer);
   }
+
+  /// The [ClusterNode] of one server object of the Hetzner API
+  /// (`GET /v1/servers`). When [_sshKeyPath] is set (SSH_KEY_PATH), the node
+  /// uses that private key file.
+  ClusterNode nodeFromApiServer(dynamic server) => ClusterNode(
+      server['name'], server['public_net']['ipv4']['ip'], server['id'], _sshKey!,
+      sshKeyPath: _sshKeyPath,
+      sshKeyPathFromEnv: _sshKeyPath != null,
+      cloudProvider: 'hetzner');
 
   @override
   Future<void> createServer(String name, String machineType, String location,
@@ -197,6 +215,24 @@ class HetznerCloud implements InfrastructureProvider {
     return servers.first.ipAddr;
   }
 
+  /// The public key that [addSshKeyToCloudProvider] registers as [keyName]:
+  /// `<workingDir>/ssh/<keyName>.pub` when it exists; else, with
+  /// SSH_KEY_PATH, `<SSH_KEY_PATH>.pub` or the line derived from that
+  /// private key. Without SSH_KEY_PATH a missing project file throws a
+  /// [FileSystemException], as before.
+  Future<String> publicKeyForRegistration(
+      Directory workingDir, String keyName) async {
+    final projectPubFile = File('${workingDir.path}/ssh/$keyName.pub');
+    final keyPath = _sshKeyPath;
+    if (keyPath == null || await projectPubFile.exists()) {
+      return await projectPubFile.readAsString();
+    }
+    final absoluteKeyPath = path.isAbsolute(keyPath)
+        ? path.normalize(keyPath)
+        : path.normalize(path.join(workingDir.path, keyPath));
+    return await publicKeyOfKeyFile(absoluteKeyPath);
+  }
+
   @override
   Future<void> addSshKeyToCloudProvider(
       Directory workingDir, String keyName) async {
@@ -217,8 +253,7 @@ class HetznerCloud implements InfrastructureProvider {
     );
 
     if (sshKey == null) {
-      final publicKeyPath = '${workingDir.path}/ssh/$keyName.pub';
-      final pubKeyBody = await File(publicKeyPath).readAsString();
+      final pubKeyBody = await publicKeyForRegistration(workingDir, keyName);
 
       final response = await http.post(url,
           headers: _getHeaders(),

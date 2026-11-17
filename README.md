@@ -65,7 +65,7 @@ Besides the CLI and MCP binaries, this package is consumed as a **Dart library**
 
 Treat the following as public API — avoid breaking changes, and note any change in the CHANGELOG:
 
-- `ProviderFactory.autoDetect` / `detectProviderType` (`lib/providers/provider_factory.dart`)
+- `ProviderFactory.autoDetect` / `detectProviderType` (`lib/providers/provider_factory.dart`) — the optional `sshKeyPath` parameter is the resolved `SSH_KEY_PATH` of the CLI; omit it to keep the keys of `servers.yaml` / `ssh/<name>` (see [SSH keys](./docs/ARCHITECTURE.md#ssh-keys))
 - `InfrastructureProvider.getServers` (`lib/providers/provider.dart`)
 - `ClusterNode` (`lib/types.dart`) — notably `name`, `ipAddr`, `username`, and `getEffectiveSshKeyPath`
 - `SelfHosting` servers.yaml parsing (`lib/providers/self_hosting.dart`)

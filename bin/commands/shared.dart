@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:dartssh2/dartssh2.dart';
+import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/secrets.dart';
 import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:nix_infra/providers/providers.dart';
 
@@ -16,15 +18,20 @@ import 'utils.dart';
 /// Uses ProviderFactory.autoDetect to automatically choose between:
 /// - SelfHosting if servers.yaml exists
 /// - HetznerCloud if HCLOUD_TOKEN is set
+///
+/// When `SSH_KEY_PATH` is set in [env], every server of the provider uses
+/// that private key file. A missing file throws here, before any
+/// connection.
 Future<InfrastructureProvider> getProvider(
   Directory workingDir,
-  env,
+  DotEnv env,
   String sshKeyName,
 ) async {
   return await ProviderFactory.autoDetect(
     workingDir: workingDir,
     env: env,
     sshKeyName: sshKeyName,
+    sshKeyPath: resolveSshKeyPath(env, workingDir),
   );
 }
 
@@ -247,8 +254,7 @@ class UpgradeNixOsCommand extends Command {
 
       // If we do a major upgrade we need to perform some extra steps
       if (nixVersion != null && !outp.startsWith(nixVersion)) {
-        final authorizedKey =
-            await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
+        final authorizedKey = await publicKeyOf(workingDir, node);
 
         final SSHSocket connection = await waitAndGetSshConnection(node);
         final SSHClient sshClient =

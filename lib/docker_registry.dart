@@ -30,7 +30,7 @@ Future<void> publishImageToRegistry(
   final deployments = [registryNode].map((node) async {
     // TODO: Use podman if available, fallback to docker
     final sshCmd =
-        'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr}';
+        'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr}';
     // final pipeline =
     //     Script('docker save $image') | Script('$sshCmd "podman load"');
     final manifestPipeline = Script('tar -O -xf $file manifest.json');
@@ -79,7 +79,7 @@ Future<void> listImagesInRegistry(
   final deployments = [registryNode].map((node) async {
     // TODO: Use podman if available, fallback to docker
     final sshCmd =
-        'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr}';
+        'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr}';
 
     // final ipCmd = Script(
     //     '$sshCmd "ip -4 addr show flannel-wg | grep -oP \'inet [0-9\\.]*\'"');

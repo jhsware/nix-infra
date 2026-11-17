@@ -6,6 +6,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:process_run/shell.dart';
 
@@ -195,8 +196,7 @@ $rebootCommand
 // NIXOS_CONFIG=/etc/nixos/configuration.nix nix-env --set -I nixpkgs=\$(realpath \$HOME/.nix-defexpr/channels/nixos) -f '<nixpkgs/nixos>' -p /nix/var/nix/profiles/system -A system;
 
     final installScript = makeInstallScript(node);
-    final authorizedKey =
-        await getSshKeyAsPem(workingDir, '${node.sshKeyName}.pub');
+    final authorizedKey = await publicKeyOf(workingDir, node);
 
     final SSHSocket connection = await waitAndGetSshConnection(node);
     final SSHClient sshClient =
@@ -272,8 +272,7 @@ $rebootCommand
       // Probably better to do this outside for all commands
       // await shell.run('ssh-add "${workingDir.path}/ssh/$sshKeyName"');
       await shell.run(
-          // 'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr} "reboot 2>/dev/null"');
-          'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr} "bash -s " < /root/install.sh');
+          'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "bash -s " < /root/install.sh');
       // Running in two part to allow nix-env to be provided by the profile script
     } on ShellException catch (_) {
       // We will get a shell exception when connection terminates
@@ -309,7 +308,7 @@ $rebootCommand
       final controller = StreamController<List<int>>();
       final shell = Shell(stdout: controller.sink);
       await shell.run(
-          'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr} "nixos-rebuild switch --fast 2>/dev/null"');
+          'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "nixos-rebuild switch --fast 2>/dev/null"');
     } catch (_) {}
   });
 
@@ -321,7 +320,7 @@ Future<void> rebootToNixos(Directory workingDir,
   final bootToNixos = nodes.map((node) async {
     // debug(node.name);
     final script =
-        'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr} "reboot 2>/dev/null"';
+        'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "reboot 2>/dev/null"';
 
     final controller = StreamController<List<int>>();
     controller.stream.listen((inp) {
@@ -382,7 +381,7 @@ Future<void> rebuildNixos(Directory workingDir,
   final rebuild = nodes.map((node) async {
     // debug(node.name);
     final script =
-        'ssh -i ${workingDir.path}/ssh/${node.sshKeyName} -o StrictHostKeyChecking=no root@${node.ipAddr} "nixos-rebuild switch --fast"'; // 2>/dev/null
+        'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "nixos-rebuild switch --fast"'; // 2>/dev/null
     // For debugging: nixos-rebuild switch --fast  --show-trace --option eval-cache false
 
     final controller = StreamController<List<int>>();

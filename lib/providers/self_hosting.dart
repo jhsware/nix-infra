@@ -90,8 +90,10 @@ class SelfHosting implements InfrastructureProvider {
   final Directory _workingDir;
   final Map<String, SelfHostedServerConfig> _servers;
   final Map<String, InfrastructureProvider> _cloudProviders;
+  final String? _sshKeyPath;
 
-  SelfHosting._internal(this._workingDir, this._servers, this._cloudProviders);
+  SelfHosting._internal(this._workingDir, this._servers, this._cloudProviders,
+      this._sshKeyPath);
 
   /// Load a SelfHosting provider from a servers.yaml file.
   /// 
@@ -102,9 +104,13 @@ class SelfHosting implements InfrastructureProvider {
   /// The optional [cloudProviders] map provides cloud provider instances
   /// keyed by provider name (e.g., "hetzner"). These are used to resolve
   /// IPs for servers that specify a `provider` field instead of a static `ip`.
+  ///
+  /// The optional [sshKeyPath] is the private key file of `SSH_KEY_PATH`.
+  /// When set, every server uses it in place of its `ssh_key`.
   static Future<SelfHosting> load(
     Directory workingDir, {
     Map<String, InfrastructureProvider>? cloudProviders,
+    String? sshKeyPath,
   }) async {
     final configFile = File('${workingDir.path}/servers.yaml');
     
@@ -159,7 +165,7 @@ class SelfHosting implements InfrastructureProvider {
       );
     }
 
-    return SelfHosting._internal(workingDir, servers, providers);
+    return SelfHosting._internal(workingDir, servers, providers, sshKeyPath);
   }
 
   /// Check if a servers.yaml file exists in the given directory.
@@ -266,7 +272,9 @@ class SelfHosting implements InfrastructureProvider {
         ipAddr,
         config.name.hashCode, // Use name hash as ID
         sshKeyName,
-        sshKeyPath: config.sshKeyPath,
+        // SSH_KEY_PATH wins over ssh_key: one key for every machine.
+        sshKeyPath: _sshKeyPath ?? config.sshKeyPath,
+        sshKeyPathFromEnv: _sshKeyPath != null,
         vpn: config.vpn,
         cloudProvider: config.provider,
       );

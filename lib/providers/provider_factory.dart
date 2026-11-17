@@ -28,10 +28,15 @@ class ProviderFactory {
   /// - [workingDir]: The working directory containing configuration files
   /// - [env]: Environment variables (for HCLOUD_TOKEN)
   /// - [sshKeyName]: The SSH key name to use
+  /// - [sshKeyPath]: Optional private key file for every server (the
+  ///   resolved `SSH_KEY_PATH` of the CLI). When null (the default), the
+  ///   servers use their `ssh_key` of servers.yaml or `ssh/<sshKeyName>`,
+  ///   as before. This function does not read `SSH_KEY_PATH` itself.
   static Future<InfrastructureProvider> autoDetect({
     required Directory workingDir,
     required DotEnv env,
     required String sshKeyName,
+    String? sshKeyPath,
   }) async {
     // Check for servers.yaml first
     if (await SelfHosting.hasServersConfig(workingDir)) {
@@ -52,6 +57,7 @@ class ProviderFactory {
             cloudProviders[providerName] = HetznerCloud(
               token: hcloudToken,
               sshKey: sshKeyName,
+              sshKeyPath: sshKeyPath,
             );
             break;
           default:
@@ -65,6 +71,7 @@ class ProviderFactory {
       return await SelfHosting.load(
         workingDir,
         cloudProviders: cloudProviders.isNotEmpty ? cloudProviders : null,
+        sshKeyPath: sshKeyPath,
       );
     }
 
@@ -78,7 +85,8 @@ class ProviderFactory {
       );
     }
 
-    return HetznerCloud(token: hcloudToken, sshKey: sshKeyName);
+    return HetznerCloud(
+        token: hcloudToken, sshKey: sshKeyName, sshKeyPath: sshKeyPath);
   }
 
   /// Create a specific provider by type.

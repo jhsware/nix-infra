@@ -14,10 +14,19 @@ const BOOTSTRAP_OS = 'ubuntu-22.04';
 class HetznerCloud implements InfrastructureProvider {
   String? _token;
   String? _sshKey;
+  String? _sshKeyPath;
 
-  HetznerCloud({required String token, required String sshKey}) {
+  /// [sshKey] is the name of the SSH key at Hetzner. It may be empty when
+  /// the command only connects and [sshKeyPath] is set.
+  ///
+  /// [sshKeyPath]: the private key file of `SSH_KEY_PATH`. When set, every
+  /// listed server uses it, and [addSshKeyToCloudProvider] takes the public
+  /// key from it when `<project>/ssh/<name>.pub` does not exist.
+  HetznerCloud(
+      {required String token, required String sshKey, String? sshKeyPath}) {
     _token = token;
     _sshKey = sshKey;
+    _sshKeyPath = sshKeyPath;
   }
 
   Map<String, String> _getHeaders() {
@@ -129,10 +138,17 @@ class HetznerCloud implements InfrastructureProvider {
       servers = servers.where((node) => only.contains(node['name'])).toList();
     }
 
-    return servers.map((node) => ClusterNode(
-        node['name'], node['public_net']['ipv4']['ip'], node['id'], _sshKey!,
-        cloudProvider: 'hetzner'));
+    return servers.map(nodeFromApiServer);
   }
+
+  /// The [ClusterNode] of one server object of the Hetzner API
+  /// (`GET /v1/servers`). When [_sshKeyPath] is set (SSH_KEY_PATH), the node
+  /// uses that private key file.
+  ClusterNode nodeFromApiServer(dynamic server) => ClusterNode(
+      server['name'], server['public_net']['ipv4']['ip'], server['id'], _sshKey!,
+      sshKeyPath: _sshKeyPath,
+      sshKeyPathFromEnv: _sshKeyPath != null,
+      cloudProvider: 'hetzner');
 
   @override
   Future<void> createServer(String name, String machineType, String location,

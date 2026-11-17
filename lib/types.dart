@@ -32,6 +32,11 @@ class ClusterNode {
   /// in non-standard locations.
   String? sshKeyPath;
 
+  /// True when [sshKeyPath] was set from `SSH_KEY_PATH` (one private key
+  /// file for every machine of a CLI command) and not from servers.yaml or
+  /// the key name. Only used for the text of an authentication error.
+  bool sshKeyPathFromEnv;
+
   /// Optional name of the VPN connection required to reach this server.
   /// Loaded from the `vpn` field in servers.yaml. When set and SSH is not
   /// reachable, the consuming agent should ask the user to start this VPN.
@@ -44,7 +49,10 @@ class ClusterNode {
   String? cloudProvider;
 
   ClusterNode(this.name, this.ipAddr, this.id, this.sshKeyName,
-      {this.sshKeyPath, this.vpn, this.cloudProvider});
+      {this.sshKeyPath,
+      this.sshKeyPathFromEnv = false,
+      this.vpn,
+      this.cloudProvider});
 
   /// Whether a VPN connection is required to reach this server.
   bool get requiresVpn => vpn != null;

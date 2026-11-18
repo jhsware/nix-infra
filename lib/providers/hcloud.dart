@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
 import 'package:path/path.dart' as path;
 
+import 'package:nix_infra/ssh_identity.dart';
+import 'package:nix_infra/ssh_key_errors.dart';
 import 'package:nix_infra/ssh_key_map.dart';
 import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
@@ -249,12 +251,21 @@ class HetznerCloud implements InfrastructureProvider {
   }
 
   /// The public key that [addSshKeyToCloudProvider] registers as [keyName]:
-  /// `<workingDir>/ssh/<keyName>.pub` when it exists; else, with
-  /// SSH_KEY_PATH, `<SSH_KEY_PATH>.pub` or the line derived from that
-  /// private key. Without SSH_KEY_PATH a missing project file throws a
-  /// [FileSystemException], as before.
+  ///
+  /// - With a key map ([_sshKeyMapPath], `SSH_KEY_MAP_PATH`): the public key
+  ///   of its `default` entry, which the agent lists for that fingerprint
+  ///   (design §6.3). A key map without `default`, or whose `default` is
+  ///   not available, throws a readable Exception.
+  /// - Otherwise `<workingDir>/ssh/<keyName>.pub` when it exists; else, with
+  ///   SSH_KEY_PATH, `<SSH_KEY_PATH>.pub` or the line derived from that
+  ///   private key. Without SSH_KEY_PATH a missing project file throws a
+  ///   [FileSystemException], as before.
   Future<String> publicKeyForRegistration(
       Directory workingDir, String keyName) async {
+    final keyMapPath = _sshKeyMapPath;
+    if (keyMapPath != null) {
+      return _publicKeyOfDefaultEntry(workingDir, keyMapPath, keyName);
+    }
     final projectPubFile = File('${workingDir.path}/ssh/$keyName.pub');
     final keyPath = _sshKeyPath;
     if (keyPath == null || await projectPubFile.exists()) {
@@ -264,6 +275,35 @@ class HetznerCloud implements InfrastructureProvider {
         ? path.normalize(keyPath)
         : path.normalize(path.join(workingDir.path, keyPath));
     return await publicKeyOfKeyFile(absoluteKeyPath);
+  }
+
+  /// The public key of the `default` entry of the key map at [keyMapPath].
+  /// Only the CLI registers keys, so the texts may name the path.
+  Future<String> _publicKeyOfDefaultEntry(
+      Directory workingDir, String keyMapPath, String keyName) async {
+    final SshKeyMap map;
+    try {
+      map = loadSshKeyMap(keyMapPath);
+    } on SshKeyMapException catch (e) {
+      throw Exception('${e.message} ($kSshKeyMapPathEnv: $keyMapPath)');
+    }
+    final defaultEntry = map.defaultEntry;
+    if (defaultEntry == null) {
+      throw Exception('The key map has no "default" entry. With a key map, '
+          'the public key of its "default" entry is registered at the cloud '
+          'provider as "$keyName"; add a "default" entry '
+          '($kSshKeyMapPathEnv: $keyMapPath).');
+    }
+    // A machine that only the default entry names.
+    final node = ClusterNode('default', '', 0, keyName,
+        keySource: keySourceFor(SshKeyMap(defaultEntry: defaultEntry), '',
+            agentSocket: _sshAgentSocket));
+    try {
+      return await publicKeyOf(workingDir, node);
+    } on NodeKeyException catch (e) {
+      throw Exception('The public key of the "default" entry of the key map '
+          'cannot be registered: ${e.message}');
+    }
   }
 
   @override

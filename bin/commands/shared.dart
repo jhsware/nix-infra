@@ -7,6 +7,7 @@ import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/secrets.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/ssh_identity.dart';
+import 'package:nix_infra/ssh_key_map.dart';
 import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:nix_infra/providers/providers.dart';
@@ -23,17 +24,37 @@ import 'utils.dart';
 /// When `SSH_KEY_PATH` is set in [env], every server of the provider uses
 /// that private key file. A missing file throws here, before any
 /// connection.
+///
+/// When `SSH_KEY_MAP_PATH` is set in [env], the key map is read once here:
+/// a key map that cannot be read, or has another version, stops the command
+/// before any connection (the CLI may name the path). The provider reads it
+/// again at each listing and uses the agent of `SSH_AUTH_SOCK` for the
+/// machines that it names (docs/design/ssh_agent_keys.md §4).
 Future<InfrastructureProvider> getProvider(
   Directory workingDir,
   DotEnv env,
   String sshKeyName,
 ) async {
+  final keyMapPath = resolveSshKeyMapPath(env, workingDir);
+  if (keyMapPath != null) checkSshKeyMap(keyMapPath);
   return await ProviderFactory.autoDetect(
     workingDir: workingDir,
     env: env,
     sshKeyName: sshKeyName,
     sshKeyPath: resolveSshKeyPath(env, workingDir),
+    sshKeyMapPath: keyMapPath,
+    sshAgentSocket: resolveSshAgentSocket(env),
   );
+}
+
+/// Reads the key map at [keyMapPath] once. Throws a readable Exception that
+/// names the path when it cannot be read or does not follow the schema.
+void checkSshKeyMap(String keyMapPath) {
+  try {
+    loadSshKeyMap(keyMapPath);
+  } on SshKeyMapException catch (e) {
+    throw Exception('${e.message} ($kSshKeyMapPathEnv: ${e.path})');
+  }
 }
 
 class ProvisionCommand extends Command {

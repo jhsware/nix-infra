@@ -1,14 +1,20 @@
 // The key source of each machine (docs/design/ssh_agent_keys.md §3, §4):
 // the order of §4.2 in keySourceFor, and the providers that read the key map
-// of SSH_KEY_MAP_PATH at each listing. Nothing here connects.
+// of SSH_KEY_MAP_PATH at each listing; the public key that provision and
+// ssh-key add register with a key map (§6.3). Nothing here connects to a
+// machine.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/providers/providers.dart';
+import 'package:nix_infra/ssh_agent.dart';
 import 'package:nix_infra/ssh_key_map.dart';
 import 'package:nix_infra/types.dart';
 import 'package:test/test.dart';
+
+import 'support/fake_ssh_agent.dart';
 
 const fpWeb = 'SHA256:u2l0c8QfR1vN0mJ5rT8hD4kX9aYb3Wq7eZs6PpLo1Hg';
 const fpDefault = 'SHA256:Yk0nDTpL0dQ4Jw0b4QnP3o1bq0oT1dS6r0Qe2m9uJ3c';
@@ -358,4 +364,78 @@ servers:
       }
     });
   });
+
+  group('HetznerCloud.publicKeyForRegistration with a key map', () {
+    late FakeSshAgent agent;
+    late Uint8List key;
+
+    setUp(() async {
+      agent = await FakeSshAgent.start();
+      key = fakeKeyBlob('ssh-ed25519');
+      agent.answer = (_) => FakeAnswer(frame([
+            SshAgentMessage.identitiesAnswer,
+            ...uint32(1),
+            ...sshString(key),
+            ...sshString(utf8.encode('comment')),
+          ]));
+      // The key file of the classic way: not used with a key map.
+      File('${dir.path}/ssh/my-key.pub')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('ssh-ed25519 AAAAproject comment\n');
+    });
+
+    tearDown(() => agent.stop());
+
+    HetznerCloud provider() => HetznerCloud(
+        token: 'test-token',
+        sshKey: 'my-key',
+        sshKeyMapPath: mapPath,
+        sshAgentSocket: agent.socketPath);
+
+    test('registers the public key of the default entry', () async {
+      writeMap({
+        'version': 1,
+        'default': {'agent_key': sshKeyFingerprint(key)},
+        'nodes': {
+          'web-1': {'agent_key': fpWeb},
+        },
+      });
+      expect(await provider().publicKeyForRegistration(dir, 'my-key'),
+          'ssh-ed25519 ${base64.encode(key)}');
+    });
+
+    test('a key map without default: a clear error', () async {
+      writeMap(designMap(withDefault: false));
+      await expectLater(
+          provider().publicKeyForRegistration(dir, 'my-key'),
+          throwsA(isA<Exception>().having((e) => e.toString(), 'toString()',
+              contains('The key map has no "default" entry'))));
+    });
+
+    test('an unavailable default: a clear error', () async {
+      writeMap({
+        'version': 1,
+        'default': {'unavailable': 'secrets_locked'},
+      });
+      await expectLater(
+          provider().publicKeyForRegistration(dir, 'my-key'),
+          throwsA(isA<Exception>().having(
+              (e) => e.toString(),
+              'toString()',
+              contains('cannot be registered: The SSH key of machine '
+                  '"default" is not available (secrets_locked).'))));
+    });
+
+    test('a default key that the agent does not hold: a clear error',
+        () async {
+      writeMap({
+        'version': 1,
+        'default': {'agent_key': fpOther},
+      });
+      await expectLater(
+          provider().publicKeyForRegistration(dir, 'my-key'),
+          throwsA(isA<Exception>().having((e) => e.toString(), 'toString()',
+              contains('The SSH agent does not hold the key'))));
+    });
+  }, skip: Platform.isWindows ? 'no Unix sockets' : false);
 }

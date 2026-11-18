@@ -168,4 +168,54 @@ void main() {
                   contains('SSH_KEY_PATH=<private key file>')))));
     });
   });
+
+  group('resolveSshKeyName with SSH_KEY_MAP_PATH', () {
+    test('a key map and no name gives an empty name', () {
+      expect(
+          resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': '/keys/map.json'})),
+          '');
+      expect(
+          resolveSshKeyName(null, envOf({'SSH_KEY_MAP_PATH': 'map.json'})),
+          '');
+    });
+
+    test('a name wins over the key map', () {
+      expect(
+          resolveSshKeyName(parentArgs([]),
+              envOf({'SSH_KEY': 'from-env', 'SSH_KEY_MAP_PATH': 'map.json'})),
+          'from-env');
+      expect(
+          resolveSshKeyName(parentArgs(['--ssh-key=from-option']),
+              envOf({'SSH_KEY_MAP_PATH': 'map.json'})),
+          'from-option');
+    });
+
+    test('an empty or blank SSH_KEY_MAP_PATH counts as not set', () {
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': ''})),
+          throwsNoKeyConfigured);
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': '  '})),
+          throwsNoKeyConfigured);
+    });
+
+    test('SSH_AUTH_SOCK alone does not replace the name', () {
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_AUTH_SOCK': '/tmp/agent.sock'})),
+          throwsNoKeyConfigured);
+    });
+
+    test('requireName and a key map without a name still throws', () {
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': '/keys/map.json'}),
+              requireName: true),
+          throwsA(isA<Exception>().having((e) => e.toString(), 'toString()',
+              'Exception: $requiredNameMessage')));
+    });
+  });
 }

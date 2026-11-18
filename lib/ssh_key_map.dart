@@ -57,6 +57,24 @@ String? resolveSshAgentSocket(DotEnv env) {
   return value == null || value.isEmpty ? null : value;
 }
 
+/// The variables of the agent mode for a script that nix-infra starts (the
+/// dev MCP server, design §6.3 and §14): `SSH_KEY_MAP_PATH` as an absolute
+/// path (the script may run in another folder) and `SSH_AUTH_SOCK`, also
+/// when they come from `.env` and not from the process environment.
+///
+/// Empty without a key map: a script then gets nothing that it did not get
+/// before, whatever `SSH_AUTH_SOCK` holds.
+Map<String, String> sshAgentScriptEnvironment(
+    DotEnv env, Directory workingDir) {
+  final keyMapPath = resolveSshKeyMapPath(env, workingDir);
+  if (keyMapPath == null) return const {};
+  final socket = resolveSshAgentSocket(env);
+  return {
+    kSshKeyMapPathEnv: keyMapPath,
+    kSshAuthSockEnv: ?socket,
+  };
+}
+
 /// What the key map says about the key of a machine.
 sealed class SshKeyMapEntry {
   const SshKeyMapEntry();

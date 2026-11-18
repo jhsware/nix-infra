@@ -3,6 +3,7 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/ssh_key_map.dart' show kSshKeyMapPathEnv;
 
 
 
@@ -77,12 +78,14 @@ String getSecretsPassword(DotEnv env, bool batch) {
 /// not set, both for the option and for `SSH_KEY`.
 ///
 /// Without a name:
-/// - `SSH_KEY_PATH` set (not empty) and [requireName] false: returns `''`.
-///   The command only connects, and SSH_KEY_PATH gives the key file of
-///   every machine.
 /// - [requireName] true (provision: the command gives the name to the
 ///   cloud provider): throws a readable Exception, also when SSH_KEY_PATH
-///   is set.
+///   or SSH_KEY_MAP_PATH is set.
+/// - `SSH_KEY_MAP_PATH` set (not empty): returns `''`. The command only
+///   connects, and the key map gives the key of the machines it names
+///   (docs/design/ssh_agent_keys.md §3).
+/// - `SSH_KEY_PATH` set (not empty): returns `''`. The command only
+///   connects, and SSH_KEY_PATH gives the key file of every machine.
 /// - Otherwise: throws a readable Exception that names the three ways to
 ///   configure a key.
 String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
@@ -103,6 +106,11 @@ String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
     throw Exception('No SSH key configured. Set SSH_KEY in .env or the '
         'environment, or pass --ssh-key=<name>. This command gives the key '
         'name to the cloud provider, so SSH_KEY_PATH alone is not enough.');
+  }
+
+  final keyMapPath = env[kSshKeyMapPathEnv]?.trim();
+  if (keyMapPath != null && keyMapPath.isNotEmpty) {
+    return '';
   }
 
   final keyPath = env['SSH_KEY_PATH']?.trim();

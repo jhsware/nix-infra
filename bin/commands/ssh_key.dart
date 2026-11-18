@@ -57,7 +57,9 @@ class AddSshKeyCommand extends Command {
   @override
   final name = 'add';
   @override
-  final description = 'Add an SSH public key to cloud provider';
+  final description = 'Add an SSH public key to cloud provider. With '
+      'SSH_KEY_MAP_PATH the public key of the "default" entry of the key map '
+      'is added under --name.';
 
   AddSshKeyCommand() {
     argParser
@@ -70,7 +72,11 @@ class AddSshKeyCommand extends Command {
     final workingDir = await getWorkingDirectory(parent?.argResults!['working-dir']);
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
-    final String sshKeyName = argResults!['name'];
+    final String? sshKeyName = argResults!['name'];
+    if (sshKeyName == null || sshKeyName.isEmpty) {
+      throw Exception('ssh-key add needs --name=<key name>: the name of the '
+          'key at the cloud provider.');
+    }
 
     final provider = await getProvider(workingDir, env, sshKeyName);
     await provider.addSshKeyToCloudProvider(workingDir, sshKeyName);

@@ -226,6 +226,18 @@ void main() {
       final input = inProject('file.txt');
       expect(reasonFor(input), '$absolute: $input');
     });
+
+    // On a file system that ignores case (the default on macOS), `SSH/` is
+    // the folder ssh/: the real path has the case on disk, so the rule
+    // still refuses it. Elsewhere `SSH/` is another folder, here missing.
+    for (final input in ['SSH/test-key', 'Ssh', 'SECRETS/token']) {
+      test('refuses "$input", a case variant of ssh/ or secrets/', () {
+        final ignoresCase = FileSystemEntity.typeSync(inProject(input)) !=
+            FileSystemEntityType.notFound;
+        expect(reasonFor(input),
+            ignoresCase ? '$protected: $input' : '$notFound: $input');
+      });
+    }
   });
 
   group('uploadPlan', () {

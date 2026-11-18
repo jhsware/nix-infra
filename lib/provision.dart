@@ -216,8 +216,7 @@ $rebootCommand
           'sshKey': authorizedKey,
         });
 
-    sftp.close();
-    sshClient.close();
+    await closeSshQuietly(sshClient, sftp: sftp);
 
     try {
       bool mute = false;

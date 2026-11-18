@@ -168,8 +168,7 @@ Future<void> deployMachine(
       }
     }
 
-    sftp.close();
-    sshClient.close();
+    await closeSshQuietly(sshClient, sftp: sftp);
   });
 
   await Future.wait(deployments);
@@ -247,8 +246,7 @@ Future<void> deployClusterNode(
       }
     }
 
-    sftp.close();
-    sshClient.close();
+    await closeSshQuietly(sshClient, sftp: sftp);
   });
 
   await Future.wait(deployments);
@@ -339,10 +337,7 @@ Future<void> deployAppsOnNode(
         queue.addAll(item.listSync());
       }
     }
-    sftp.close();
-
-    sshClient.close();
-
+    await closeSshQuietly(sshClient, sftp: sftp);
   });
 
   await Future.wait(deployments);
@@ -374,7 +369,7 @@ Future<void> registerClusterNode(
       export ETCDCTL_API=3
       etcdctl --endpoints=https://${ctrlNodes.first.ipAddr}:2379 put /cluster/nodes/${node.name} "$jsonPayload"
     ''', stdout: true, stderr: true);
-    sshClient.close();
+    await closeSshQuietly(sshClient);
     echo('Registered ${node.name} with etcd');
   });
 
@@ -399,7 +394,7 @@ Future<void> unregisterClusterNode(
       etcdctl --endpoints=https://${ctrlNodes.first.ipAddr}:2379 del /cluster/nodes/\$(hostname)
       systemctl stop flannel
     ''');
-    sshClient.close();
+    await closeSshQuietly(sshClient);
     echo('Unregistered ${node.name} from etcd');
   });
 
@@ -417,7 +412,7 @@ Future<void> triggerConfdUpdate(
     await sshClient.run('''
       systemctl restart confd
     ''');
-    sshClient.close();
+    await closeSshQuietly(sshClient);
     echo('Regenerated confd templates for ${node.name}');
   });
 

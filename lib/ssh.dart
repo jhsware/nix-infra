@@ -36,6 +36,35 @@ String sshAuthenticationFailedMessage(ClusterNode node) {
       'permissions and configuration';
 }
 
+/// Closes [sftp] and waits until the server has closed its channel.
+///
+/// An error of the close is ignored: the work on the channel is done, and in
+/// a `catch` or `finally` the close must not hide the error being handled.
+Future<void> closeSftpQuietly(SftpClient? sftp) async {
+  if (sftp == null) return;
+  try {
+    await sftp.close();
+  } catch (_) {
+    // Ignored, see above.
+  }
+}
+
+/// Closes [sftp] (when given) and then [sshClient], and waits for both.
+///
+/// An error of a close is ignored, as in [closeSftpQuietly]. Since dartssh2
+/// 3.0 `SSHClient.close()` and `SftpClient.close()` return a `Future`; every
+/// connection of nix-infra is closed through this function or
+/// [closeSftpQuietly], so the closes are awaited and done in this order.
+Future<void> closeSshQuietly(SSHClient? sshClient, {SftpClient? sftp}) async {
+  await closeSftpQuietly(sftp);
+  if (sshClient == null) return;
+  try {
+    await sshClient.close();
+  } catch (_) {
+    // Ignored, see above.
+  }
+}
+
 Future<String> runCommandOverSsh(
     Directory workingDir, ClusterNode node, String cmd,
     {Duration? connectTimeout}) async {
@@ -60,11 +89,11 @@ Future<String> runCommandOverSsh(
     );
 
     final res = await sshClient.run(cmd);
-    sshClient.close();
+    await closeSshQuietly(sshClient);
     return utf8.decode(res);
   } catch (e) {
     socket?.destroy();
-    sshClient?.close();
+    await closeSshQuietly(sshClient);
 
     final errorMsg = e.toString();
     if (errorMsg.contains('Connection refused')) {
@@ -110,11 +139,69 @@ Future<void> portForward(
   final SSHClient sshClient =
       await getSshClient(workingDir, target, connection);
 
-  final serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
-  await for (final socket in serverSocket) {
-    final forward = await sshClient.forwardLocal(overlayIp, remotePort);
-    forward.stream.cast<List<int>>().pipe(socket);
-    socket.cast<List<int>>().pipe(forward.sink);
+  final ServerSocket serverSocket;
+  try {
+    serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
+  } catch (_) {
+    await closeSshQuietly(sshClient);
+    rethrow;
+  }
+
+  // Ctrl-C (or SIGTERM) stops the command: close the local server socket, so
+  // that the forward ends and its SSH client is closed.
+  final signalSubscriptions = [
+    ProcessSignal.sigint.watch().listen((_) => serverSocket.close()),
+    if (!Platform.isWindows)
+      ProcessSignal.sigterm.watch().listen((_) => serverSocket.close()),
+  ];
+  try {
+    await forwardLocalPort(sshClient, serverSocket, overlayIp, remotePort);
+  } finally {
+    for (final subscription in signalSubscriptions) {
+      await subscription.cancel();
+    }
+  }
+}
+
+/// Forwards each connection to [serverSocket] through [sshClient] to
+/// [remoteHost]:[remotePort] until the forward ends: [serverSocket] is closed,
+/// the SSH connection ends, or a channel cannot be opened (that error is
+/// rethrown, as before).
+///
+/// When the forward ends, the open connections are ended, and [serverSocket]
+/// and [sshClient] are closed.
+Future<void> forwardLocalPort(SSHClient sshClient, ServerSocket serverSocket,
+    String remoteHost, int remotePort) async {
+  final connections = <Socket>{};
+
+  // The SSH connection ends (the machine closes it, or the network fails):
+  // stop accepting connections.
+  unawaited(sshClient.done
+      .then((_) {}, onError: (_) {})
+      .whenComplete(() => serverSocket.close()));
+
+  try {
+    await for (final socket in serverSocket) {
+      final SSHForwardChannel forward;
+      try {
+        forward = await sshClient.forwardLocal(remoteHost, remotePort);
+      } catch (_) {
+        socket.destroy();
+        rethrow;
+      }
+      connections.add(socket);
+      unawaited(socket.done
+          .then((_) {}, onError: (_) {})
+          .whenComplete(() => connections.remove(socket)));
+      forward.stream.cast<List<int>>().pipe(socket);
+      socket.cast<List<int>>().pipe(forward.sink);
+    }
+  } finally {
+    await serverSocket.close();
+    for (final socket in connections.toList()) {
+      socket.destroy();
+    }
+    await closeSshQuietly(sshClient);
   }
 }
 
@@ -181,7 +268,7 @@ Future<String> runActionScriptOverSsh(
   // Cleanup
   await sshClient.run('rm /root/action.sh');
 
-  sshClient.close();
+  await closeSshQuietly(sshClient, sftp: sftp);
   return utf8.decode(res);
 }
 
@@ -345,14 +432,14 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
     stdin.lineMode = true;
 
     shell.close();
-    sshClient.close();
+    await closeSshQuietly(sshClient);
   } catch (e) {
     // Restore terminal settings on error
     stdin.echoMode = true;
     stdin.lineMode = true;
 
     shell?.close();
-    sshClient?.close();
+    await closeSshQuietly(sshClient);
     socket?.destroy();
 
     final errorMsg = e.toString();

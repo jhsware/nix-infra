@@ -374,7 +374,7 @@ Future<void> deployEtcdCertsOnClusterNode(
       await remoteFile.write(file.openRead().cast());
       await remoteFile.close();
     }
-    sftp.close();
+    await closeSftpQuietly(sftp);
 
     // Set proper permissions on certs
     final shell = await getSshShell(sshClient);
@@ -385,6 +385,6 @@ Future<void> deployEtcdCertsOnClusterNode(
     """;
     shell.write(Uint8List.fromList(utf8.encode(script)));
     await shell.done;
-    sshClient.close();
+    await closeSshQuietly(sshClient);
   }
 }

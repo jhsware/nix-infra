@@ -247,7 +247,7 @@ Future<Map<String, String>> getOverlayMeshIps(
       export ETCDCTL_API=3
       etcdctl --endpoints=https://${etcdNode.ipAddr}:2379 get --prefix /coreos.com/network/subnets
     ''', stdout: true, stderr: true);
-  sshClient.close();
+  await closeSshQuietly(sshClient);
   final resStr = utf8.decode(res);
 
   Map<String, String> overlayIps = {};

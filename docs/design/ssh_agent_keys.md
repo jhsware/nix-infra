@@ -252,3 +252,18 @@ Made on 2026-11-18 for the companion design (its §11). What each one means for 
 | sysops uses the `ssh-agent` of OpenSSH, one per terminal, probe run or agent session. | The tests with a real `ssh-agent` (§10) cover the agent that sysops uses. |
 | "None" in sysops means no key of the vault. | sysops then sets no key map, so nix-infra uses the key files (§3). |
 | sysops sets no deny rules for the file tools of an agent session. | The rule of §7 (no path in a text) stays. The limit is in §9. |
+
+## 14. Corrections found while the tasks were planned
+
+Found on 2026-11-18 by reading the code of `main` at `188897b`. The planner tasks follow these points; the sections above were not rewritten.
+
+- **§9, `file-upload`.** The tool `configuration-files` is not a model for the limit: it allows a list of sub-folders only, takes its root from the current folder and not from `--project-dir`, does not resolve symbolic links, and compares paths as text. `file-upload` gets a complete rule of its own. It also walks folders with `listSync()`, which follows symbolic links.
+- **§9, open question.** "Inside the project folder" still allows `ssh/` (private key files) and `secrets/`. Whether `file-upload` refuses them is a question for the operator, in the first step of the `file-upload` task.
+- **§4.1 and §4.2, a key map that cannot be read.** A broken map at the start stops the start. A map that fails later makes every machine unavailable. §7 has no text for the second case; the task "Agent mode 2" proposes one.
+- **§6.3, the dev MCP server.** The scripts do not inherit a value that comes from `.env`, and a relative path of the key map breaks when a script runs in another folder. Both variables are passed on explicitly, the key map as an absolute path.
+- **§8, tests.** `test/ssh_key_name_cli_test.dart` also checks a text that names `SSH_KEY_PATH` (`bin/commands/utils.dart:112-114`).
+- **§10, tests.** `runCommandOverSsh` always uses port 22 (`lib/ssh.dart:47`). The tests with a local `sshd` need a small port parameter.
+- **§11.1, `README.md:68`.** The line is about the public API `autoDetect(sshKeyPath)`, not about a setting. It is rewritten for the key map parameter, and a line on the agent mode is added.
+- **§11.1, `CHANGELOG.md`.** The Unreleased entry holds more than `SSH_KEY_PATH`: the public key from `.pub` or derived, `ssh_key` used by more steps, `getSshKeyAsPem` removed, the error for a missing key name. Only the `SSH_KEY_PATH` parts are removed.
+- **§11.1, `docs/README.md`.** The index links neither the design nor the analysis notes, and an empty line cuts its table in two. The docs task corrects both.
+- **§12, the trial.** The trial branch is not merged, so the upgrade task copies the result of the trial into §12.

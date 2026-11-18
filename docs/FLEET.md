@@ -278,6 +278,8 @@ These options are available on all fleet subcommands:
 | `--batch` | Run non-interactively (skip confirmation prompts) |
 
 `SSH_KEY_PATH=<private key file>` (in `.env` or the environment) makes every fleet subcommand use that file as the private key for every machine, in place of `ssh_key` of `servers.yaml` and `ssh/<SSH_KEY>`. With it, `SSH_KEY` and `--ssh-key` are optional, except for `provision`, which gives the key name to the cloud provider. A machine that does not accept the key is not reached; no other key is tried. See [Architecture — SSH keys](./ARCHITECTURE.md#ssh-keys).
+`SSH_KEY_MAP_PATH=<key map>` (in `.env` or the environment) names a key map: the machines that it names are reached with a key of the `ssh-agent` at `SSH_AUTH_SOCK`, and `SSH_KEY` and `--ssh-key` are then optional, except for `provision`. See [SSH keys](./ARCHITECTURE.md#ssh-keys).
+
 
 ## MCP Integration
 

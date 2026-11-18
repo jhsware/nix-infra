@@ -448,6 +448,8 @@ These options are available on all cluster subcommands:
 | `--batch` | Run non-interactively (skip confirmation prompts) |
 
 `SSH_KEY_PATH=<private key file>` (in `.env` or the environment) makes every cluster, etcd and registry subcommand use that file as the private key for every node, in place of `ssh/<SSH_KEY>` (and `ssh_key` of `servers.yaml`). With it, `SSH_KEY` and `--ssh-key` are optional, except for `provision`, which gives the key name to the cloud provider. A node that does not accept the key is not reached; no other key is tried. See [Architecture — SSH keys](./ARCHITECTURE.md#ssh-keys).
+`SSH_KEY_MAP_PATH=<key map>` (in `.env` or the environment) names a key map: the nodes that it names are reached with a key of the `ssh-agent` at `SSH_AUTH_SOCK`, and `SSH_KEY` and `--ssh-key` are then optional, except for `provision`. See [SSH keys](./ARCHITECTURE.md#ssh-keys).
+
 
 ## MCP Integration
 

@@ -4,6 +4,7 @@ import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/ssh_identity.dart';
 
 class FileUpload extends McpTool {
   static const description =
@@ -71,10 +72,14 @@ class FileUpload extends McpTool {
       final List<String> uploadedFiles = [];
 
       try {
+        // The key first: a machine whose key is not available is not
+        // contacted.
+        final identities = await identitiesOf(workingDir, node,
+            agentTimeout: sshConnectTimeout);
         final connection =
             await waitAndGetSshConnection(node, totalBudget: sshConnectTimeout);
         final sshClient = await getSshClient(workingDir, node, connection,
-            timeout: sshConnectTimeout);
+            timeout: sshConnectTimeout, identities: identities);
         SftpClient? sftp;
 
         try {
@@ -124,7 +129,10 @@ class FileUpload extends McpTool {
             '${node.name}: Uploaded ${uploadedFiles.length} file(s) to $remotePath\n'
             '  Files: ${uploadedFiles.join(", ")}');
       } catch (e) {
-        results.add('${node.name}: ERROR - $e');
+        // An error about the key of the machine gives its text of design
+        // §7, which names no path (of a key file, the key map or the
+        // socket of the agent).
+        results.add('${node.name}: ERROR - ${sshKeyErrorMessage(node, e) ?? e}');
       }
     }
 

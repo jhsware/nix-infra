@@ -9,6 +9,7 @@ import 'mcp_server/systemctl.dart';
 import 'mcp_server/system_stats.dart';
 import 'mcp_server/file_upload.dart';
 import 'mcp_server/cscli.dart';
+import 'mcp_server/server_keys.dart';
 import 'package:nix_infra/helpers.dart';
 
 void main(List<String> arguments) async {
@@ -47,12 +48,9 @@ void main(List<String> arguments) async {
 
   final env = await loadEnv(dotEnvFile, workingDir);
 
-  final sshKeyName = env['SSH_KEY'];
-
-  if (sshKeyName == null) {
-    stderr.writeln('ERROR! env-var SSH_KEY is missing');
-    exit(2);
-  }
+  // SSH_KEY, or a key map (SSH_KEY_MAP_PATH) with SSH_AUTH_SOCK.
+  final keys = mcpKeySettingsOrExit(env, workingDir);
+  final sshKeyName = keys.sshKeyName;
 
   // Use ProviderFactory to create the appropriate provider
   late final InfrastructureProvider provider;
@@ -61,6 +59,8 @@ void main(List<String> arguments) async {
       workingDir: workingDir,
       env: env,
       sshKeyName: sshKeyName,
+      sshKeyMapPath: keys.keyMapPath,
+      sshAgentSocket: keys.agentSocket,
     );
   } catch (e) {
     stderr.writeln('ERROR! $e');

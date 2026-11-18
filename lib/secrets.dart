@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/secret_codec.dart';
 import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/ssh_identity.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:process_run/shell.dart';
@@ -552,22 +553,21 @@ Future<void> deploySecretOnRemote(
   required SSHClient sshClient,
   bool debug = false,
 }) async {
-  final sshCmd =
-      'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr}';
+  await withSshCommand(workingDir, node, (sshCmd) async {
+    final controller = StreamController<List<int>>();
 
-  final controller = StreamController<List<int>>();
+    final shell = Shell(
+      runInShell: true,
+      verbose: debug,
+      stdin: controller.stream,
+    );
 
-  final shell = Shell(
-    runInShell: true,
-    verbose: debug,
-    stdin: controller.stream,
-  );
+    controller.add(utf8.encode(secret));
+    controller.close();
 
-  controller.add(utf8.encode(secret));
-  controller.close();
-
-  await shell
-      .run('$sshCmd "systemd-creds encrypt - /root/secrets/$secretName"');
+    await shell
+        .run('$sshCmd "systemd-creds encrypt - /root/secrets/$secretName"');
+  });
 }
 
 Future<void> syncSecrets(

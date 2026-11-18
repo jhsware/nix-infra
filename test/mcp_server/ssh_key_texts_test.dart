@@ -115,8 +115,9 @@ void main() {
     final remoteText = '$thrown';
     final statsText = textOf(await stats
         .callback(args: {'target': 'web-1', 'operation': 'health'}));
-    final uploadText = textOf(await upload.callback(
-        args: {'target': 'web-1', 'local_path': '${dir.path}/upload.txt'}));
+    // A path relative to the project folder: file-upload refuses others.
+    final uploadText = textOf(await upload
+        .callback(args: {'target': 'web-1', 'local_path': 'upload.txt'}));
 
     expect(remoteText, 'Exception: $text');
     expect(statsText, '--- web-1 (192.0.2.10) ---\nError: Exception: $text');

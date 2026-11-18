@@ -163,6 +163,15 @@ System info (`uname`, `uptime`, `who`), process monitoring (`ps`, `top`, `htop`)
 
 Commands must appear on the whitelist and not on the blacklist. Any unrecognized command is rejected.
 
+### File Upload
+
+The MCP tool `file-upload` takes local paths inside the project folder (`--project-dir`) only. Without this limit an agent session with `file-upload` and `remote-command` could copy any file of the server user (a key file, `~/.ssh`, `.env`) to a machine and read it there.
+
+- A path is relative to the project folder, not to the current folder of the MCP server. Absolute paths, `..`, hidden files and folders (`.env`, `.git`) and the folders `ssh/` (the key files) and `secrets/` are refused.
+- Paths are checked after the symbolic links are resolved, by path segments: a symbolic link that leads out of the project folder, to a hidden file, or into `ssh/` or `secrets/` is refused.
+- In an uploaded folder every entry is checked: a hidden entry is skipped, any other refused entry refuses the whole call.
+- All paths are checked before a machine is looked up or contacted, and an error names only the path that the caller gave.
+
 ### Known MCP Limitations
 
 - The `systemctl` whitelist entry needs further sub-command restrictions (e.g., `systemctl stop` should likely be blocked)

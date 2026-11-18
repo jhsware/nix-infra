@@ -157,8 +157,7 @@ Future<bool> sftpExists(
 
 /// Get SSH key as PEM string from a ClusterNode.
 ///
-/// Reads [ClusterNode.getEffectiveSshKeyPath]: the private key file of
-/// `SSH_KEY_PATH` when the provider set it, else the node's `ssh_key` of
+/// Reads [ClusterNode.getEffectiveSshKeyPath]: the node's `ssh_key` of
 /// servers.yaml, else `<workingDir>/ssh/<sshKeyName>`. Only for a node with
 /// a key file; a login uses `identitiesOf` of lib/ssh_identity.dart, which
 /// follows the key source of the node.

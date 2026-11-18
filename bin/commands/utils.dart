@@ -79,14 +79,12 @@ String getSecretsPassword(DotEnv env, bool batch) {
 ///
 /// Without a name:
 /// - [requireName] true (provision: the command gives the name to the
-///   cloud provider): throws a readable Exception, also when SSH_KEY_PATH
-///   or SSH_KEY_MAP_PATH is set.
+///   cloud provider): throws a readable Exception, also when
+///   SSH_KEY_MAP_PATH is set.
 /// - `SSH_KEY_MAP_PATH` set (not empty): returns `''`. The command only
 ///   connects, and the key map gives the key of the machines it names
 ///   (docs/design/ssh_agent_keys.md §3).
-/// - `SSH_KEY_PATH` set (not empty): returns `''`. The command only
-///   connects, and SSH_KEY_PATH gives the key file of every machine.
-/// - Otherwise: throws a readable Exception that names the three ways to
+/// - Otherwise: throws a readable Exception that names the ways to
 ///   configure a key.
 String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
     {bool requireName = false}) {
@@ -105,7 +103,7 @@ String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
   if (requireName) {
     throw Exception('No SSH key configured. Set SSH_KEY in .env or the '
         'environment, or pass --ssh-key=<name>. This command gives the key '
-        'name to the cloud provider, so SSH_KEY_PATH alone is not enough.');
+        'name to the cloud provider.');
   }
 
   final keyMapPath = env[kSshKeyMapPathEnv]?.trim();
@@ -113,14 +111,8 @@ String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
     return '';
   }
 
-  final keyPath = env['SSH_KEY_PATH']?.trim();
-  if (keyPath != null && keyPath.isNotEmpty) {
-    return '';
-  }
-
   throw Exception('No SSH key configured. Set SSH_KEY in .env or the '
-      'environment, pass --ssh-key=<name>, or set '
-      'SSH_KEY_PATH=<private key file>.');
+      'environment, or pass --ssh-key=<name>.');
 }
 
 /// The parsed arguments that hold the option [name] for the subcommand

@@ -25,22 +25,15 @@ String vpnRequiredHint(ClusterNode node) => node.requiresVpn
 ///
 /// - An agent key ([AgentKeySource]): the machine does not accept the one
 ///   key of the agent that the key map gives it (design §7).
-/// - The key of SSH_KEY_PATH ([ClusterNode.sshKeyPathFromEnv]): there is no
-///   other key to try, the machine does not accept that key.
 /// - Otherwise the text is the one nix-infra always gave.
 String sshAuthenticationFailedMessage(ClusterNode node) {
   if (node.keySource case AgentKeySource(:final fingerprint)) {
     return NodeKeyNotAcceptedException(node.name, fingerprint).message;
   }
-  final where =
-      'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n';
-  if (node.sshKeyPathFromEnv) {
-    return '${where}Reason: the machine does not accept the key of '
-        'SSH_KEY_PATH. It may belong to another SSH key (in sysops: open a '
-        'terminal with the key of this machine).';
-  }
-  return '${where}Reason: SSH authentication failed - check SSH key '
-      'permissions and configuration';
+  return 'Failed to authenticate to server "${node.name}" at '
+      '${node.ipAddr}:22\n'
+      'Reason: SSH authentication failed - check SSH key permissions and '
+      'configuration';
 }
 
 /// The text of [error] when it is about the key of [node]

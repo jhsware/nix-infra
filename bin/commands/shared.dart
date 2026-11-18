@@ -8,7 +8,6 @@ import 'package:nix_infra/secrets.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/ssh_identity.dart';
 import 'package:nix_infra/ssh_key_map.dart';
-import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:nix_infra/providers/providers.dart';
 
@@ -20,10 +19,6 @@ import 'utils.dart';
 /// Uses ProviderFactory.autoDetect to automatically choose between:
 /// - SelfHosting if servers.yaml exists
 /// - HetznerCloud if HCLOUD_TOKEN is set
-///
-/// When `SSH_KEY_PATH` is set in [env], every server of the provider uses
-/// that private key file. A missing file throws here, before any
-/// connection.
 ///
 /// When `SSH_KEY_MAP_PATH` is set in [env], the key map is read once here:
 /// a key map that cannot be read, or has another version, stops the command
@@ -41,7 +36,6 @@ Future<InfrastructureProvider> getProvider(
     workingDir: workingDir,
     env: env,
     sshKeyName: sshKeyName,
-    sshKeyPath: resolveSshKeyPath(env, workingDir),
     sshKeyMapPath: keyMapPath,
     sshAgentSocket: resolveSshAgentSocket(env),
   );

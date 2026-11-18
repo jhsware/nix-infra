@@ -3,55 +3,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
-import 'package:dotenv/dotenv.dart';
-import 'package:path/path.dart' as path;
 
-// SSH_KEY_PATH: one private key file for every machine of a CLI command, and
-// the public key of a private key file (docs/analysis/
-// 2026-11-17-ssh-key-resolution-external-identities.md §5.2).
+// The public key of a private key file: `<file>.pub` when it exists, else
+// derived from the private key (docs/analysis/
+// 2026-11-17-ssh-key-resolution-external-identities.md §5.2). The public key
+// of a machine is `publicKeyOf` of lib/ssh_identity.dart.
 //
 // No function of this file reads the key into a message: an error names the
 // path of the file, never its content.
-
-/// The private key file of `SSH_KEY_PATH` in [env], as an absolute,
-/// normalized path, or null when the variable is not set or is empty (after
-/// trimming).
-///
-/// - A leading `~/` is the home directory ([homeDir], default `HOME` of the
-///   process environment); a value in `.env` is not expanded by a shell.
-/// - An absolute path is used as it is (normalized).
-/// - Any other path is relative to [workingDir] (the project folder), the
-///   rule of `ssh_key` in servers.yaml.
-///
-/// Throws an [Exception] when the file does not exist, before any
-/// connection is made. A key of a sysops vault is deleted when the vault is
-/// locked, so the message says what to do then.
-String? resolveSshKeyPath(DotEnv env, Directory workingDir,
-    {String? homeDir}) {
-  final value = env['SSH_KEY_PATH']?.trim();
-  if (value == null || value.isEmpty) return null;
-
-  final String keyPath;
-  if (value.startsWith('~/')) {
-    final home = homeDir ?? Platform.environment['HOME'];
-    if (home == null || home.isEmpty) {
-      throw Exception('SSH_KEY_PATH starts with ~/ but HOME is not set: '
-          '$value. Use an absolute path.');
-    }
-    keyPath = path.normalize(path.join(home, value.substring(2)));
-  } else if (path.isAbsolute(value)) {
-    keyPath = path.normalize(value);
-  } else {
-    keyPath = path.normalize(path.join(workingDir.absolute.path, value));
-  }
-
-  if (!File(keyPath).existsSync()) {
-    throw Exception('SSH_KEY_PATH names a file that does not exist: '
-        '$keyPath. If a sysops terminal set it: unlock the vault and open a '
-        'new terminal.');
-  }
-  return keyPath;
-}
 
 /// The OpenSSH public key line `<type> <base64 blob>` of the private key
 /// [pem], without a comment: the line of `ssh-keygen -y -f <file>` without

@@ -126,6 +126,27 @@ Key details:
 - `StrictHostKeyChecking=no` is used for SSH connections (nodes are frequently reprovisioned with new host keys)
 
 A private key can also stay outside the project folder, for example the key file that sysops decrypts from its vault for one terminal. `SSH_KEY_PATH=<private key file>` makes a CLI command use that one file for every machine; the public key comes from `<file>.pub` or is derived from the private key, so no key file is needed in `ssh/`. There is no fallback to another key: a machine that does not accept this key refuses the connection, so a terminal with one key reaches only the machines that accept that key. A missing file (for example after the vault was locked) stops the command before any connection. The errors of the path check and of the public key derivation name the path of the file, never its content. The MCP servers do not read `SSH_KEY_PATH`.
+### Keys from an ssh-agent
+
+With a key map (`SSH_KEY_MAP_PATH`, see [SSH keys](./ARCHITECTURE.md#ssh-keys)) a machine that the map names is reached with a key that stays in an `ssh-agent` (`SSH_AUTH_SOCK`); nix-infra asks the agent to sign. sysops fills such agents from its vault and sets the key map for each terminal or agent session.
+
+**What nix-infra guarantees in agent mode**
+
+- It never reads, holds or writes a private key. It holds a socket path and public keys.
+- It uses the agent only for a machine that the key map names. It never offers every key of the agent to a machine: `ssh` runs with `IdentitiesOnly=yes` and the one public key of the machine, and the agent is never forwarded.
+- It never falls back to another key after a failure.
+- An MCP tool result, and the stderr of an MCP server, never show where the socket, the key map or a key file is.
+
+**What it does not guarantee**
+
+| Limit | Why |
+|---|---|
+| A process of the same UNIX user can use the agent while it runs. | The socket is a file of that user. The key cannot be copied out, but it can be asked to sign. |
+| Whoever may call `remote-command` is root on the machine. | That is what the tool is for. Which machines a caller reaches is decided by the keys in its agent, so by the caller. |
+| The machine at the other end is not checked. | No host key check (see [StrictHostKeyChecking Disabled](#stricthostkeychecking-disabled)). An attacker in the network path cannot learn the key and cannot use the signature for another connection, but nix-infra would talk to the wrong machine and could send it files and secrets. |
+| A key file of the classic way is as readable as before. | Unchanged. |
+| A file tool of an agent session of sysops can read the key map and learn the path of the socket. | sysops sets no deny rules for the file tools. The key map holds fingerprints only, and a file tool cannot connect to a socket. |
+
 
 ## MCP Server Safety
 

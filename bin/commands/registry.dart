@@ -87,11 +87,8 @@ class ListImagesCommand extends Command {
     final env = await loadEnv(parent?.argResults!['env'], workingDir);
 
     // final bool debug = parent?.argResults!['debug'];
-    final bool batch = argResults!['batch'];
     final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = parent?.argResults!['target'].split(' ');
-
-    areYouSure('Are you sure you want to publish this image?', batch);
 
     final provider = await getProvider(workingDir, env, sshKeyName);
     final nodes = await provider.getServers(only: targets);

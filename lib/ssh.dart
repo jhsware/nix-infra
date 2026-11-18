@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:process_run/shell.dart';
 
 import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/ssh_identity.dart';
+import 'package:nix_infra/ssh_key_errors.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 
@@ -21,20 +23,23 @@ String vpnRequiredHint(ClusterNode node) => node.requiresVpn
 
 /// The text of a failed SSH authentication to [node].
 ///
-/// When the node uses the key of SSH_KEY_PATH ([ClusterNode.sshKeyPathFromEnv]),
-/// there is no other key to try: the machine does not accept that key.
-/// Otherwise the text is the one nix-infra always gave.
+/// - An agent key ([AgentKeySource]): the machine does not accept the one
+///   key of the agent that the key map gives it (design §7).
+/// - Otherwise the text is the one nix-infra always gave.
 String sshAuthenticationFailedMessage(ClusterNode node) {
-  final where =
-      'Failed to authenticate to server "${node.name}" at ${node.ipAddr}:22\n';
-  if (node.sshKeyPathFromEnv) {
-    return '${where}Reason: the machine does not accept the key of '
-        'SSH_KEY_PATH. It may belong to another SSH key (in sysops: open a '
-        'terminal with the key of this machine).';
+  if (node.keySource case AgentKeySource(:final fingerprint)) {
+    return NodeKeyNotAcceptedException(node.name, fingerprint).message;
   }
-  return '${where}Reason: SSH authentication failed - check SSH key '
-      'permissions and configuration';
+  return 'Failed to authenticate to server "${node.name}" at '
+      '${node.ipAddr}:22\n'
+      'Reason: SSH authentication failed - check SSH key permissions and '
+      'configuration';
 }
+
+/// The text of [error] when it is about the key of [node]
+/// ([nodeKeyErrorOf], design §7), else null. Its text names no path.
+String? sshKeyErrorMessage(ClusterNode node, Object error) =>
+    nodeKeyErrorOf(node, error)?.message;
 
 /// Closes [sftp] and waits until the server has closed its channel.
 ///
@@ -191,8 +196,10 @@ const _connectionTimeoutReason =
 String _failedToConnect(ClusterNode node) =>
     'Failed to connect to server "${node.name}" at ${node.ipAddr}:22\n';
 
-/// The text of a failed [runCommandOverSsh] on [node].
+/// The text of a failed [runCommandOverSsh] on [node]. An error about the
+/// key of [node] gives its text of design §7 ([sshKeyErrorMessage]).
 String sshCommandErrorMessage(ClusterNode node, Object error) =>
+    sshKeyErrorMessage(node, error) ??
     switch (classifySshError(error)) {
       SshFailure.connectionRefused =>
         '${_failedToConnect(node)}$_connectionRefusedReason'
@@ -208,8 +215,10 @@ String sshCommandErrorMessage(ClusterNode node, Object error) =>
             'Reason: ${_sshErrorText(error)}${vpnRequiredHint(node)}',
     };
 
-/// The text of a failed [openShellOverSsh] to [node].
+/// The text of a failed [openShellOverSsh] to [node]. An error about the
+/// key of [node] gives its text of design §7 ([sshKeyErrorMessage]).
 String sshShellErrorMessage(ClusterNode node, Object error) =>
+    sshKeyErrorMessage(node, error) ??
     switch (classifySshError(error)) {
       SshFailure.connectionRefused =>
         '${_failedToConnect(node)}$_connectionRefusedReason',
@@ -244,9 +253,14 @@ String sshConnectErrorMessage(ClusterNode node, Object? error) {
 
 /// Runs [cmd] on [node] over SSH and returns its output.
 ///
+/// The identities of [node] are resolved first ([identitiesOf]): a machine
+/// whose key is not available is not contacted. Every error is thrown as an
+/// [Exception] with the text of [sshCommandErrorMessage].
+///
 /// [connectTimeout], when given, bounds the TCP connect, the SSH handshake
-/// and the login, each of them (the MCP tools pass `--ssh-timeout`). [port]
-/// is a seam for the tests against a local `sshd`; nix-infra always uses 22.
+/// and the login, each of them (the MCP tools pass `--ssh-timeout`), and
+/// each request to the ssh-agent. [port] is a seam for the tests against a
+/// local `sshd`; nix-infra always uses 22.
 Future<String> runCommandOverSsh(
     Directory workingDir, ClusterNode node, String cmd,
     {Duration? connectTimeout, int port = 22}) async {
@@ -254,6 +268,9 @@ Future<String> runCommandOverSsh(
   SSHClient? sshClient;
 
   try {
+    final identities =
+        await identitiesOf(workingDir, node, agentTimeout: connectTimeout);
+
     socket =
         await SSHSocket.connect(node.ipAddr, port, timeout: connectTimeout);
 
@@ -265,9 +282,7 @@ Future<String> runCommandOverSsh(
       //   cipher: const [SSHCipherType.aes256ctr, ],
       //   // mac: const [SSHMacType.hmacSha1],
       // ),
-      identities: [
-        ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
-      ],
+      identities: identities,
       handshakeTimeout: connectTimeout,
       authTimeout: connectTimeout,
     );
@@ -449,14 +464,7 @@ Future<void> clearKnownHosts(Iterable<ClusterNode> nodes) async {
 Future<void> waitForSsh(Iterable<ClusterNode> nodes) async {
   stdout.write('- ssh: ');
   final sshSessions = nodes.map((node) async {
-    // final sshClient = SSHClient(
-    //   await SSHSocket.connect(node.ipAddr, 22,
-    //         timeout: sshTimeoutDuration,),
-    //   username: 'root',
-    //   identities: [
-    //     ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
-    //   ],
-    // );
+    // Only waits until the SSH port answers; no login, so no key.
     var maxTries = 20;
     while (maxTries-- > 0) {
       try {
@@ -507,19 +515,34 @@ Future<SSHSocket> waitAndGetSshConnection(ClusterNode node,
   throw Exception(sshConnectErrorMessage(node, lastError));
 }
 
-/// An SSH client on [connection] that logs in to [node] with its key file.
+/// An SSH client on [connection] that logs in to [node] with its key
+/// ([identitiesOf]: the key file, or the key of the ssh-agent that the key
+/// map gives [node]).
+///
+/// [identities], when given, are used as they are: a caller that resolved
+/// them before it connected (so a machine whose key is not available is not
+/// contacted) passes them. When the identities cannot be resolved here,
+/// [connection] is closed and the [NodeKeyException] is thrown.
 ///
 /// [timeout], when given, bounds the SSH handshake and the login, each of
-/// them (dartssh2 `handshakeTimeout` and `authTimeout`). The MCP tools pass
-/// `--ssh-timeout`; the CLI passes nothing and waits as it always did.
+/// them (dartssh2 `handshakeTimeout` and `authTimeout`), and each request to
+/// the ssh-agent. The MCP tools pass `--ssh-timeout`; the CLI passes nothing
+/// and waits as it always did.
 Future<SSHClient> getSshClient(
     Directory workingDir, ClusterNode node, connection,
-    {Duration? timeout}) async {
-  final nodePemFile = await getSshKeyAsPemFromNode(workingDir, node);
+    {Duration? timeout, List<SSHIdentity>? identities}) async {
+  final List<SSHIdentity> keys;
+  try {
+    keys = identities ??
+        await identitiesOf(workingDir, node, agentTimeout: timeout);
+  } catch (_) {
+    if (connection is SSHSocket) connection.destroy();
+    rethrow;
+  }
   final sshClient = SSHClient(
     connection,
     username: node.username,
-    identities: [...SSHKeyPair.fromPem(nodePemFile)],
+    identities: keys,
     handshakeTimeout: timeout,
     authTimeout: timeout,
   );
@@ -547,6 +570,8 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
   SSHSession? shell;
 
   try {
+    final identities = await identitiesOf(workingDir, node);
+
     socket = await SSHSocket.connect(node.ipAddr, 22);
 
     sshClient = SSHClient(
@@ -557,9 +582,7 @@ Future<void> openShellOverSsh(Directory workingDir, ClusterNode node) async {
       //   cipher: const [SSHCipherType.aes256ctr, ],
       //   // mac: const [SSHMacType.hmacSha1],
       // ),
-      identities: [
-        ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
-      ],
+      identities: identities,
     );
 
     shell = await sshClient.shell(

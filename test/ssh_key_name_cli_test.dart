@@ -58,8 +58,7 @@ void main() {
     expect(
         r.stdout,
         contains('- ERROR: No SSH key configured. Set SSH_KEY in .env or the '
-            'environment, pass --ssh-key=<name>, or set '
-            'SSH_KEY_PATH=<private key file>.'));
+            'environment, or pass --ssh-key=<name>.'));
     expect(output, isNot(contains("type 'Null'")));
   }, timeout: const Timeout(Duration(minutes: 2)));
 

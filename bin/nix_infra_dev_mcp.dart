@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:mcp_dart/mcp_dart.dart';
 import 'package:nix_infra/providers/providers.dart';
+import 'package:nix_infra/ssh_key_map.dart';
+import 'mcp_server/server_keys.dart';
 import 'mcp_server/test_environment.dart';
 import 'mcp_server/test_runner.dart';
 import 'mcp_server/nix_prefetch_url.dart';
@@ -28,12 +30,14 @@ void main(List<String> arguments) async {
 
   final env = await loadEnv('.env', workingDir);
 
-  final sshKeyName = env['SSH_KEY'];
+  // SSH_KEY, or a key map (SSH_KEY_MAP_PATH) with SSH_AUTH_SOCK.
+  final keys = mcpKeySettingsOrExit(env, workingDir);
+  final sshKeyName = keys.sshKeyName;
 
-  if (sshKeyName == null) {
-    stderr.writeln('ERROR! env-var SSH_KEY is missing');
-    exit(2);
-  }
+  // The scripts that test-runner and test-environment start get the key
+  // map (as an absolute path) and the agent socket, also when they come
+  // from .env (design §6.3, §14).
+  final scriptEnvironment = sshAgentScriptEnvironment(env, workingDir);
 
   // Use ProviderFactory to create the appropriate provider
   late final InfrastructureProvider provider;
@@ -42,6 +46,8 @@ void main(List<String> arguments) async {
       workingDir: workingDir,
       env: env,
       sshKeyName: sshKeyName,
+      sshKeyMapPath: keys.keyMapPath,
+      sshAgentSocket: keys.agentSocket,
     );
   } catch (e) {
     stderr.writeln('ERROR! $e');
@@ -104,6 +110,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    scriptEnvironment: scriptEnvironment,
   );
 
   server.tool(
@@ -117,6 +124,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    scriptEnvironment: scriptEnvironment,
   );
 
   server.tool(

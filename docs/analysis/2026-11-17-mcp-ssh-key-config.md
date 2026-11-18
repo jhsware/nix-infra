@@ -1,7 +1,7 @@
 # MCP servers: SSH keys from a key map — analysis
 
 **Date:** 2026-11-17
-**Status:** Superseded on 2026-11-17 by `docs/design/ssh_agent_keys.md` (keys from an ssh-agent; `SSH_KEY_PATH` removed). §3 and §4 still hold.
+**Status:** Superseded on 2026-11-17 by `docs/design/ssh_agent_keys.md` (keys from an ssh-agent; `SSH_KEY_PATH` removed). §3 and §4 still hold. The design was implemented on 2026-11-18 (its §15 says what was built in another way).
 **Code reviewed:** `188897b` (`main`).
 **Full note:** `sysops_server/docs/analysis/2026-11-17-ssh-keys-for-mcp-servers.md` (why, the alternatives, the sysops side). This note is the nix-infra side and can be read alone.
 **Earlier note:** `docs/analysis/2026-11-17-ssh-key-resolution-external-identities.md` (`SSH_KEY_PATH` for the CLI).

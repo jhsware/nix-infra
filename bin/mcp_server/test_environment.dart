@@ -138,10 +138,16 @@ cancel -- cancel a running session
   final TestEnvironmentSessionManager _sessionManager =
       TestEnvironmentSessionManager();
 
+  /// Added to the environment of the scripts this tool starts: the
+  /// variables of the agent mode (`sshAgentScriptEnvironment`), empty
+  /// without a key map.
+  final Map<String, String> scriptEnvironment;
+
   TestEnvironment({
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    this.scriptEnvironment = const {},
   });
 
   @override
@@ -342,7 +348,8 @@ cancel -- cancel a running session
     );
   }
 
-  /// Streams command output as it becomes available.
+  /// Streams command output as it becomes available. [scriptEnvironment] is
+  /// added to the environment of this process for the command.
   Stream<String> _streamCommand(Directory workingDir, String cmd) {
     final controller = StreamController<String>();
 
@@ -351,6 +358,7 @@ cancel -- cancel a running session
       '/bin/sh',
       ['-c', cmd],
       workingDirectory: workingDir.path,
+      environment: scriptEnvironment,
       runInShell: false,
     ).then((process) {
       // Track when both streams are done

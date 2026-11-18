@@ -3,57 +3,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
-import 'package:dotenv/dotenv.dart';
-import 'package:path/path.dart' as path;
 
-import 'package:nix_infra/types.dart';
-
-// SSH_KEY_PATH: one private key file for every machine of a CLI command, and
-// the public key of a private key file (docs/analysis/
-// 2026-11-17-ssh-key-resolution-external-identities.md §5.2).
+// The public key of a private key file: `<file>.pub` when it exists, else
+// derived from the private key (docs/analysis/
+// 2026-11-17-ssh-key-resolution-external-identities.md §5.2). The public key
+// of a machine is `publicKeyOf` of lib/ssh_identity.dart.
 //
 // No function of this file reads the key into a message: an error names the
 // path of the file, never its content.
-
-/// The private key file of `SSH_KEY_PATH` in [env], as an absolute,
-/// normalized path, or null when the variable is not set or is empty (after
-/// trimming).
-///
-/// - A leading `~/` is the home directory ([homeDir], default `HOME` of the
-///   process environment); a value in `.env` is not expanded by a shell.
-/// - An absolute path is used as it is (normalized).
-/// - Any other path is relative to [workingDir] (the project folder), the
-///   rule of `ssh_key` in servers.yaml.
-///
-/// Throws an [Exception] when the file does not exist, before any
-/// connection is made. A key of a sysops vault is deleted when the vault is
-/// locked, so the message says what to do then.
-String? resolveSshKeyPath(DotEnv env, Directory workingDir,
-    {String? homeDir}) {
-  final value = env['SSH_KEY_PATH']?.trim();
-  if (value == null || value.isEmpty) return null;
-
-  final String keyPath;
-  if (value.startsWith('~/')) {
-    final home = homeDir ?? Platform.environment['HOME'];
-    if (home == null || home.isEmpty) {
-      throw Exception('SSH_KEY_PATH starts with ~/ but HOME is not set: '
-          '$value. Use an absolute path.');
-    }
-    keyPath = path.normalize(path.join(home, value.substring(2)));
-  } else if (path.isAbsolute(value)) {
-    keyPath = path.normalize(value);
-  } else {
-    keyPath = path.normalize(path.join(workingDir.absolute.path, value));
-  }
-
-  if (!File(keyPath).existsSync()) {
-    throw Exception('SSH_KEY_PATH names a file that does not exist: '
-        '$keyPath. If a sysops terminal set it: unlock the vault and open a '
-        'new terminal.');
-  }
-  return keyPath;
-}
 
 /// The OpenSSH public key line `<type> <base64 blob>` of the private key
 /// [pem], without a comment: the line of `ssh-keygen -y -f <file>` without
@@ -77,6 +34,9 @@ String publicKeyLineFromPrivateKey(String pem) {
 /// The public key of the private key file [privateKeyPath]: the trimmed
 /// content of `<privateKeyPath>.pub` when that file exists, else the line
 /// derived from the private key ([publicKeyLineFromPrivateKey]).
+///
+/// The public key of a machine is `publicKeyOf` of lib/ssh_identity.dart,
+/// which uses this function for a machine with a key file.
 Future<String> publicKeyOfKeyFile(String privateKeyPath) async {
   final pubFile = File('$privateKeyPath.pub');
   if (await pubFile.exists()) {
@@ -91,18 +51,6 @@ Future<String> publicKeyOfKeyFile(String privateKeyPath) async {
         '$privateKeyPath.pub does not exist: the SSH key ${e.reason}');
   }
 }
-
-/// The public key of [node]: the one written as root's authorized key
-/// (`[%%sshKey%%]` of configuration.nix).
-///
-/// The private key file is [ClusterNode.getEffectiveSshKeyPath]; see
-/// [publicKeyOfKeyFile]. For a project with `ssh/<name>` and
-/// `ssh/<name>.pub` the result is the content of `ssh/<name>.pub`, as
-/// before SSH_KEY_PATH.
-Future<String> publicKeyOf(Directory workingDir, ClusterNode node) {
-  return publicKeyOfKeyFile(node.getEffectiveSshKeyPath(workingDir.path));
-}
-
 /// Why a key cannot be used, as the end of a sentence that starts with
 /// "The SSH key". Never holds key text.
 class _SshKeyError implements Exception {

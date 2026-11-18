@@ -1,7 +1,7 @@
 # SSH keys from an ssh-agent — design
 
 **Date:** 2026-11-17
-**Status:** Accepted by the operator on 2026-11-18, with the decisions of §13. Not implemented.
+**Status:** Accepted by the operator on 2026-11-18, with the decisions of §13. **Implemented on 2026-11-18** in the branches `feat/dartssh2-4` (merged into `main`), `feat/ssh-agent-client`, `feat/ssh-agent-mode`, `chore/remove-ssh-key-path`, `fix/mcp-file-upload-project-paths` and `docs/ssh-agent-pages` (merged into the integration branch `feat/ssh-agent-keys`, which goes into `main` as a whole); the trial branch `trial/ssh-agent-dartssh2-4` is not merged. What was built in another way than the sections below say: §15.
 **Code reviewed:** nix-infra `188897b` (`main`, 0.18.0-beta), dartssh2 2.14.0 (locked). dartssh2 4.1.0 from its changelog and API pages only.
 **Companion design:** `sysops_server/docs/design/ssh_keys_through_agents.md` (how sysops fills the agents).
 **Replaces:** the `SSH_KEY_PATH` feature (`docs/analysis/2026-11-17-ssh-key-resolution-external-identities.md`) and the proposal of `docs/analysis/2026-11-17-mcp-ssh-key-config.md`.
@@ -278,3 +278,49 @@ Found on 2026-11-18 by reading the code of `main` at `188897b`. The planner task
 - **§11.1, `CHANGELOG.md`.** The Unreleased entry holds more than `SSH_KEY_PATH`: the public key from `.pub` or derived, `ssh_key` used by more steps, `getSshKeyAsPem` removed, the error for a missing key name. Only the `SSH_KEY_PATH` parts are removed.
 - **§11.1, `docs/README.md`.** The index links neither the design nor the analysis notes, and an empty line cuts its table in two. The docs task corrects both.
 - **§12, the trial.** The trial branch is not merged, so the upgrade task copies the result of the trial into §12.
+
+## 15. As built
+
+Built on 2026-11-18 in the order of §11. Where the code differs from the sections above, the code is right; the pages (`docs/ARCHITECTURE.md` "SSH keys" and "MCP Servers", `docs/SECURITY.md`) describe the code.
+
+**Branches.** The trial `trial/ssh-agent-dartssh2-4` (not merged). `feat/dartssh2-4`, merged into `main` (`a63311f`). Then, by a decision of the operator, the integration branch `feat/ssh-agent-keys` (made from `main` at `a63311f`, because sysops_server reads nix-infra through a path dependency on the main folder): `feat/ssh-agent-client` (`f861057`), `feat/ssh-agent-mode` (`b16f88a`), `chore/remove-ssh-key-path` (`9f9b815`), `fix/mcp-file-upload-project-paths` (`8842137`) and `docs/ssh-agent-pages`. `main` gets the integration branch at the end.
+
+**The upgrade (§5)**
+
+- Errors are mapped by their type (`classifySshError`, `lib/ssh.dart`); the old text search is the last fallback. A login that ends in a failed handshake (an old server with only weak algorithms) now names the handshake error, no longer "authentication failed".
+- `--ssh-timeout` bounds the TCP connect, the handshake and the login, each of them, and now also reaches the MCP tool `etcd`, which had no timeout. The CLI gets no handshake or login timeout, as before.
+- `closeSshQuietly` and `closeSftpQuietly` (`lib/ssh.dart`) close every client, SFTP first; `forwardLocalPort` was split out of `portForward`, which now closes its client. The lint `unawaited_futures` was not turned on; the closes were found by a search.
+- `runCommandOverSsh` has a `port` parameter for the tests against a local `sshd` (§14); the texts still say `:22`.
+
+**The agent client and the key map (§4.1, §6.1)**
+
+- `lib/ssh_agent.dart` declares its own protocol constants (`SshAgentMessage`, `SshAgentSignFlags`) and uses none of the agent names of dartssh2 (§12 said it uses `SSHAgentProtocol`).
+- Each request to the agent has a timeout: 30 seconds (`sshAgentDefaultTimeout`), `--ssh-timeout` in the MCP servers. This answers the point "An agent that never answers" of §12.
+- Two typed errors beyond §6.1: `SshAgentKeyNotFoundException` and `SshAgentWrongAlgorithmException` (the signer checks the algorithm of the signature). The identity of an agent key has `shouldProbe: true`.
+- The key map (`lib/ssh_key_map.dart`): `version` must be the number 1; an explicit `null` is an error, not "absent"; `agent_key` is not checked for the `SHA256:` form; `loadSshKeyMap` is synchronous.
+- The tests check each signature of the agent with `ssh-keygen -Y check-novalidate` (`test/support/sshsig.dart`), because dartssh2 exports no verifier.
+
+**The agent mode (§4.2, §6.2, §6.3, §7)**
+
+- A fourth key source, `KeyMapUnreadableSource` (`lib/types.dart`), for a key map that cannot be read while a server runs (§14), with its own text: `The key map of this session cannot be read. The key of machine "<name>" is not available.` (`lib/ssh_key_errors.dart`, the one place for the texts).
+- Texts without a row in §7: another error of the agent (`The SSH agent of this session failed for the key of machine "<name>" (<fingerprint>): ...`), and a key file that cannot be read, has a passphrase, or is not a private key. The CLI uses the same texts.
+- `sshCommand` (`lib/ssh_identity.dart`) adds `-o ForwardAgent=no` and quotes `IdentityAgent` and `-i`; the public key file has mode 600 in a new temporary folder. `withSshCommand` deletes it also after an error. The socket is carried by `AgentKeySource`; the three functions take an optional `agentSocket`.
+- Call sites that §6.2 missed: `rebootToNixos` and `rebuildNixos` in `lib/provision.dart` (seven `ssh -i` sites, not five), `getSshClient` in `lib/ssh.dart`, and `HetznerCloud.publicKeyForRegistration` (`lib/providers/hcloud.dart`), which registers the public key of `default` with a key map.
+- `runCommandOverSsh`, `openShellOverSsh`, the certificates and `file-upload` get the key before the TCP connect, so a machine whose key is not available is not contacted; `getSshClient` takes optional `identities`. The other callers of `getSshClient` (`lib/cluster_node.dart`, `lib/control_node.dart`, `lib/provision.dart`, `lib/helpers.dart`, the port forward and the action scripts in `lib/ssh.dart`) connect first and then stop on the key, with the same text.
+- The MCP servers share `bin/mcp_server/server_keys.dart`; a broken key map stops the start with `ERROR! SSH_KEY_MAP_PATH: <what is wrong>`. The dev MCP server passes nothing new to its scripts without a key map, not even `SSH_AUTH_SOCK` (`sshAgentScriptEnvironment`).
+- `provision` prints a key error of its install step as `ERROR! <text>`; `ssh-key add` stops with a clear error without `--name`.
+
+**The removal of `SSH_KEY_PATH` (§8)**
+
+- No file was deleted: the test that a set value has no effect is `test/ssh_key_path_cli_test.dart` (written again), and `test/ssh_key_path_test.dart` keeps its name. `lib/ssh_key_path.dart` keeps the public key functions; `publicKeyOf` is in `lib/ssh_identity.dart`.
+- The texts for a missing key name name `SSH_KEY` and `--ssh-key`, not the key map.
+
+**`file-upload` (§9, §14)**
+
+- The operator decided on 2026-11-18 that `ssh/` and `secrets/` are refused too (the open question of §14); only these folders at the top of the project. The rule is `bin/mcp_server/utils/project_path.dart`: relative path, no hidden segment, real path inside the real project folder by segments.
+- A refused entry inside an uploaded folder (a link that leaves, a broken link, a loop) refuses the whole call; hidden entries are skipped. All paths are checked before the machines are looked up. Check and send are two moments; `docs/SECURITY.md` names that limit.
+- The test against a local `sshd` runs the check and the send over its own SFTP client, because the tool connects to port 22 only.
+
+**Still open from §12:** Linux (all runs were on macOS), what `mcp_dart` returns for an error that a tool does not catch, and a rescue or installer system that `provision` meets; the check by hand of §10 covers the last one.
+
+**Not built, noted for the backlog:** `ProviderFactory.create` does not take the key map; `fleet port-forward` fails with "has no mesh-ip" (before and after this work); `waitAndGetSshConnection` writes to stdout, which is the JSON-RPC channel of an MCP server; `configuration-files` does not have the path rule of `file-upload`.

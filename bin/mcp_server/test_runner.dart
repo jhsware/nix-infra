@@ -142,10 +142,16 @@ cancel -- cancel a running session
 
   final SessionManager _sessionManager = SessionManager();
 
+  /// Added to the environment of the scripts this tool starts: the
+  /// variables of the agent mode (`sshAgentScriptEnvironment`), empty
+  /// without a key map.
+  final Map<String, String> scriptEnvironment;
+
   TestRunner({
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    this.scriptEnvironment = const {},
   });
 
   @override
@@ -215,11 +221,13 @@ cancel -- cancel a running session
     // Start the appropriate command
     Stream<String> outputStream;
     if (operation == 'run') {
-      outputStream =
-          streamCommand(workingDir, '__test__/run-tests.sh run $testName');
+      outputStream = streamCommand(
+          workingDir, '__test__/run-tests.sh run $testName',
+          environment: scriptEnvironment);
     } else {
-      outputStream =
-          streamCommand(workingDir, '__test__/run-tests.sh reset $testName');
+      outputStream = streamCommand(
+          workingDir, '__test__/run-tests.sh reset $testName',
+          environment: scriptEnvironment);
     }
 
     // Start collecting output in the background
@@ -372,7 +380,8 @@ cancel -- cancel a running session
       return;
     }
 
-    yield* streamCommand(workingDir, '__test__/run-tests.sh run $name');
+    yield* streamCommand(workingDir, '__test__/run-tests.sh run $name',
+        environment: scriptEnvironment);
   }
 
   Stream<String> resetTestCluster({required String name}) async* {
@@ -387,14 +396,19 @@ cancel -- cancel a running session
       return;
     }
 
-    yield* streamCommand(workingDir, '__test__/run-tests.sh reset $name');
+    yield* streamCommand(workingDir, '__test__/run-tests.sh reset $name',
+        environment: scriptEnvironment);
   }
 }
 
 /// Streams command output as it becomes available.
 /// Each chunk is yielded as soon as it is received from the process.
 /// Uses Process.start directly for true streaming behavior.
-Stream<String> streamCommand(Directory workingDir, String cmd) {
+///
+/// [environment] is added to the environment of this process for the
+/// command (the variables of the agent mode, `sshAgentScriptEnvironment`).
+Stream<String> streamCommand(Directory workingDir, String cmd,
+    {Map<String, String>? environment}) {
   final controller = StreamController<String>();
 
   // Start the process asynchronously
@@ -402,6 +416,7 @@ Stream<String> streamCommand(Directory workingDir, String cmd) {
     '/bin/sh',
     ['-c', cmd],
     workingDirectory: workingDir.path,
+    environment: environment,
     runInShell: false,
   ).then((process) {
     // Track when both streams are done

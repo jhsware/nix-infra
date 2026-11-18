@@ -44,6 +44,7 @@ nix-infra
 │   └── store               # Store a secret (from --secret, --secret-file, or stdin)
 ├── ssh-key                 # SSH key management
 │   ├── create              # Create a new SSH key pair
+│   ├── add                 # Register a public key at the cloud provider
 │   └── remove              # Remove SSH key from cloud provider
 ├── registry                # Container registry management
 │   ├── push                # Push container image to registry
@@ -58,13 +59,13 @@ Common options shared across command groups:
 
 - `--working-dir` / `-d` — Project directory (default: `.`)
 - `--env` — Path to `.env` file (values from the environment win; see [Configuration and `.env`](#configuration-and-env))
-- `--ssh-key` — SSH key name (overrides `SSH_KEY`; see [SSH keys](#ssh-keys) for `SSH_KEY_PATH`)
+- `--ssh-key` — SSH key name (overrides `SSH_KEY`; see [SSH keys](#ssh-keys) for `SSH_KEY_MAP_PATH`)
 - `--debug` — Verbose debug logging (global: `nix-infra --debug cluster ...`, or per command group)
 - `--batch` — Non-interactive mode (skips confirmations)
 
 ### Configuration and `.env`
 
-nix-infra reads its configuration (`SECRETS_PASS`, `SSH_KEY`, `SSH_KEY_PATH`, `HCLOUD_TOKEN`, `CA_PASS`, ...) from the project `.env` (or the file given with `--env`) and from the process environment:
+nix-infra reads its configuration (`SECRETS_PASS`, `SSH_KEY`, `SSH_KEY_MAP_PATH`, `SSH_AUTH_SOCK`, `HCLOUD_TOKEN`, `CA_PASS`, ...) from the project `.env` (or the file given with `--env`) and from the process environment:
 
 - A non-empty variable in the process environment wins over the same name in `.env`.
 - An empty variable in the process environment (`FOO=`) does not hide a `.env` value.
@@ -74,15 +75,59 @@ Every command, the MCP servers, `init` and `cert` follow this rule. It is implem
 
 ### SSH keys
 
-nix-infra authenticates with a private key file (dartssh2 has no `ssh-agent` client). For each machine the CLI uses, in this order:
+Each machine gets its SSH key from one of two sources; the key map decides (design: [ssh_agent_keys.md](./design/ssh_agent_keys.md)).
 
-1. `SSH_KEY_PATH` — when it is set and not empty, this private key file is used for **every** machine of the command. It wins over `ssh_key` of `servers.yaml` and over `ssh/<SSH_KEY>`. There is no fallback to another key: a machine that does not accept it refuses the connection.
-2. `ssh_key` of the machine in `servers.yaml` (absolute, or relative to the project).
-3. `<project>/ssh/<SSH_KEY>` (or `--ssh-key`).
+| | Key file | Agent |
+|---|---|---|
+| Chosen when | the key map does not name the machine, or there is no key map | the key map names the machine, or has a `default` |
+| Private key | a file (see the order below) | stays in the `ssh-agent` at `SSH_AUTH_SOCK`; nix-infra asks the agent to sign and never sees it |
+| Public key | `<private key>.pub` when that file exists, else derived from the private key | the public key that the agent lists |
+| Key name `SSH_KEY` | required (`SSH_KEY` or `--ssh-key`); with a key map only for `ssh/<SSH_KEY>` | not required to connect |
 
-`SSH_KEY_PATH` is absolute, relative to the project folder, or starts with `~/` (the home directory; a `.env` value is not expanded by a shell). A file that does not exist stops the command before any connection. The public key (root's authorized key, `[%%sshKey%%]` in `configuration.nix`, and the key registered at Hetzner) is `<private key>.pub` when that file exists, else it is derived from the private key. A key with a passphrase cannot be used.
+**The key map** is a JSON file named by `SSH_KEY_MAP_PATH` (absolute, or relative to the project folder; `~` is not expanded). It holds fingerprints, no key and no secret:
 
-With `SSH_KEY_PATH`, `SSH_KEY` is optional for the commands that only connect (`cmd`, `ssh`, `upload`, `update`, `deploy-apps`, `init-machine`, ...). `provision` still needs the key name (`SSH_KEY` or `--ssh-key`), because it gives the name to the cloud provider. The MCP servers (`nix-infra-*-mcp`) do not read `SSH_KEY_PATH`; they need `SSH_KEY` and `ssh/<SSH_KEY>`. `ProviderFactory.autoDetect` takes the resolved path as an optional `sshKeyPath` parameter and does not read the variable itself.
+```json
+{
+  "version": 1,
+  "default": { "agent_key": "SHA256:Yk0nDTpL0dQ4Jw0b4QnP3o1bq0oT1dS6r0Qe2m9uJ3c" },
+  "nodes": {
+    "web-1": { "agent_key": "SHA256:u2l0c8QfR1vN0mJ5rT8hD4kX9aYb3Wq7eZs6PpLo1Hg" },
+    "db-1":  { "unavailable": "secrets_locked", "ring": "interactive" }
+  }
+}
+```
+
+`version` must be the number `1`; `default` and `nodes` are optional. An entry has either `agent_key` (the SHA-256 fingerprint in the form that `ssh-add -l` prints, compared exactly) or `unavailable` (a reason), the latter with an optional `ring`; unknown fields are ignored at every level. A machine name is compared exactly; there are no patterns. The file is read each time the machines are listed, so a caller may write it again while an MCP server runs. A key map that cannot be read, or does not follow this schema, stops a command before it connects, or the start of an MCP server; one that cannot be read later makes every machine of that listing unavailable.
+
+**The key of one machine** — the first rule that names the machine decides:
+
+1. `nodes[<name>]` of the key map;
+2. `default` of the key map;
+3. `ssh_key` of the machine in `servers.yaml` (absolute, or relative to the project);
+4. `<project>/ssh/<SSH_KEY>` (or `--ssh-key`).
+
+There is no fall-through after rule 1 or 2: an `unavailable` entry, an agent that cannot be reached, an agent that does not hold the key and a key map that cannot be read are errors for that machine. A machine is never tried with another key than the one chosen for it, and nix-infra never offers every key of the agent. `SSH_AUTH_SOCK` alone changes nothing: a developer's own agent is used only when a key map names the machine. nix-infra asks the agent at each login and keeps nothing of it between two logins, so a key that the caller removed from the agent (a locked sysops vault) gives a clear error.
+
+All code that reaches a machine goes through `lib/ssh_identity.dart`: `identitiesOf` (the dartssh2 login), `publicKeyOf` (root's authorized key, `[%%sshKey%%]` in `configuration.nix`) and `sshCommand` (the `ssh` command line of `provision`, `registry` and the deployment of secrets). With an agent key, `ssh` runs with `-o IdentityAgent=<socket> -o IdentitiesOnly=yes -o ForwardAgent=no -i <public key file>`, where the public key of the machine is written to a temporary file (mode 600) that is deleted after the command; the agent is never forwarded.
+
+`provision` (on Hetzner Cloud) and `ssh-key add` register the public key of the `default` entry of the key map at the cloud provider, under the key name (`provision`: `SSH_KEY` or `--ssh-key`; `ssh-key add`: `--name`), so they still need the name. A key map without a `default` entry, or whose `default` key cannot be had from the agent (an `unavailable` entry, a key that the agent does not hold), is an error there. `init` and `ssh-key create` make key files as before; they never put a key into an agent.
+
+A key file with a passphrase cannot be used.
+
+With a key map, `SSH_KEY` is optional for the commands that only connect (`cmd`, `ssh`, `upload`, `update`, `deploy-apps`, `init-machine`, ...); a machine that the key map does not name then needs `ssh_key` in `servers.yaml`, or the key name. `provision` still needs the key name (`SSH_KEY` or `--ssh-key`), because it gives the name to the cloud provider. The MCP servers (`nix-infra-*-mcp`) need `SSH_KEY` and its key files, or a key map (then `SSH_KEY` is not required; see [MCP Servers](#mcp-servers)). The dev MCP server passes `SSH_KEY_MAP_PATH` (as an absolute path) and `SSH_AUTH_SOCK` to the scripts that it starts, when a key map is set. `ProviderFactory.autoDetect` takes the resolved values as the optional parameters `sshKeyMapPath` and `sshAgentSocket` and does not read the variables itself.
+
+**Errors.** No text of an MCP tool, and no line on the stderr of an MCP server, names the path of a key file, of the key map or of the agent socket; a text may name the machine, a variable and a fingerprint. The CLI shows the same texts, and may name a path elsewhere (for example of a key map that it cannot read at the start).
+
+| Case | Text |
+|---|---|
+| An `unavailable` entry | `The SSH key of machine "<name>" is not available (<reason>).` (with a `ring`: `(<reason>, ring <ring>)`) |
+| The key map cannot be read when the machines are listed (after the start) | `The key map of this session cannot be read. The key of machine "<name>" is not available.` |
+| An agent key, but no `SSH_AUTH_SOCK` | `SSH_KEY_MAP_PATH is set but SSH_AUTH_SOCK is not.` |
+| The agent cannot be reached | `The SSH agent of this session cannot be reached. The key of machine "<name>" is not available.` |
+| The agent does not hold the key, or refuses to sign | `The SSH agent does not hold the key of machine "<name>" (<fingerprint>). If sysops filled the agent: the vault may be locked.` |
+| Another error of the agent (no answer in time, an answer that breaks the protocol) | `The SSH agent of this session failed for the key of machine "<name>" (<fingerprint>): <what went wrong>` |
+| The machine does not accept the agent key | `Machine "<name>" does not accept its key (<fingerprint>).` |
+| The key file is missing, cannot be read, has a passphrase, or is not a private key | `The SSH key file of machine "<name>" does not exist.`, `... cannot be read.`, `... has a passphrase; nix-infra cannot use it.`, `... is not a private key that nix-infra can read.` |
 
 ## Provider Abstraction
 
@@ -333,6 +378,8 @@ nix-infra includes three experimental MCP (Model Context Protocol) servers for A
 - **nix-infra-dev-mcp** — Read/write access for project development (edit app modules, run tests, manage test environments)
 
 The infrastructure MCPs enforce read-only access with command whitelists and blacklists. The dev MCP restricts filesystem access to project directories (`app_modules/`, `modules/`, `node_types/`, `__test__/`).
+
+The MCP servers take their SSH keys as the CLI does (see [SSH keys](#ssh-keys)): `SSH_KEY` and its key files, or a key map (`SSH_KEY_MAP_PATH`; then `SSH_KEY` is not required). A key map that cannot be read, or does not follow its schema, stops the start with `ERROR! SSH_KEY_MAP_PATH: <what is wrong>` on stderr; without `SSH_KEY` and without a key map the start stops with `ERROR! env-var SSH_KEY is missing`. `nix-infra-machine-mcp` and `nix-infra-cluster-mcp` take `--ssh-timeout=<seconds>` (default 10). It bounds the TCP connect, the SSH handshake and the login of each connection of a tool, each of them, and each request to the `ssh-agent`; it applies to every tool that connects, `etcd` and `file-upload` included. The CLI sets no timeout on the handshake and the login, and a request to the agent waits at most 30 seconds there. The tool `file-upload` takes local paths inside the project folder only (see [File Upload](./SECURITY.md#file-upload)).
 
 ## Node Lifecycle
 

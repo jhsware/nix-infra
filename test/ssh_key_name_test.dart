@@ -6,11 +6,10 @@ import '../bin/commands/utils.dart';
 
 void main() {
   const expectedMessage = 'No SSH key configured. Set SSH_KEY in .env or the '
-      'environment, pass --ssh-key=<name>, or set '
-      'SSH_KEY_PATH=<private key file>.';
+      'environment, or pass --ssh-key=<name>.';
   const requiredNameMessage = 'No SSH key configured. Set SSH_KEY in .env or '
       'the environment, or pass --ssh-key=<name>. This command gives the key '
-      'name to the cloud provider, so SSH_KEY_PATH alone is not enough.';
+      'name to the cloud provider.';
 
   /// The parsed arguments of a parent command that declares --ssh-key, like
   /// fleet, cluster, etcd and registry.
@@ -119,53 +118,66 @@ void main() {
     });
   });
 
-  group('resolveSshKeyName with SSH_KEY_PATH', () {
-    test('SSH_KEY_PATH and no name gives an empty name', () {
-      expect(
-          resolveSshKeyName(
-              parentArgs([]), envOf({'SSH_KEY_PATH': '/keys/id_ed25519'})),
-          '');
-      expect(
-          resolveSshKeyName(null, envOf({'SSH_KEY_PATH': '/keys/id_ed25519'})),
-          '');
-    });
-
-    test('a name wins over SSH_KEY_PATH', () {
-      expect(
-          resolveSshKeyName(parentArgs([]),
-              envOf({'SSH_KEY': 'from-env', 'SSH_KEY_PATH': '/keys/k'})),
-          'from-env');
-      expect(
-          resolveSshKeyName(parentArgs(['--ssh-key=from-option']),
-              envOf({'SSH_KEY_PATH': '/keys/k'})),
-          'from-option');
-    });
-
-    test('an empty or blank SSH_KEY_PATH counts as not set', () {
-      expect(() => resolveSshKeyName(parentArgs([]), envOf({'SSH_KEY_PATH': ''})),
-          throwsNoKeyConfigured);
-      expect(
-          () => resolveSshKeyName(parentArgs([]), envOf({'SSH_KEY_PATH': '  '})),
-          throwsNoKeyConfigured);
-    });
-
-    test('requireName and SSH_KEY_PATH without a name still throws', () {
-      expect(
-          () => resolveSshKeyName(
-              parentArgs([]), envOf({'SSH_KEY_PATH': '/keys/id_ed25519'}),
-              requireName: true),
-          throwsA(isA<Exception>().having((e) => e.toString(), 'toString()',
-              'Exception: $requiredNameMessage')));
-    });
-
-    test('the message without any key names all three settings', () {
+  group('resolveSshKeyName: the missing-name message', () {
+    test('names SSH_KEY and --ssh-key, and nothing else', () {
       expect(
           () => resolveSshKeyName(parentArgs([]), envOf({})),
           throwsA(isA<Exception>().having(
               (e) => e.toString(),
               'toString()',
               allOf(contains('SSH_KEY in .env'), contains('--ssh-key=<name>'),
-                  contains('SSH_KEY_PATH=<private key file>')))));
+                  isNot(contains('private key file')),
+                  isNot(contains('alone is not enough'))))));
+    });
+  });
+
+  group('resolveSshKeyName with SSH_KEY_MAP_PATH', () {
+    test('a key map and no name gives an empty name', () {
+      expect(
+          resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': '/keys/map.json'})),
+          '');
+      expect(
+          resolveSshKeyName(null, envOf({'SSH_KEY_MAP_PATH': 'map.json'})),
+          '');
+    });
+
+    test('a name wins over the key map', () {
+      expect(
+          resolveSshKeyName(parentArgs([]),
+              envOf({'SSH_KEY': 'from-env', 'SSH_KEY_MAP_PATH': 'map.json'})),
+          'from-env');
+      expect(
+          resolveSshKeyName(parentArgs(['--ssh-key=from-option']),
+              envOf({'SSH_KEY_MAP_PATH': 'map.json'})),
+          'from-option');
+    });
+
+    test('an empty or blank SSH_KEY_MAP_PATH counts as not set', () {
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': ''})),
+          throwsNoKeyConfigured);
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': '  '})),
+          throwsNoKeyConfigured);
+    });
+
+    test('SSH_AUTH_SOCK alone does not replace the name', () {
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_AUTH_SOCK': '/tmp/agent.sock'})),
+          throwsNoKeyConfigured);
+    });
+
+    test('requireName and a key map without a name still throws', () {
+      expect(
+          () => resolveSshKeyName(
+              parentArgs([]), envOf({'SSH_KEY_MAP_PATH': '/keys/map.json'}),
+              requireName: true),
+          throwsA(isA<Exception>().having((e) => e.toString(), 'toString()',
+              'Exception: $requiredNameMessage')));
     });
   });
 }

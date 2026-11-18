@@ -19,7 +19,7 @@ This is appropriate for small-to-medium self-hosted infrastructure. If you need 
 
 All communication between the operator's workstation and managed nodes uses SSH. There is no unencrypted management traffic.
 
-**SSH connections** are established using the [dartssh2](https://pub.dev/packages/dartssh2) library, which supports RSA key authentication. All remote commands, file transfers (SFTP), and port forwarding use SSH tunnels.
+**SSH connections** are established using the [dartssh2](https://pub.dev/packages/dartssh2) library (4.1), with a key file or with a key of an `ssh-agent` (see [Keys from an ssh-agent](#keys-from-an-ssh-agent)). All remote commands, file transfers (SFTP), and port forwarding use SSH tunnels. dartssh2 4.1 no longer offers SHA-1 key exchange, the `ssh-rsa` host key signature and CBC ciphers; an old SSH server that offers only these refuses the connection, and the error names the failed handshake (for example `No matching key exchange algorithm`).
 
 **WireGuard** encrypts the overlay network between nodes. The Flanneld overlay network uses WireGuard tunnels, so inter-node traffic (including etcd replication and service mesh communication) is encrypted in transit even on shared networks.
 
@@ -125,7 +125,28 @@ Key details:
 - For self-hosted servers, keys must be manually deployed
 - `StrictHostKeyChecking=no` is used for SSH connections (nodes are frequently reprovisioned with new host keys)
 
-A private key can also stay outside the project folder, for example the key file that sysops decrypts from its vault for one terminal. `SSH_KEY_PATH=<private key file>` makes a CLI command use that one file for every machine; the public key comes from `<file>.pub` or is derived from the private key, so no key file is needed in `ssh/`. There is no fallback to another key: a machine that does not accept this key refuses the connection, so a terminal with one key reaches only the machines that accept that key. A missing file (for example after the vault was locked) stops the command before any connection. The errors of the path check and of the public key derivation name the path of the file, never its content. The MCP servers do not read `SSH_KEY_PATH`.
+### Keys from an ssh-agent
+
+With a key map (`SSH_KEY_MAP_PATH`, see [SSH keys](./ARCHITECTURE.md#ssh-keys)) a machine that the map names is reached with a key that stays in an `ssh-agent` (`SSH_AUTH_SOCK`); nix-infra asks the agent to sign. sysops fills such agents from its vault and sets the key map for each terminal or agent session.
+
+**What nix-infra guarantees in agent mode**
+
+- It never reads, holds or writes a private key. It holds a socket path and public keys.
+- It uses the agent only for a machine that the key map names. It never offers every key of the agent to a machine: `ssh` runs with `IdentitiesOnly=yes` and the one public key of the machine, and the agent is never forwarded.
+- It never falls back to another key after a failure.
+- An MCP tool result, and the stderr of an MCP server, never show where the socket, the key map or a key file is.
+
+**What it does not guarantee**
+
+| Limit | Why |
+|---|---|
+| A process of the same UNIX user can use the agent while it runs. | The socket is a file of that user. The key cannot be copied out, but it can be asked to sign. |
+| Whoever may call `remote-command` is root on the machine. | That is what the tool is for. Which machines a caller reaches is decided by the keys in its agent, so by the caller. |
+| The machine at the other end is not checked. | No host key check (see [StrictHostKeyChecking Disabled](#stricthostkeychecking-disabled)). An attacker in the network path cannot learn the key and cannot use the signature for another connection, but nix-infra would talk to the wrong machine and could send it files and secrets. |
+| A key file of the classic way is as readable as before. | Unchanged. |
+| A file tool of an agent session of sysops can read the key map and learn the path of the socket. | sysops sets no deny rules for the file tools. The key map holds fingerprints only, and a file tool cannot connect to a socket. |
+
+Tested with the `ssh-agent` of OpenSSH and RSA 2048 and Ed25519 keys; RSA signs with `rsa-sha2-512`. A request to the agent waits at most 30 seconds in the CLI, and at most `--ssh-timeout` in the MCP servers. Certificates, hardware tokens and keys that ask for a confirmation (`ssh-add -c`) are not tested.
 
 ## MCP Server Safety
 
@@ -143,11 +164,21 @@ System info (`uname`, `uptime`, `who`), process monitoring (`ps`, `top`, `htop`)
 
 Commands must appear on the whitelist and not on the blacklist. Any unrecognized command is rejected.
 
+### File Upload
+
+The MCP tool `file-upload` takes local paths inside the project folder (`--project-dir`) only. Without this limit an agent session with `file-upload` and `remote-command` could copy any file of the server user (a key file, `~/.ssh`, `.env`) to a machine and read it there.
+
+- A path is relative to the project folder, not to the current folder of the MCP server. Absolute paths, `..`, hidden files and folders (`.env`, `.git`) and the folders `ssh/` (the key files) and `secrets/` at the top of the project are refused (`modules/ssh/` is allowed).
+- Paths are checked after the symbolic links are resolved, by path segments: a symbolic link that leads out of the project folder, to a hidden file, or into `ssh/` or `secrets/` is refused.
+- In an uploaded folder every entry is checked: a hidden entry is skipped, any other refused entry refuses the whole call.
+- All paths are checked before a machine is looked up or contacted, and an error names only the path that the caller gave, or a path below it.
+
 ### Known MCP Limitations
 
 - The `systemctl` whitelist entry needs further sub-command restrictions (e.g., `systemctl stop` should likely be blocked)
 - Command parsing handles basic pipes and chains but may not catch all shell injection patterns
 - The MCP servers are experimental and should not be considered production-hardened
+- `file-upload` checks its paths before it sends the files: a process that can write in the project folder could replace a checked file with a symbolic link in between. No MCP tool of nix-infra makes symbolic links.
 
 ## Known Limitations
 
@@ -214,7 +245,7 @@ The project directory is the trust anchor. It contains SSH keys, CA keys, and en
 
 ### SSH Key Hygiene
 - Generate separate SSH key pairs for separate environments (production, staging)
-- Store SSH keys only in the project's `ssh/` directory
+- Store SSH keys only in the project's `ssh/` directory, or keep them out of the project in an `ssh-agent` with a key map (see [Keys from an ssh-agent](#keys-from-an-ssh-agent))
 - Never reuse SSH keys across unrelated projects
 
 ### Monitoring

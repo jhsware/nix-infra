@@ -73,7 +73,8 @@ class FileUpload extends McpTool {
       try {
         final connection =
             await waitAndGetSshConnection(node, totalBudget: sshConnectTimeout);
-        final sshClient = await getSshClient(workingDir, node, connection);
+        final sshClient = await getSshClient(workingDir, node, connection,
+            timeout: sshConnectTimeout);
         SftpClient? sftp;
 
         try {

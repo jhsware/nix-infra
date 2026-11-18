@@ -1,7 +1,7 @@
 # SSH keys from an ssh-agent — design
 
 **Date:** 2026-11-17
-**Status:** Proposed. Not accepted, not implemented.
+**Status:** Proposed. Updated on 2026-11-18 with the decisions of the operator (§13). Not implemented.
 **Code reviewed:** nix-infra `188897b` (`main`, 0.18.0-beta), dartssh2 2.14.0 (locked). dartssh2 4.1.0 from its changelog and API pages only.
 **Companion design:** `sysops_server/docs/design/ssh_keys_through_agents.md` (how sysops fills the agents).
 **Replaces:** the `SSH_KEY_PATH` feature (`docs/analysis/2026-11-17-ssh-key-resolution-external-identities.md`) and the proposal of `docs/analysis/2026-11-17-mcp-ssh-key-config.md`.
@@ -15,7 +15,7 @@ nix-infra reads a private key from a file today. This design adds a second way: 
 - **dartssh2 goes from 2.14 to 4.1.** Since 3.0 an identity can sign through another process.
 - **A key map says which key of the agent each machine uses.** It is a JSON file named by `SSH_KEY_MAP_PATH`. It holds fingerprints, no secret.
 - **The classic way does not change.** `SSH_KEY`, `SSH_EMAIL`, `.env`, the files `ssh/<SSH_KEY>` and `ssh/<SSH_KEY>.pub`, and `ssh_key` in `servers.yaml` work as before.
-- **`SSH_KEY_PATH` is removed.** It was merged on 2026-11-17 and is in no released binary.
+- **`SSH_KEY_PATH` is removed, with no transition.** It was merged on 2026-11-17 and is in no released binary.
 
 ## 2. Goals and non-goals
 
@@ -165,11 +165,13 @@ No tool result and no line on stderr of an MCP server holds the path of a key fi
 | `ClusterNode.sshKeyPathFromEnv` and its text | `lib/types.dart:35-38, 53`, `lib/ssh.dart:22-37` |
 | The `SSH_KEY_PATH` branches of the key name | `bin/commands/utils.dart:79-84, 104-114` |
 | Tests | `test/ssh_key_path_cli_test.dart`; the `SSH_KEY_PATH` groups of `test/ssh_key_path_test.dart`, `test/ssh_key_name_test.dart`, `test/providers_test.dart` |
-| Documentation | `README.md:68`, `CHANGELOG.md` (Unreleased), `docs/ARCHITECTURE.md:61-85`, `docs/CLUSTER.md:81, 448`, `docs/FLEET.md:76, 280`, `docs/PROVIDERS.md:98`, `docs/SECURITY.md:128` |
+| Documentation | every page that names `SSH_KEY_PATH`; the list is in §11.1 |
 
 **Stays:** `ssh_key` of `servers.yaml` with `ClusterNode.sshKeyPath` and `getEffectiveSshKeyPath`; the public key functions of `lib/ssh_key_path.dart`; the clear error for a missing key name.
 
-**For one release:** a set `SSH_KEY_PATH` is an error, not ignored: `SSH_KEY_PATH is no longer supported. Use a key file (SSH_KEY) or an ssh-agent with SSH_KEY_MAP_PATH.` A sysops that still sets the variable would otherwise make nix-infra use another key without a word.
+**No transition** (decision of the operator, 2026-11-18). After the removal nix-infra does not know the name. A set `SSH_KEY_PATH` has no effect and gives no error and no warning, as in every released nix-infra. sysops removes its guards for the name at the same time (companion design, §5).
+
+For a caller that still sets the variable this means: nix-infra uses `ssh_key` of `servers.yaml` or `ssh/<SSH_KEY>` when there is one, else it stops with the error for a missing key name. It does not say that `SSH_KEY_PATH` was ignored.
 
 ## 9. Security boundaries
 
@@ -188,6 +190,7 @@ No tool result and no line on stderr of an MCP server holds the path of a key fi
 | Whoever may call `remote-command` is root on the machine. | That is what the tool is for. Which machines a caller reaches is decided by the keys in its agent, so by the caller. |
 | The machine at the other end is not checked. | No host key check (§2). An attacker in the network path cannot learn the key and cannot use the signature for another connection, but nix-infra would talk to the wrong machine and could send it files and secrets. |
 | A key file of the classic way is as readable as before. | Unchanged. |
+| A file tool of an agent session of sysops can read the key map and learn the path of the socket. | sysops sets no deny rules for the file tools (decision of the operator, §13). The key map holds fingerprints only, and a file tool cannot connect to a socket. |
 
 **One change that belongs here.** The MCP tool `file-upload` uploads any local path the process can read (`bin/mcp_server/file_upload.dart:52-65`). It gets the limit that `configuration-files` has: local paths inside the project folder only. Without it an agent session can copy any file of the server user to a machine, whatever the key design is.
 
@@ -209,9 +212,26 @@ No test connects to an SSH server today.
 3. The agent client, the key map and the three functions of §6.2.
 4. The removal of `SSH_KEY_PATH`.
 5. The limit on `file-upload`.
-6. The documentation: `docs/SECURITY.md`, `docs/FLEET.md`, `docs/CLUSTER.md`, `docs/PROVIDERS.md`, `docs/ARCHITECTURE.md`, `README.md`, `CHANGELOG.md`.
+6. The documentation that is left (§11.1). Most of it goes with steps 2 to 5.
 
 Steps 2 and 5 are useful without the rest.
+
+### 11.1 The documentation
+
+Each change of the documentation goes with the code that it describes, so no page names a setting that the code does not have.
+
+| File | Change | With step |
+|---|---|---|
+| `docs/ARCHITECTURE.md:61-85` (options, configuration, "SSH keys") | Write the section "SSH keys" again: the two key sources (§3), the key map (§4.1), the order of §4.2. Remove `SSH_KEY_PATH` from the option text (61), from the list of settings (67) and from the order (77-85). The sentence "dartssh2 has no `ssh-agent` client" goes. The MCP servers: `SSH_KEY` is not required with a key map. | 3, 4 |
+| `docs/FLEET.md:76, 280` and `docs/CLUSTER.md:81, 448` | Remove the two `SSH_KEY_PATH` paragraphs of each file. In "Global Options", name `SSH_KEY_MAP_PATH` in one sentence with a link to "SSH keys". | 3, 4 |
+| `docs/PROVIDERS.md:98` | The row `ssh_key`: remove the `SSH_KEY_PATH` sentence. Add that an entry of the key map wins over `ssh_key`. | 3, 4 |
+| `docs/SECURITY.md:128` | Replace the `SSH_KEY_PATH` paragraph with the agent mode: what nix-infra guarantees and what it does not (§9). Add the limit of `file-upload`. "StrictHostKeyChecking Disabled" stays as it is. | 3, 4, 5 |
+| `README.md:68` | Remove the `SSH_KEY_PATH` line. One line on keys from an `ssh-agent`, with a link. | 3, 4 |
+| `CHANGELOG.md` (Unreleased) | Remove the `SSH_KEY_PATH` entry; it was never released. Add: dartssh2 4.1, keys from an `ssh-agent` with `SSH_KEY_MAP_PATH`, the limit of `file-upload`. | 2, 3, 4, 5 |
+| `docs/analysis/2026-11-17-ssh-key-resolution-external-identities.md` | The status line: §5.2 to §5.7 (`SSH_KEY_PATH`) were removed again by this design; §5.1 (the clear error for a missing key name) stays. | 4 |
+| This design | The status line, and what was built in another way. | last |
+
+At the end, a search for `SSH_KEY_PATH` finds the name only in the two analysis notes, in this design and in older entries of `CHANGELOG.md`.
 
 ## 12. Not verified, and open
 
@@ -220,3 +240,15 @@ Steps 2 and 5 are useful without the rest.
 - `ssh -i <public key file>` with `IdentitiesOnly=yes` picks the matching key of the agent according to `ssh_config(5)`; not tried here.
 - What `mcp_dart` returns for an error that a tool does not catch.
 - Whether a rescue or installer system that `provision` meets needs an algorithm that dartssh2 4 no longer offers. `provision` reaches such a system with `ssh`, not with dartssh2, so probably not.
+
+## 13. Decisions of the operator
+
+Made on 2026-11-18 for the companion design (its §11). What each one means for nix-infra:
+
+| Decision | For nix-infra |
+|---|---|
+| `SSH_KEY_PATH` is removed, with no transition. | §8: a set value gives no error. |
+| A lock of the sysops vault removes the keys from every agent; an unlock gives them back. | An agent that does not hold the key is a normal case, not a fault: the text of §7. nix-infra asks the agent at each login and keeps nothing from the agent between two logins. The key map is read again each time (§4.1). A connection that is already open is not ended. |
+| sysops uses the `ssh-agent` of OpenSSH, one per terminal, probe run or agent session. | The tests with a real `ssh-agent` (§10) cover the agent that sysops uses. |
+| "None" in sysops means no key of the vault. | sysops then sets no key map, so nix-infra uses the key files (§3). |
+| sysops sets no deny rules for the file tools of an agent session. | The rule of §7 (no path in a text) stays. The limit is in §9. |

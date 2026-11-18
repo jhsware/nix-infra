@@ -30,7 +30,8 @@ void main(List<String> arguments) async {
     }
   }
 
-  // Timeout for establishing SSH connections from MCP tools. Short by
+  // Timeout for establishing SSH connections from MCP tools: it bounds the
+  // TCP connect, the SSH handshake and the login, each of them. Short by
   // default (10s) so unreachable servers fail fast. Increase with
   // --ssh-timeout=<seconds> when on a poor internet connection.
   final sshConnectTimeout = Duration(seconds: sshTimeoutSeconds);
@@ -112,6 +113,7 @@ void main(List<String> arguments) async {
     workingDir: workingDir,
     sshKeyName: sshKeyName,
     provider: provider,
+    sshConnectTimeout: sshConnectTimeout,
   );
 
   server.tool(

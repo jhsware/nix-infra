@@ -14,7 +14,8 @@ abstract class McpTool {
   final String sshKeyName;
   final InfrastructureProvider provider;
 
-  /// Timeout for establishing SSH connections from MCP tools. Kept short
+  /// Timeout for establishing SSH connections from MCP tools: it bounds the
+  /// TCP connect, the SSH handshake and the login, each of them. Kept short
   /// by default so unreachable servers fail fast. Override with the
   /// `--ssh-timeout=<seconds>` CLI argument when on a slow connection.
   final Duration sshConnectTimeout;

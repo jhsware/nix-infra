@@ -133,10 +133,10 @@ packages:
     dependency: "direct main"
     description:
       name: dartssh2
-      sha256: eba2540c6fb0c8a4553ab13cf23662402337a08bcfeb61d644eea8efdf389162
+      sha256: "39359aceafcf5940b868249e3c9c6d86e4e0f989eec7417d033c943157c84c51"
       url: "https://pub.dev"
     source: hosted
-    version: "2.14.0"
+    version: "4.1.0"
   dotenv:
     dependency: "direct main"
     description:
@@ -209,14 +209,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
-  js:
-    dependency: transitive
-    description:
-      name: js
-      sha256: "53385261521cc4a0c4658fd0ad07a7d14591cf8fc33abbceae306ddb974888dc"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.2"
   lints:
     dependency: "direct dev"
     description:
@@ -301,10 +293,10 @@ packages:
     dependency: transitive
     description:
       name: pointycastle
-      sha256: "4be0097fcf3fd3e8449e53730c631200ebc7b88016acecab2b0da2f0149222fe"
+      sha256: "92aa3841d083cc4b0f4709b5c74fd6409a3e6ba833ffc7dc6a8fee096366acf5"
       url: "https://pub.dev"
     source: hosted
-    version: "3.9.1"
+    version: "4.0.0"
   pool:
     dependency: transitive
     description:

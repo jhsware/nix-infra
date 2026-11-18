@@ -9,8 +9,11 @@ import './shared.dart';
 import './utils.dart';
 
 
+/// Runs `etcdctl [cmd]` on [node]. [connectTimeout] is passed on to
+/// [runCommandOverSsh] (the MCP tool `etcd` passes `--ssh-timeout`).
 Future<Iterable<String>> runEtcdCtlCommand(
-    Directory workingDir, String cmd, ClusterNode node) async {
+    Directory workingDir, String cmd, ClusterNode node,
+    {Duration? connectTimeout}) async {
   final cmdScript = [
     'export ETCDCTL_DIAL_TIMEOUT=3s',
     'export ETCDCTL_CACERT=/root/certs/ca-chain.cert.pem',
@@ -19,7 +22,8 @@ Future<Iterable<String>> runEtcdCtlCommand(
     'export ETCDCTL_API=3',
     'etcdctl $cmd',
   ].join('\n');
-  final inp = await runCommandOverSsh(workingDir, node, cmdScript);
+  final inp = await runCommandOverSsh(workingDir, node, cmdScript,
+      connectTimeout: connectTimeout);
   final tmp = inp.split('\n');
   final outp = tmp.map((str) => '${node.name}: $str');
   return outp;

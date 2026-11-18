@@ -25,6 +25,7 @@ class ControlPlaneEtcd extends McpTool {
     required super.workingDir,
     required super.sshKeyName,
     required super.provider,
+    super.sshConnectTimeout,
   });
 
   @override
@@ -70,7 +71,8 @@ class ControlPlaneEtcd extends McpTool {
       );
     }
 
-    final outp = await runEtcdCtlCommand(workingDir, query, nodes.first);
+    final outp = await runEtcdCtlCommand(workingDir, query, nodes.first,
+        connectTimeout: sshConnectTimeout);
     final result = outp.toList().join('\n');
 
     return CallToolResult.fromContent(

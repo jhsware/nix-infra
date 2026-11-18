@@ -57,8 +57,7 @@ Future<void> deployControlNode(
       }
     }
 
-    sftp.close();
-    sshClient.close();
+    await closeSshQuietly(sshClient, sftp: sftp);
   });
 
   await Future.wait(deployments);

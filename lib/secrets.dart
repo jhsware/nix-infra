@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/secret_codec.dart';
+import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:process_run/shell.dart';
@@ -633,7 +634,8 @@ Future<void> syncSecrets(
       await sftp.remove('/root/secrets/${file.filename}');
     }
   }
-  sftp.close();
+  // The SSH client belongs to the caller: close only the SFTP session.
+  await closeSftpQuietly(sftp);
 
   // TODO: Garbage collect unused secrets on target node
   // 1. check what secrets exist on remote

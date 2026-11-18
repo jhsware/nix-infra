@@ -279,8 +279,7 @@ class UpgradeNixOsCommand extends Command {
                   'x86_64-linux', // QUESTION: Should we read variables from target node?
             });
 
-        sftp.close();
-        sshClient.close();
+        await closeSshQuietly(sshClient, sftp: sftp);
 
         outp = await runCommandOverSsh(workingDir, node,
             'nix-channel --add https://nixos.org/channels/nixos-$nixVersion nixos');
@@ -413,9 +412,10 @@ class UploadCommand extends Command {
       final SSHSocket connection = await waitAndGetSshConnection(node);
       final SSHClient sshClient =
           await getSshClient(workingDir, node, connection);
-      final sftp = await sshClient.sftp();
+      SftpClient? sftp;
 
       try {
+        sftp = await sshClient.sftp();
         await sftpMkDirRecursive(sftp, uploadPath);
 
         final queue = [];
@@ -453,9 +453,8 @@ class UploadCommand extends Command {
         }
 
         echoFromNode(node.name, 'Upload complete');
-        sftp.close();
       } finally {
-        sshClient.close();
+        await closeSshQuietly(sshClient, sftp: sftp);
       }
     });
 

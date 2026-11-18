@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:dartssh2/dartssh2.dart' show SftpClient;
 import 'package:mcp_dart/mcp_dart.dart';
 import 'mcp_tool.dart';
 import 'package:nix_infra/helpers.dart';
@@ -72,10 +73,12 @@ class FileUpload extends McpTool {
       try {
         final connection =
             await waitAndGetSshConnection(node, totalBudget: sshConnectTimeout);
-        final sshClient = await getSshClient(workingDir, node, connection);
-        final sftp = await sshClient.sftp();
+        final sshClient = await getSshClient(workingDir, node, connection,
+            timeout: sshConnectTimeout);
+        SftpClient? sftp;
 
         try {
+          sftp = await sshClient.sftp();
           await sftpMkDirRecursive(sftp, remotePath);
 
           final queue = <Map<String, dynamic>>[];
@@ -113,10 +116,8 @@ class FileUpload extends McpTool {
             await sftpSend(sftp, entity.path, '$remotePath/$relPath');
             uploadedFiles.add(relPath);
           }
-
-          sftp.close();
         } finally {
-          sshClient.close();
+          await closeSshQuietly(sshClient, sftp: sftp);
         }
 
         results.add(

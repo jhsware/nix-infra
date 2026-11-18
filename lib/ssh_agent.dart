@@ -4,10 +4,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:dartssh2/dartssh2.dart'
+    show SSHIdentity, SSHRawHostKey, SSHRawSignature;
 
 // A client for the SSH agent protocol (RFC 9987) over the Unix-domain socket
 // of an agent (docs/design/ssh_agent_keys.md §6.1). It sends two requests:
-// list the identities, and sign.
+// list the identities, and sign. [agentIdentityFor] makes a dartssh2
+// identity that signs through the agent with the key of one fingerprint.
 //
 // dartssh2 4.1 has no such client. It has the other side (an agent that
 // answers over an SSH channel, for agent forwarding) and exports the names
@@ -145,6 +148,36 @@ final class SshAgentTimeoutException extends SshAgentException {
       'The SSH agent did not answer within ${_describe(timeout)}.';
 }
 
+/// The agent does not hold a key with the fingerprint [fingerprint].
+final class SshAgentKeyNotFoundException extends SshAgentException {
+  const SshAgentKeyNotFoundException(this.fingerprint);
+
+  final String fingerprint;
+
+  @override
+  String get message => 'The SSH agent does not hold the key $fingerprint.';
+}
+
+/// The agent signed with another algorithm than the identity names: an
+/// agent that ignores the flag of an RSA sign request, for example.
+final class SshAgentWrongAlgorithmException extends SshAgentException {
+  const SshAgentWrongAlgorithmException(this.fingerprint,
+      {required this.expected, required this.actual});
+
+  /// The key that signed.
+  final String fingerprint;
+
+  /// The algorithm of the identity.
+  final String expected;
+
+  /// The algorithm of the signature the agent returned.
+  final String actual;
+
+  @override
+  String get message => 'The SSH agent signed with $actual, not $expected, '
+      'for the key $fingerprint.';
+}
+
 String _describe(Duration duration) => duration.inMilliseconds % 1000 == 0
     ? '${duration.inSeconds} s'
     : '${duration.inMilliseconds} ms';
@@ -219,6 +252,18 @@ final class SshAgentClient {
     return identities;
   }
 
+  /// The key of the agent whose fingerprint ([SshAgentIdentity.fingerprint])
+  /// is [fingerprint], compared exactly. One list request.
+  ///
+  /// Throws an [SshAgentKeyNotFoundException] when the agent does not hold
+  /// it.
+  Future<SshAgentIdentity> findIdentity(String fingerprint) async {
+    for (final identity in await listIdentities()) {
+      if (identity.fingerprint == fingerprint) return identity;
+    }
+    throw SshAgentKeyNotFoundException(fingerprint);
+  }
+
   /// Asks the agent to sign [data] with the key [keyBlob]
   /// (`SSH_AGENTC_SIGN_REQUEST`).
   ///
@@ -282,6 +327,62 @@ final class SshAgentClient {
       socket.destroy();
     }
   }
+}
+
+/// The algorithm name of an RSA identity of the agent; its sign requests set
+/// [SshAgentSignFlags.rsaSha512]. (A key file of dartssh2 uses
+/// `rsa-sha2-256`.)
+const sshAgentRsaAlgorithm = 'rsa-sha2-512';
+
+/// A dartssh2 identity for the key of the agent at [socketPath] whose
+/// SHA-256 fingerprint is [fingerprint], in the form that `ssh-add -l`
+/// prints, compared exactly.
+///
+/// Lists the keys of the agent once ([SshAgentClient.findIdentity]); an
+/// agent that does not hold the key gives an [SshAgentKeyNotFoundException]
+/// and no identity, so no other key is tried. Call it for each login:
+/// nothing of the agent is kept between two logins.
+///
+/// The identity (design §6.1, §12):
+/// - The public key is the blob the agent listed ([SSHRawHostKey]).
+/// - Each signature is a new sign request on a new connection, so a key that
+///   the agent lost after the listing gives an [SshAgentRefusedException].
+/// - RSA (`ssh-rsa` blob): the identity names [sshAgentRsaAlgorithm] and the
+///   request sets [SshAgentSignFlags.rsaSha512]. dartssh2 sends
+///   [SSHIdentity.type] as the algorithm of the `publickey` request, as it
+///   is, and does not compare it with the signature; the server does.
+/// - Ed25519 and ECDSA: the algorithm is the key type, no flag.
+/// - The agent returns an SSH signature blob (algorithm name and signature
+///   bytes). It is passed on unchanged as an [SSHRawSignature], after its
+///   algorithm is checked ([SshAgentWrongAlgorithmException]).
+/// - [SSHIdentity.shouldProbe] is set: the server is asked first whether it
+///   accepts the key, so the agent signs only for a key the server takes.
+///
+/// A signer that throws ends the login: dartssh2 closes the connection with
+/// an `SSHInternalError` that wraps the exception, and tries no other
+/// identity.
+Future<SSHIdentity> agentIdentityFor(String socketPath, String fingerprint,
+    {Duration timeout = sshAgentDefaultTimeout}) async {
+  final client = SshAgentClient(socketPath, timeout: timeout);
+  final key = await client.findIdentity(fingerprint);
+  final isRsa = key.keyType == 'ssh-rsa';
+  final algorithm = isRsa ? sshAgentRsaAlgorithm : key.keyType;
+  final flags = isRsa ? SshAgentSignFlags.rsaSha512 : SshAgentSignFlags.none;
+  return SSHIdentity.custom(
+    type: algorithm,
+    publicKey: SSHRawHostKey(key.keyBlob),
+    comment: key.comment,
+    shouldProbe: true,
+    signer: (data) async {
+      final signature = await client.sign(key.keyBlob, data, flags: flags);
+      final signedWith = latin1.decode(_Reader(signature).readString());
+      if (signedWith != algorithm) {
+        throw SshAgentWrongAlgorithmException(key.fingerprint,
+            expected: algorithm, actual: signedWith);
+      }
+      return SSHRawSignature(signature);
+    },
+  );
 }
 
 /// The first full answer on [socket], without its length field. A length

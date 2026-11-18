@@ -8,12 +8,13 @@ import 'package:path/path.dart' as path;
 // §10). Made for the trial of §11 step 1 (branch trial/ssh-agent-dartssh2-4,
 // not merged); the agent mode tasks reuse it. The upgrade of dartssh2 (§11
 // step 2) added [SshdKeyFileTestEnv]: a local `sshd` for the key files of a
-// project, with no agent.
+// project, with no agent. Agent mode 1 added [SshAgentTestEnv]: an agent
+// with test keys, with no `sshd`; [SshTestEnv] is one of them and an `sshd`.
 //
 // Everything lives in one temporary folder: the agent socket, the host key,
 // the public keys, `authorized_keys`, the sshd config and its pid file. The
-// private keys of an [SshTestEnv] are given to the agent and then deleted,
-// so only the agent holds them. `sshd` runs as the current user on
+// private keys of an [SshAgentTestEnv] are given to the agent and then
+// deleted, so only the agent holds them. `sshd` runs as the current user on
 // 127.0.0.1 and a free port, and logs to stderr (kept in
 // [SshTestEnv.sshdLog]).
 
@@ -54,8 +55,9 @@ List<String> missingSshTools([List<String> tools = SshTestEnv.tools]) => [
     ];
 
 /// The `skip` value of a test that needs [tools] (by default an
-/// [SshTestEnv]; [SshdKeyFileTestEnv.tools] for an [SshdKeyFileTestEnv]):
-/// false, or a text that names the missing tools.
+/// [SshTestEnv]; [SshAgentTestEnv.tools] for an [SshAgentTestEnv],
+/// [SshdKeyFileTestEnv.tools] for an [SshdKeyFileTestEnv]): false, or a text
+/// that names the missing tools.
 Object sshTestEnvSkip([List<String> tools = SshTestEnv.tools]) {
   final missing = missingSshTools(tools);
   return missing.isEmpty ? false : '${missing.join(', ')} not on PATH';
@@ -63,16 +65,7 @@ Object sshTestEnvSkip([List<String> tools = SshTestEnv.tools]) {
 
 /// A running `ssh-agent` with test keys and a local `sshd` that accepts them.
 class SshTestEnv {
-  SshTestEnv._(
-    this.dir,
-    this.agentSocket,
-    this.port,
-    this.user,
-    this.publicKeyFiles,
-    this._agent,
-    this._sshd,
-    this._sshdLog,
-  );
+  SshTestEnv._(this.dir, this.port, this.user, this._agent, this._sshd);
 
   /// The tools that [start] needs.
   static const tools = ['ssh-agent', 'ssh-add', 'ssh-keygen', 'sshd'];
@@ -80,28 +73,27 @@ class SshTestEnv {
   /// The temporary folder of this environment.
   final Directory dir;
 
-  /// The socket of the agent (`SSH_AUTH_SOCK`).
-  final String agentSocket;
-
   /// The port of `sshd` on 127.0.0.1.
   final int port;
 
   /// The current user, the only user `sshd` can log in.
   final String user;
 
-  /// The public key file of each test key, by key name.
-  final Map<String, String> publicKeyFiles;
+  final SshAgentTestEnv _agent;
+  final _Sshd _sshd;
 
-  final Process _agent;
-  final Process _sshd;
-  final StringBuffer _sshdLog;
+  /// The socket of the agent (`SSH_AUTH_SOCK`).
+  String get agentSocket => _agent.socket;
+
+  /// The public key file of each test key, by key name.
+  Map<String, String> get publicKeyFiles => _agent.publicKeyFiles;
 
   /// Everything `sshd` wrote so far (`-e`, `LogLevel DEBUG2`).
-  String get sshdLog => _sshdLog.toString();
+  String get sshdLog => _sshd.log.toString();
 
   /// The length of [sshdLog] now: a mark for [sshdLogLines] and
   /// [waitForSshdLog].
-  int get sshdLogMark => _sshdLog.length;
+  int get sshdLogMark => _sshd.log.length;
 
   /// The lines of [sshdLog] after the mark [from].
   List<String> sshdLogLines({int from = 0}) =>
@@ -129,12 +121,13 @@ class SshTestEnv {
   }
 
   /// The public key line of the test key [name]: `<type> <base64> <comment>`.
-  String publicKeyLine(String name) =>
-      File(publicKeyFiles[name]!).readAsStringSync().trim();
+  String publicKeyLine(String name) => _agent.publicKeyLine(name);
 
   /// The public key blob of the test key [name].
-  Uint8List publicKeyBlob(String name) =>
-      base64.decode(publicKeyLine(name).split(' ')[1]);
+  Uint8List publicKeyBlob(String name) => _agent.publicKeyBlob(name);
+
+  /// Removes the test key [name] from the agent (`ssh-add -d`).
+  Future<void> removeAgentKey(String name) => _agent.removeKey(name);
 
   /// Starts an agent with the test keys [keys] (names of [sshTestKeyTypes]),
   /// deletes their private key files, and starts `sshd` with all of them as
@@ -149,65 +142,19 @@ class SshTestEnv {
     if (missing.isNotEmpty) {
       throw StateError('${missing.join(', ')} not on PATH');
     }
-    final sshAgent = findSshTool('ssh-agent')!;
-    final sshAdd = findSshTool('ssh-add')!;
-    final sshKeygen = findSshTool('ssh-keygen')!;
-    final sshdTool = findSshTool('sshd')!;
-
     final dir = _tempDir();
-    Process? agentProcess;
-    _Sshd? sshd;
+    SshAgentTestEnv? agent;
     try {
-      final agentSocket = path.join(dir.path, 'agent.sock');
-      agentProcess = await Process.start(sshAgent, ['-D', '-a', agentSocket]);
-      final agentOutput = StringBuffer();
-      agentProcess.stdout.transform(utf8.decoder).listen(agentOutput.write);
-      agentProcess.stderr.transform(utf8.decoder).listen(agentOutput.write);
-      await _waitFor(
-        () =>
-            FileSystemEntity.typeSync(agentSocket) !=
-            FileSystemEntityType.notFound,
-        () => 'ssh-agent did not make its socket:\n$agentOutput',
-      );
-
-      final publicKeyFiles = <String, String>{};
-      for (final name in keys) {
-        final args = sshTestKeyTypes[name];
-        if (args == null) throw ArgumentError.value(name, 'keys');
-        final keyFile = path.join(dir.path, name);
-        await _run(sshKeygen, [
-          '-q', ...args, '-N', '', '-C', 'nix-infra-test-$name', //
-          '-f', keyFile,
-        ]);
-        await _run(
-          sshAdd,
-          [keyFile],
-          environment: {'SSH_AUTH_SOCK': agentSocket},
-        );
-        File(keyFile).deleteSync();
-        publicKeyFiles[name] = '$keyFile.pub';
-      }
-
-      sshd = await _Sshd.start(
+      agent = await SshAgentTestEnv._startIn(dir, keys);
+      final sshd = await _Sshd.start(
         dir,
-        sshKeygen: sshKeygen,
-        sshd: sshdTool,
-        authorizedKeys: publicKeyFiles.values,
+        sshKeygen: findSshTool('ssh-keygen')!,
+        sshd: findSshTool('sshd')!,
+        authorizedKeys: agent.publicKeyFiles.values,
       );
-
-      return SshTestEnv._(
-        dir,
-        agentSocket,
-        sshd.port,
-        _currentUser(),
-        publicKeyFiles,
-        agentProcess,
-        sshd.process,
-        sshd.log,
-      );
+      return SshTestEnv._(dir, sshd.port, _currentUser(), agent, sshd);
     } catch (_) {
-      sshd?.process.kill();
-      agentProcess?.kill();
+      await agent?._kill();
       _deleteDir(dir);
       rethrow;
     }
@@ -215,12 +162,12 @@ class SshTestEnv {
 
   /// Stops `sshd` and the agent and deletes the temporary folder.
   Future<void> stop() async {
-    _sshd.kill();
-    _agent.kill();
+    _sshd.process.kill();
     await Future.wait([
-      _sshd.exitCode,
-      _agent.exitCode,
-    ]).timeout(const Duration(seconds: 5), onTimeout: () => const <int>[]);
+      _sshd.process.exitCode
+          .timeout(const Duration(seconds: 5), onTimeout: () => -1),
+      _agent._kill(),
+    ]);
     _deleteDir(dir);
   }
 
@@ -307,6 +254,117 @@ class SshTestEnv {
       throw StateError('The current user is not known.');
     }
     return user;
+  }
+}
+
+/// A running `ssh-agent` with test keys, without `sshd`. Needs [tools].
+///
+/// The private key files are given to the agent and then deleted, so only
+/// the agent holds the keys.
+class SshAgentTestEnv {
+  SshAgentTestEnv._(this.dir, this.socket, this.publicKeyFiles, this._process);
+
+  /// The tools that [start] needs.
+  static const tools = ['ssh-agent', 'ssh-add', 'ssh-keygen'];
+
+  /// The temporary folder: the socket and the public key files.
+  final Directory dir;
+
+  /// The socket of the agent (`SSH_AUTH_SOCK`).
+  final String socket;
+
+  /// The public key file of each test key, by key name.
+  final Map<String, String> publicKeyFiles;
+
+  final Process _process;
+
+  /// The public key line of the test key [name]: `<type> <base64> <comment>`.
+  String publicKeyLine(String name) =>
+      File(publicKeyFiles[name]!).readAsStringSync().trim();
+
+  /// The public key blob of the test key [name].
+  Uint8List publicKeyBlob(String name) =>
+      base64.decode(publicKeyLine(name).split(' ')[1]);
+
+  /// Starts an agent in a new temporary folder with the test keys [keys]
+  /// (names of [sshTestKeyTypes]) and deletes their private key files.
+  ///
+  /// Throws a [StateError] with the output of the tool when a step fails.
+  static Future<SshAgentTestEnv> start({
+    List<String> keys = const ['ed25519', 'rsa', 'ecdsa'],
+  }) async {
+    final missing = missingSshTools(tools);
+    if (missing.isNotEmpty) {
+      throw StateError('${missing.join(', ')} not on PATH');
+    }
+    final dir = SshTestEnv._tempDir();
+    try {
+      return await _startIn(dir, keys);
+    } catch (_) {
+      SshTestEnv._deleteDir(dir);
+      rethrow;
+    }
+  }
+
+  /// Starts the agent in [dir]; the caller deletes [dir] on an error.
+  static Future<SshAgentTestEnv> _startIn(
+    Directory dir,
+    List<String> keys,
+  ) async {
+    final socket = path.join(dir.path, 'agent.sock');
+    final process =
+        await Process.start(findSshTool('ssh-agent')!, ['-D', '-a', socket]);
+    try {
+      final output = StringBuffer();
+      process.stdout.transform(utf8.decoder).listen(output.write);
+      process.stderr.transform(utf8.decoder).listen(output.write);
+      await SshTestEnv._waitFor(
+        () =>
+            FileSystemEntity.typeSync(socket) != FileSystemEntityType.notFound,
+        () => 'ssh-agent did not make its socket:\n$output',
+      );
+
+      final publicKeyFiles = <String, String>{};
+      for (final name in keys) {
+        final args = sshTestKeyTypes[name];
+        if (args == null) throw ArgumentError.value(name, 'keys');
+        final keyFile = path.join(dir.path, name);
+        await SshTestEnv._run(findSshTool('ssh-keygen')!, [
+          '-q', ...args, '-N', '', '-C', 'nix-infra-test-$name', //
+          '-f', keyFile,
+        ]);
+        await SshTestEnv._run(
+          findSshTool('ssh-add')!,
+          [keyFile],
+          environment: {'SSH_AUTH_SOCK': socket},
+        );
+        File(keyFile).deleteSync();
+        publicKeyFiles[name] = '$keyFile.pub';
+      }
+      return SshAgentTestEnv._(dir, socket, publicKeyFiles, process);
+    } catch (_) {
+      process.kill();
+      rethrow;
+    }
+  }
+
+  /// Removes the test key [name] from the agent (`ssh-add -d`).
+  Future<void> removeKey(String name) => SshTestEnv._run(
+        findSshTool('ssh-add')!,
+        ['-d', publicKeyFiles[name]!],
+        environment: {'SSH_AUTH_SOCK': socket},
+      );
+
+  /// Stops the agent and deletes [dir].
+  Future<void> stop() async {
+    await _kill();
+    SshTestEnv._deleteDir(dir);
+  }
+
+  Future<void> _kill() async {
+    _process.kill();
+    await _process.exitCode
+        .timeout(const Duration(seconds: 5), onTimeout: () => -1);
   }
 }
 

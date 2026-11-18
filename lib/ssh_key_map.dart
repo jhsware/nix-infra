@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:dotenv/dotenv.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:nix_infra/types.dart';
+
 // The key map of the agent mode (docs/design/ssh_agent_keys.md §4.1, §4.2):
 // a JSON file, named by SSH_KEY_MAP_PATH, that says which key of the
 // ssh-agent signs for a machine, or that the key of a machine is not
@@ -25,6 +27,11 @@ import 'package:path/path.dart' as p;
 /// The variable that names the key map.
 const kSshKeyMapPathEnv = 'SSH_KEY_MAP_PATH';
 
+/// The variable that names the socket of the ssh-agent. Used only for a
+/// machine that the key map gives an agent key: `SSH_AUTH_SOCK` alone
+/// changes nothing (design §3).
+const kSshAuthSockEnv = 'SSH_AUTH_SOCK';
+
 /// The version of the key map that nix-infra reads.
 const sshKeyMapVersion = 1;
 
@@ -40,6 +47,14 @@ String? resolveSshKeyMapPath(DotEnv env, Directory workingDir) {
   if (value == null || value.isEmpty) return null;
   return p.normalize(
       p.isAbsolute(value) ? value : p.join(workingDir.absolute.path, value));
+}
+
+/// The socket of the ssh-agent that [env] names ([kSshAuthSockEnv]), or
+/// null when the variable is not set or is empty (after trimming). The
+/// value is used as it is.
+String? resolveSshAgentSocket(DotEnv env) {
+  final value = env[kSshAuthSockEnv]?.trim();
+  return value == null || value.isEmpty ? null : value;
 }
 
 /// What the key map says about the key of a machine.
@@ -215,4 +230,56 @@ String _text(Map<String, dynamic> entry, String name, String owner,
 String _shown(Object? value) {
   final text = jsonEncode(value);
   return text.length <= 40 ? text : '${text.substring(0, 37)}...';
+}
+
+
+/// The key source of the machine [nodeName] (design §4.2). This is the only
+/// place that knows the order of the rules:
+///
+/// 1. `nodes[<name>]` of the key map;
+/// 2. `default` of the key map;
+/// 3. and 4. no entry, or no key map ([map] null): [KeyFileSource], so
+///    [ClusterNode.getEffectiveSshKeyPath] chooses between `ssh_key` of
+///    servers.yaml and `ssh/<SSH_KEY>`.
+///
+/// There is no fall-through after rule 1 or 2: an `unavailable` entry gives
+/// an [UnavailableKeySource], never a key file. [agentSocket] (the value of
+/// `SSH_AUTH_SOCK`) is put into an [AgentKeySource].
+NodeKeySource keySourceFor(SshKeyMap? map, String nodeName,
+    {String? agentSocket}) {
+  if (map == null) return const KeyFileSource();
+  return switch (map.entryFor(nodeName)) {
+    null => const KeyFileSource(),
+    AgentKeyEntry(:final fingerprint) =>
+      AgentKeySource(fingerprint, agentSocket: agentSocket),
+    UnavailableEntry(:final reason, :final ring) =>
+      UnavailableKeySource(ring == null ? reason : '$reason, ring $ring'),
+  };
+}
+
+/// The key sources of one listing of machines: reads the key map at
+/// [keyMapPath] now, once, and returns the function that gives the key
+/// source of a machine by name ([keySourceFor]).
+///
+/// Call it each time the machines are listed (`getServers`): nothing is
+/// cached, so a key map that the caller wrote again while an MCP server
+/// runs is seen (design §4.1, §13).
+///
+/// - [keyMapPath] null (no key map): every machine has a [KeyFileSource],
+///   whatever [agentSocket] holds.
+/// - A key map that cannot be read now: every machine gets a
+///   [KeyMapUnreadableSource]; the listing itself does not fail, and no
+///   machine is reached with another key.
+NodeKeySource Function(String nodeName) keySourcesForListing(
+    String? keyMapPath,
+    {String? agentSocket}) {
+  if (keyMapPath == null) return (_) => const KeyFileSource();
+  final SshKeyMap map;
+  try {
+    map = loadSshKeyMap(keyMapPath);
+  } on SshKeyMapException catch (e) {
+    final unreadable = KeyMapUnreadableSource(e.message);
+    return (_) => unreadable;
+  }
+  return (nodeName) => keySourceFor(map, nodeName, agentSocket: agentSocket);
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:yaml/yaml.dart';
 
 import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/ssh_key_map.dart';
 import 'package:nix_infra/types.dart';
 import 'provider.dart';
 
@@ -91,9 +92,11 @@ class SelfHosting implements InfrastructureProvider {
   final Map<String, SelfHostedServerConfig> _servers;
   final Map<String, InfrastructureProvider> _cloudProviders;
   final String? _sshKeyPath;
+  final String? _sshKeyMapPath;
+  final String? _sshAgentSocket;
 
   SelfHosting._internal(this._workingDir, this._servers, this._cloudProviders,
-      this._sshKeyPath);
+      this._sshKeyPath, this._sshKeyMapPath, this._sshAgentSocket);
 
   /// Load a SelfHosting provider from a servers.yaml file.
   /// 
@@ -107,10 +110,17 @@ class SelfHosting implements InfrastructureProvider {
   ///
   /// The optional [sshKeyPath] is the private key file of `SSH_KEY_PATH`.
   /// When set, every server uses it in place of its `ssh_key`.
+  ///
+  /// The optional [sshKeyMapPath] is the key map of `SSH_KEY_MAP_PATH`
+  /// (absolute). [getServers] reads it at each call and sets the key source
+  /// of each server; [sshAgentSocket] (`SSH_AUTH_SOCK`) goes into an agent
+  /// key source. Without [sshKeyMapPath] every server uses a key file.
   static Future<SelfHosting> load(
     Directory workingDir, {
     Map<String, InfrastructureProvider>? cloudProviders,
     String? sshKeyPath,
+    String? sshKeyMapPath,
+    String? sshAgentSocket,
   }) async {
     final configFile = File('${workingDir.path}/servers.yaml');
     
@@ -165,7 +175,8 @@ class SelfHosting implements InfrastructureProvider {
       );
     }
 
-    return SelfHosting._internal(workingDir, servers, providers, sshKeyPath);
+    return SelfHosting._internal(workingDir, servers, providers, sshKeyPath,
+        sshKeyMapPath, sshAgentSocket);
   }
 
   /// Check if a servers.yaml file exists in the given directory.
@@ -243,6 +254,11 @@ class SelfHosting implements InfrastructureProvider {
       serverConfigs = serverConfigs.where((s) => only.contains(s.name));
     }
 
+    // The key map is read again at each listing (design §4.1); without
+    // SSH_KEY_MAP_PATH every server keeps its key file.
+    final keySourceOf =
+        keySourcesForListing(_sshKeyMapPath, agentSocket: _sshAgentSocket);
+
     final nodes = <ClusterNode>[];
     for (final config in serverConfigs) {
       final sshKeyName = _extractSshKeyName(config.sshKeyPath);
@@ -275,6 +291,7 @@ class SelfHosting implements InfrastructureProvider {
         // SSH_KEY_PATH wins over ssh_key: one key for every machine.
         sshKeyPath: _sshKeyPath ?? config.sshKeyPath,
         sshKeyPathFromEnv: _sshKeyPath != null,
+        keySource: keySourceOf(config.name),
         vpn: config.vpn,
         cloudProvider: config.provider,
       );

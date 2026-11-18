@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
 import 'package:path/path.dart' as path;
 
+import 'package:nix_infra/ssh_key_map.dart';
 import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'provider.dart';
@@ -17,18 +18,30 @@ class HetznerCloud implements InfrastructureProvider {
   String? _token;
   String? _sshKey;
   String? _sshKeyPath;
+  String? _sshKeyMapPath;
+  String? _sshAgentSocket;
 
   /// [sshKey] is the name of the SSH key at Hetzner. It may be empty when
-  /// the command only connects and [sshKeyPath] is set.
+  /// the command only connects and [sshKeyPath] or [sshKeyMapPath] is set.
   ///
   /// [sshKeyPath]: the private key file of `SSH_KEY_PATH`. When set, every
   /// listed server uses it, and [addSshKeyToCloudProvider] takes the public
   /// key from it when `<project>/ssh/<name>.pub` does not exist.
+  ///
+  /// [sshKeyMapPath]: the key map of `SSH_KEY_MAP_PATH` (absolute). Each
+  /// listing reads it again and sets the key source of each server;
+  /// [sshAgentSocket] (`SSH_AUTH_SOCK`) goes into an agent key source.
   HetznerCloud(
-      {required String token, required String sshKey, String? sshKeyPath}) {
+      {required String token,
+      required String sshKey,
+      String? sshKeyPath,
+      String? sshKeyMapPath,
+      String? sshAgentSocket}) {
     _token = token;
     _sshKey = sshKey;
     _sshKeyPath = sshKeyPath;
+    _sshKeyMapPath = sshKeyMapPath;
+    _sshAgentSocket = sshAgentSocket;
   }
 
   Map<String, String> _getHeaders() {
@@ -140,17 +153,37 @@ class HetznerCloud implements InfrastructureProvider {
       servers = servers.where((node) => only.contains(node['name'])).toList();
     }
 
-    return servers.map(nodeFromApiServer);
+    return nodesFromApiServers(servers);
+  }
+
+  /// The [ClusterNode]s of the server objects [servers] of the Hetzner API
+  /// (`GET /v1/servers`), built now (not lazily).
+  ///
+  /// With a key map ([_sshKeyMapPath]) the key map is read once for this
+  /// listing, at each call, and each node gets its key source
+  /// (`keySourcesForListing` of lib/ssh_key_map.dart).
+  List<ClusterNode> nodesFromApiServers(Iterable<dynamic> servers) {
+    final keySourceOf =
+        keySourcesForListing(_sshKeyMapPath, agentSocket: _sshAgentSocket);
+    return [
+      for (final server in servers)
+        nodeFromApiServer(server,
+            keySource: keySourceOf(server['name'] as String)),
+    ];
   }
 
   /// The [ClusterNode] of one server object of the Hetzner API
   /// (`GET /v1/servers`). When [_sshKeyPath] is set (SSH_KEY_PATH), the node
-  /// uses that private key file.
-  ClusterNode nodeFromApiServer(dynamic server) => ClusterNode(
-      server['name'], server['public_net']['ipv4']['ip'], server['id'], _sshKey!,
-      sshKeyPath: _sshKeyPath,
-      sshKeyPathFromEnv: _sshKeyPath != null,
-      cloudProvider: 'hetzner');
+  /// uses that private key file. [keySource] is the key source of the node
+  /// (default: a key file); [nodesFromApiServers] takes it from the key map.
+  ClusterNode nodeFromApiServer(dynamic server,
+          {NodeKeySource keySource = const KeyFileSource()}) =>
+      ClusterNode(server['name'], server['public_net']['ipv4']['ip'],
+          server['id'], _sshKey!,
+          sshKeyPath: _sshKeyPath,
+          sshKeyPathFromEnv: _sshKeyPath != null,
+          keySource: keySource,
+          cloudProvider: 'hetzner');
 
   @override
   Future<void> createServer(String name, String machineType, String location,

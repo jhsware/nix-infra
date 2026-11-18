@@ -95,7 +95,7 @@ servers:
 | Field | Required | Description |
 |-------|:--------:|-------------|
 | `ip` | Yes* | Server IP address. Required unless `provider` is set. |
-| `ssh_key` | Yes | Path to SSH private key (relative to working directory or absolute). Its public key is `<ssh_key>.pub`, else derived from the private key. When `SSH_KEY_PATH` is set, the CLI uses that file instead for every server (see [SSH keys](./ARCHITECTURE.md#ssh-keys)). An entry of the key map (`SSH_KEY_MAP_PATH`, by name or `default`) wins over `ssh_key`: the server is then reached with the key of the `ssh-agent` that the entry names. |
+| `ssh_key` | Yes | Path to SSH private key (relative to working directory or absolute). Its public key is `<ssh_key>.pub`, else derived from the private key. An entry of the key map (`SSH_KEY_MAP_PATH`, by name or `default`; see [SSH keys](./ARCHITECTURE.md#ssh-keys)) wins over `ssh_key`: the server is then reached with the key of the `ssh-agent` that the entry names. |
 | `description` | No | Human-readable server description |
 | `username` | No | SSH username (defaults to `root`) |
 | `metadata` | No | Key-value pairs for your own organisation |

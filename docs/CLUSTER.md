@@ -447,7 +447,8 @@ These options are available on all cluster subcommands:
 
 `SSH_KEY_MAP_PATH=<key map>` (in `.env` or the environment) names a key map: the nodes that it names are reached with a key of the `ssh-agent` at `SSH_AUTH_SOCK`, and `SSH_KEY` and `--ssh-key` are then optional, except for `provision`. See [SSH keys](./ARCHITECTURE.md#ssh-keys).
 
-
 ## MCP Integration
 
 For AI-assisted cluster management, nix-infra provides an MCP server that exposes cluster operations as tools. You can launch it with `./cli claude` from the cluster project directory. See [Security — MCP Server Safety](./SECURITY.md#mcp-server-safety) for the safety restrictions that apply to MCP-driven operations.
+
+The server (`nix-infra-cluster-mcp`) takes its SSH keys as the CLI does: `SSH_KEY` and its key files, or a key map (`SSH_KEY_MAP_PATH`; then `SSH_KEY` is not required). `--ssh-timeout=<seconds>` (default 10) bounds the connect, the SSH handshake and the login of each connection of a tool. The tool `file-upload` takes local paths inside the project folder only. See [MCP Servers](./ARCHITECTURE.md#mcp-servers).

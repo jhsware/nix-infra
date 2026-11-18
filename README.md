@@ -69,9 +69,10 @@ Treat the following as public API — avoid breaking changes, and note any chang
 
 - `ProviderFactory.autoDetect` / `detectProviderType` (`lib/providers/provider_factory.dart`) — the optional `sshKeyMapPath` and `sshAgentSocket` parameters are the resolved `SSH_KEY_MAP_PATH` (`resolveSshKeyMapPath` in `lib/ssh_key_map.dart`) and `SSH_AUTH_SOCK` (`resolveSshAgentSocket`): with them each listed node gets its key source from the key map. Omit them to keep the keys of `servers.yaml` / `ssh/<name>` (see [SSH keys](./docs/ARCHITECTURE.md#ssh-keys))
 - `InfrastructureProvider.getServers` (`lib/providers/provider.dart`)
-- `ClusterNode` (`lib/types.dart`) — notably `name`, `ipAddr`, `username`, `keySource`, and `getEffectiveSshKeyPath`
+- `ClusterNode` (`lib/types.dart`) — notably `name`, `ipAddr`, `username`, `sshKeyPath` (`ssh_key` of `servers.yaml`), `keySource` (key file, agent key, or not available), and `getEffectiveSshKeyPath`
 - `SelfHosting` servers.yaml parsing (`lib/providers/self_hosting.dart`)
 - `loadEnv(envFileName, workingDir, {processEnvironment})` and `envWithProcessPrecedence` (`lib/helpers.dart`) — see [Configuration and `.env`](./docs/ARCHITECTURE.md#configuration-and-env)
+
 ## Building From Source
 
 1. Install Nix (choose one):

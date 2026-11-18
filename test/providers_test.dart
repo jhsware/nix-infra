@@ -844,7 +844,7 @@ servers:
     });
   });
 
-  group('SSH_KEY_PATH - SelfHosting', () {
+  group('Key files - SelfHosting', () {
     late Directory tempDir;
     late MockCloudProvider mockCloud;
 
@@ -869,30 +869,7 @@ servers:
       await tempDir.delete(recursive: true);
     });
 
-    test('sshKeyPath is set on every node, also over its own ssh_key',
-        () async {
-      final provider = await SelfHosting.load(
-        tempDir,
-        cloudProviders: {'hetzner': mockCloud},
-        sshKeyPath: '/x/key',
-      );
-      final nodes = (await provider.getServers()).toList();
-
-      expect(nodes.map((n) => n.name).toSet(),
-          equals({'static-server', 'other-server', 'cloud-server-1'}));
-      for (final node in nodes) {
-        expect(node.sshKeyPath, equals('/x/key'), reason: node.name);
-        expect(node.sshKeyPathFromEnv, isTrue, reason: node.name);
-        expect(node.getEffectiveSshKeyPath(tempDir.path), equals('/x/key'),
-            reason: node.name);
-      }
-      // The key name still comes from ssh_key (used by nothing that
-      // connects when SSH_KEY_PATH is set).
-      expect(nodes.firstWhere((n) => n.name == 'static-server').sshKeyName,
-          equals('static-key'));
-    });
-
-    test('without sshKeyPath the nodes keep their ssh_key', () async {
+    test('every node keeps its ssh_key of servers.yaml', () async {
       final provider = await SelfHosting.load(
         tempDir,
         cloudProviders: {'hetzner': mockCloud},
@@ -904,26 +881,26 @@ servers:
       expect(nodes['static-server']!.sshKeyPath, equals('./ssh/static-key'));
       expect(nodes['other-server']!.sshKeyPath, equals('/opt/keys/other-key'));
       expect(nodes['cloud-server-1']!.sshKeyPath, equals('./ssh/cloud-key'));
-      expect(nodes.values.every((n) => !n.sshKeyPathFromEnv), isTrue);
       expect(nodes['static-server']!.getEffectiveSshKeyPath(tempDir.path),
           equals('${tempDir.path}/ssh/static-key'));
+      expect(nodes['other-server']!.getEffectiveSshKeyPath(tempDir.path),
+          equals('/opt/keys/other-key'));
+      expect(nodes['static-server']!.sshKeyName, equals('static-key'));
     });
 
-    test('getServers(only:) applies sshKeyPath to the selected nodes',
+    test('getServers(only:) keeps the ssh_key of the selected nodes',
         () async {
       final provider = await SelfHosting.load(
         tempDir,
         cloudProviders: {'hetzner': mockCloud},
-        sshKeyPath: '/x/key',
       );
       final nodes = (await provider.getServers(only: ['other-server'])).toList();
 
-      expect(nodes.single.sshKeyPath, equals('/x/key'));
-      expect(nodes.single.sshKeyPathFromEnv, isTrue);
+      expect(nodes.single.sshKeyPath, equals('/opt/keys/other-key'));
     });
   });
 
-  group('SSH_KEY_PATH - ProviderFactory.autoDetect', () {
+  group('Key files - ProviderFactory.autoDetect', () {
     late Directory tempDir;
 
     setUp(() async {
@@ -936,7 +913,7 @@ servers:
 
     DotEnv envOf(Map<String, String> values) => DotEnv()..addAll(values);
 
-    test('passes sshKeyPath to SelfHosting', () async {
+    test('a servers.yaml node keeps its ssh_key', () async {
       await File('${tempDir.path}/servers.yaml').writeAsString('''
 servers:
   server:
@@ -946,49 +923,27 @@ servers:
       final provider = await ProviderFactory.autoDetect(
         workingDir: tempDir,
         env: envOf({}),
-        sshKeyName: '',
-        sshKeyPath: '/x/key',
-      );
-      final node = (await provider.getServers()).single;
-
-      expect(node.sshKeyPath, equals('/x/key'));
-      expect(node.sshKeyPathFromEnv, isTrue);
-    });
-
-    test('without sshKeyPath behaves as before', () async {
-      await File('${tempDir.path}/servers.yaml').writeAsString('''
-servers:
-  server:
-    ip: 192.168.1.10
-    ssh_key: ./ssh/key
-''');
-      final provider = await ProviderFactory.autoDetect(
-        workingDir: tempDir,
-        env: envOf({'SSH_KEY_PATH': '/ignored/by/autoDetect'}),
         sshKeyName: 'key',
       );
       final node = (await provider.getServers()).single;
 
-      // autoDetect does not read SSH_KEY_PATH itself (the MCP servers call
-      // it without the parameter).
       expect(node.sshKeyPath, equals('./ssh/key'));
-      expect(node.sshKeyPathFromEnv, isFalse);
+      expect(node.getEffectiveSshKeyPath(tempDir.path),
+          equals('${tempDir.path}/ssh/key'));
     });
 
-    test('a Hetzner project still gives a HetznerCloud (no wrapper)',
-        () async {
+    test('a Hetzner project gives a HetznerCloud', () async {
       final provider = await ProviderFactory.autoDetect(
         workingDir: tempDir,
         env: envOf({'HCLOUD_TOKEN': 'test-token'}),
-        sshKeyName: '',
-        sshKeyPath: '/x/key',
+        sshKeyName: 'key',
       );
 
       expect(provider, isA<HetznerCloud>());
     });
   });
 
-  group('SSH_KEY_PATH - HetznerCloud', () {
+  group('Key files - HetznerCloud', () {
     late Directory tempDir;
 
     setUp(() async {
@@ -1007,61 +962,31 @@ servers:
       },
     };
 
-    test('nodeFromApiServer uses sshKeyPath when it is set', () {
-      final provider = HetznerCloud(
-          token: 'test-token', sshKey: '', sshKeyPath: '/x/key');
+    test('nodeFromApiServer uses ssh/<name>', () {
+      final provider = HetznerCloud(token: 'test-token', sshKey: 'my-key');
       final node = provider.nodeFromApiServer(apiServer);
 
       expect(node.name, equals('web001'));
       expect(node.ipAddr, equals('203.0.113.7'));
       expect(node.id, equals(42));
-      expect(node.sshKeyName, equals(''));
       expect(node.cloudProvider, equals('hetzner'));
-      expect(node.sshKeyPath, equals('/x/key'));
-      expect(node.sshKeyPathFromEnv, isTrue);
-      expect(node.getEffectiveSshKeyPath('/project'), equals('/x/key'));
-    });
-
-    test('nodeFromApiServer without sshKeyPath uses ssh/<name>', () {
-      final provider = HetznerCloud(token: 'test-token', sshKey: 'my-key');
-      final node = provider.nodeFromApiServer(apiServer);
-
       expect(node.sshKeyName, equals('my-key'));
       expect(node.sshKeyPath, isNull);
-      expect(node.sshKeyPathFromEnv, isFalse);
       expect(node.getEffectiveSshKeyPath('/project'),
           equals('/project/ssh/my-key'));
     });
 
-    test('publicKeyForRegistration reads ssh/<name>.pub first', () async {
+    test('publicKeyForRegistration reads ssh/<name>.pub', () async {
       await Directory('${tempDir.path}/ssh').create();
       await File('${tempDir.path}/ssh/my-key.pub')
           .writeAsString('ssh-ed25519 AAAAproject comment\n');
-      await File('${tempDir.path}/env-key.pub')
-          .writeAsString('ssh-ed25519 AAAAenv comment\n');
-      final provider = HetznerCloud(
-          token: 'test-token',
-          sshKey: 'my-key',
-          sshKeyPath: '${tempDir.path}/env-key');
+      final provider = HetznerCloud(token: 'test-token', sshKey: 'my-key');
 
       expect(await provider.publicKeyForRegistration(tempDir, 'my-key'),
           equals('ssh-ed25519 AAAAproject comment\n'));
     });
 
-    test('publicKeyForRegistration falls back to <SSH_KEY_PATH>.pub',
-        () async {
-      await File('${tempDir.path}/env-key.pub')
-          .writeAsString('ssh-ed25519 AAAAenv comment\n');
-      final provider = HetznerCloud(
-          token: 'test-token',
-          sshKey: 'my-key',
-          sshKeyPath: '${tempDir.path}/env-key');
-
-      expect(await provider.publicKeyForRegistration(tempDir, 'my-key'),
-          equals('ssh-ed25519 AAAAenv comment'));
-    });
-
-    test('publicKeyForRegistration without SSH_KEY_PATH fails as before',
+    test('publicKeyForRegistration without ssh/<name>.pub fails as before',
         () async {
       final provider = HetznerCloud(token: 'test-token', sshKey: 'my-key');
 

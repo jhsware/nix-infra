@@ -28,16 +28,12 @@ class ProviderFactory {
   /// - [workingDir]: The working directory containing configuration files
   /// - [env]: Environment variables (for HCLOUD_TOKEN)
   /// - [sshKeyName]: The SSH key name to use
-  /// - [sshKeyPath]: Optional private key file for every server (the
-  ///   resolved `SSH_KEY_PATH` of the CLI). When null (the default), the
-  ///   servers use their `ssh_key` of servers.yaml or `ssh/<sshKeyName>`,
-  ///   as before. This function does not read `SSH_KEY_PATH` itself.
   /// - [sshKeyMapPath]: Optional absolute path of the key map (the resolved
   ///   `SSH_KEY_MAP_PATH`, see `resolveSshKeyMapPath` in
   ///   lib/ssh_key_map.dart). The providers read it each time they list the
   ///   servers and give each server its key source (docs/design/
   ///   ssh_agent_keys.md §4). When null (the default) every server uses a
-  ///   key file, as before.
+  ///   key file: its `ssh_key` of servers.yaml or `ssh/<sshKeyName>`.
   /// - [sshAgentSocket]: The socket of the ssh-agent (the resolved
   ///   `SSH_AUTH_SOCK`), used only for a server that the key map gives an
   ///   agent key. Without [sshKeyMapPath] it changes nothing.
@@ -48,7 +44,6 @@ class ProviderFactory {
     required Directory workingDir,
     required DotEnv env,
     required String sshKeyName,
-    String? sshKeyPath,
     String? sshKeyMapPath,
     String? sshAgentSocket,
   }) async {
@@ -71,7 +66,6 @@ class ProviderFactory {
             cloudProviders[providerName] = HetznerCloud(
               token: hcloudToken,
               sshKey: sshKeyName,
-              sshKeyPath: sshKeyPath,
               sshKeyMapPath: sshKeyMapPath,
               sshAgentSocket: sshAgentSocket,
             );
@@ -87,7 +81,6 @@ class ProviderFactory {
       return await SelfHosting.load(
         workingDir,
         cloudProviders: cloudProviders.isNotEmpty ? cloudProviders : null,
-        sshKeyPath: sshKeyPath,
         sshKeyMapPath: sshKeyMapPath,
         sshAgentSocket: sshAgentSocket,
       );
@@ -106,7 +99,6 @@ class ProviderFactory {
     return HetznerCloud(
         token: hcloudToken,
         sshKey: sshKeyName,
-        sshKeyPath: sshKeyPath,
         sshKeyMapPath: sshKeyMapPath,
         sshAgentSocket: sshAgentSocket);
   }

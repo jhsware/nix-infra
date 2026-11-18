@@ -1,12 +1,14 @@
 import 'dart:io';
 
-import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/ssh.dart' show sshAuthenticationFailedMessage;
 import 'package:nix_infra/ssh_identity.dart' show publicKeyOf;
 import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
+
+// The public key of a key file (lib/ssh_key_path.dart) and of a machine
+// with a key file (publicKeyOf), and the text of a failed authentication.
 
 /// The path of [name] on PATH, or null.
 String? _onPath(String name) {
@@ -19,10 +21,6 @@ String? _onPath(String name) {
 }
 
 void main() {
-  /// DotEnv() does not include the platform environment, so a SSH_KEY_PATH
-  /// of the developer's shell does not leak into these tests.
-  DotEnv envOf(Map<String, String> values) => DotEnv()..addAll(values);
-
   late Directory tempDir;
 
   setUp(() {
@@ -35,89 +33,6 @@ void main() {
 
   File touch(String filePath) =>
       File(filePath)..createSync(recursive: true)..writeAsStringSync('x');
-
-  group('resolveSshKeyPath', () {
-    test('unset gives null', () {
-      expect(resolveSshKeyPath(envOf({}), tempDir), isNull);
-    });
-
-    test('empty or blank gives null', () {
-      expect(resolveSshKeyPath(envOf({'SSH_KEY_PATH': ''}), tempDir), isNull);
-      expect(
-          resolveSshKeyPath(envOf({'SSH_KEY_PATH': '  '}), tempDir), isNull);
-    });
-
-    test('an absolute path is used, normalized', () {
-      final key = touch('${tempDir.path}/keys/id_ed25519');
-      expect(
-          resolveSshKeyPath(
-              envOf({'SSH_KEY_PATH': '${tempDir.path}/keys/../keys/id_ed25519'}),
-              tempDir),
-          equals(key.path));
-    });
-
-    test('a relative path is relative to the project folder', () {
-      final project = Directory('${tempDir.path}/project')..createSync();
-      final key = touch('${project.path}/keys/id_ed25519');
-      expect(
-          resolveSshKeyPath(
-              envOf({'SSH_KEY_PATH': 'keys/id_ed25519'}), project),
-          equals(key.path));
-      expect(
-          resolveSshKeyPath(
-              envOf({'SSH_KEY_PATH': './keys/id_ed25519'}), project),
-          equals(key.path));
-    });
-
-    test('a leading ~/ is the home directory', () {
-      final home = '${tempDir.path}/home';
-      final key = touch('$home/.ssh/id_ed25519');
-      expect(
-          resolveSshKeyPath(envOf({'SSH_KEY_PATH': '~/.ssh/id_ed25519'}),
-              Directory('${tempDir.path}/project'),
-              homeDir: home),
-          equals(key.path));
-    });
-
-    test('surrounding blanks are ignored', () {
-      final key = touch('${tempDir.path}/id_ed25519');
-      expect(
-          resolveSshKeyPath(
-              envOf({'SSH_KEY_PATH': ' ${tempDir.path}/id_ed25519 '}), tempDir),
-          equals(key.path));
-    });
-
-    test('a missing file throws before any connection', () {
-      final missing = '${tempDir.path}/run/ssh-keys/p/k-fp';
-      expect(
-          () => resolveSshKeyPath(envOf({'SSH_KEY_PATH': missing}), tempDir),
-          throwsA(isA<Exception>().having(
-              (e) => e.toString(),
-              'toString()',
-              'Exception: SSH_KEY_PATH names a file that does not exist: '
-                  '$missing. If a sysops terminal set it: unlock the vault '
-                  'and open a new terminal.')));
-    });
-
-    test('a directory is not a key file', () {
-      Directory('${tempDir.path}/keys').createSync();
-      expect(
-          () => resolveSshKeyPath(
-              envOf({'SSH_KEY_PATH': '${tempDir.path}/keys'}), tempDir),
-          throwsA(isA<Exception>().having((e) => e.toString(), 'toString()',
-              contains('SSH_KEY_PATH names a file that does not exist'))));
-    });
-
-    test('a missing file under ~/ names the expanded path', () {
-      final home = '${tempDir.path}/home';
-      expect(
-          () => resolveSshKeyPath(
-              envOf({'SSH_KEY_PATH': '~/.ssh/missing'}), tempDir,
-              homeDir: home),
-          throwsA(isA<Exception>().having((e) => e.toString(), 'toString()',
-              contains('does not exist: $home/.ssh/missing.'))));
-    });
-  });
 
   group('publicKeyLineFromPrivateKey without a key', () {
     test('random text throws without echoing it', () {
@@ -143,15 +58,13 @@ void main() {
       touch(keyPath).writeAsStringSync('not a key');
       File('$keyPath.pub')
           .writeAsStringSync('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAfake me@x\n');
-      final node = ClusterNode('n1', '10.0.0.1', 1, '',
-          sshKeyPath: keyPath, sshKeyPathFromEnv: true);
+      final node = ClusterNode('n1', '10.0.0.1', 1, '', sshKeyPath: keyPath);
 
       expect(await publicKeyOf(tempDir, node),
           equals('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAfake me@x'));
     });
 
-    test('keeps the result of ssh/<name>.pub for a project without '
-        'SSH_KEY_PATH', () async {
+    test('reads ssh/<name>.pub of the key name', () async {
       touch('${tempDir.path}/ssh/my-key');
       File('${tempDir.path}/ssh/my-key.pub')
           .writeAsStringSync('ssh-rsa AAAAB3NzaC1yc2EAAAAfake project@x\n');
@@ -178,21 +91,19 @@ void main() {
   });
 
   group('sshAuthenticationFailedMessage', () {
-    test('with SSH_KEY_PATH it names the key of SSH_KEY_PATH', () {
-      final node = ClusterNode('web001', '203.0.113.7', 1, '',
-          sshKeyPath: '/k', sshKeyPathFromEnv: true);
+    test('a key file gives the text nix-infra always gave', () {
+      final node = ClusterNode('web001', '203.0.113.7', 1, 'my-key',
+          sshKeyPath: './ssh/my-key');
       expect(
           sshAuthenticationFailedMessage(node),
           equals('Failed to authenticate to server "web001" at '
               '203.0.113.7:22\n'
-              'Reason: the machine does not accept the key of SSH_KEY_PATH. '
-              'It may belong to another SSH key (in sysops: open a terminal '
-              'with the key of this machine).'));
+              'Reason: SSH authentication failed - check SSH key permissions '
+              'and configuration'));
     });
 
-    test('without SSH_KEY_PATH the text is unchanged', () {
-      final node = ClusterNode('web001', '203.0.113.7', 1, 'my-key',
-          sshKeyPath: './ssh/my-key');
+    test('a node without ssh_key gives the same text', () {
+      final node = ClusterNode('web001', '203.0.113.7', 1, 'my-key');
       expect(
           sshAuthenticationFailedMessage(node),
           equals('Failed to authenticate to server "web001" at '
@@ -294,8 +205,7 @@ void main() {
       final keyPath = await makeKey('no_pub', ['-t', 'ed25519']);
       final expected = await expectedLine(keyPath);
       File('$keyPath.pub').deleteSync();
-      final node = ClusterNode('n1', '10.0.0.1', 1, '',
-          sshKeyPath: keyPath, sshKeyPathFromEnv: true);
+      final node = ClusterNode('n1', '10.0.0.1', 1, '', sshKeyPath: keyPath);
 
       expect(await publicKeyOf(tempDir, node), equals(expected));
     });

@@ -128,11 +128,6 @@ class ClusterNode {
   /// in non-standard locations.
   String? sshKeyPath;
 
-  /// True when [sshKeyPath] was set from `SSH_KEY_PATH` (one private key
-  /// file for every machine of a CLI command) and not from servers.yaml or
-  /// the key name. Only used for the text of an authentication error.
-  bool sshKeyPathFromEnv;
-
   /// Where the key of this machine comes from. The default,
   /// [KeyFileSource], is the classic way ([getEffectiveSshKeyPath]); the
   /// provider sets another source from the key map (`SSH_KEY_MAP_PATH`).
@@ -151,7 +146,6 @@ class ClusterNode {
 
   ClusterNode(this.name, this.ipAddr, this.id, this.sshKeyName,
       {this.sshKeyPath,
-      this.sshKeyPathFromEnv = false,
       this.keySource = const KeyFileSource(),
       this.vpn,
       this.cloudProvider});

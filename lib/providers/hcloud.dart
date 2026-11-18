@@ -3,12 +3,10 @@ import 'dart:io';
 import 'package:nix_infra/helpers.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
-import 'package:path/path.dart' as path;
 
 import 'package:nix_infra/ssh_identity.dart';
 import 'package:nix_infra/ssh_key_errors.dart';
 import 'package:nix_infra/ssh_key_map.dart';
-import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'provider.dart';
 
@@ -19,16 +17,11 @@ const BOOTSTRAP_OS = 'ubuntu-22.04';
 class HetznerCloud implements InfrastructureProvider {
   String? _token;
   String? _sshKey;
-  String? _sshKeyPath;
   String? _sshKeyMapPath;
   String? _sshAgentSocket;
 
   /// [sshKey] is the name of the SSH key at Hetzner. It may be empty when
-  /// the command only connects and [sshKeyPath] or [sshKeyMapPath] is set.
-  ///
-  /// [sshKeyPath]: the private key file of `SSH_KEY_PATH`. When set, every
-  /// listed server uses it, and [addSshKeyToCloudProvider] takes the public
-  /// key from it when `<project>/ssh/<name>.pub` does not exist.
+  /// the command only connects and [sshKeyMapPath] is set.
   ///
   /// [sshKeyMapPath]: the key map of `SSH_KEY_MAP_PATH` (absolute). Each
   /// listing reads it again and sets the key source of each server;
@@ -36,12 +29,10 @@ class HetznerCloud implements InfrastructureProvider {
   HetznerCloud(
       {required String token,
       required String sshKey,
-      String? sshKeyPath,
       String? sshKeyMapPath,
       String? sshAgentSocket}) {
     _token = token;
     _sshKey = sshKey;
-    _sshKeyPath = sshKeyPath;
     _sshKeyMapPath = sshKeyMapPath;
     _sshAgentSocket = sshAgentSocket;
   }
@@ -175,17 +166,13 @@ class HetznerCloud implements InfrastructureProvider {
   }
 
   /// The [ClusterNode] of one server object of the Hetzner API
-  /// (`GET /v1/servers`). When [_sshKeyPath] is set (SSH_KEY_PATH), the node
-  /// uses that private key file. [keySource] is the key source of the node
+  /// (`GET /v1/servers`). [keySource] is the key source of the node
   /// (default: a key file); [nodesFromApiServers] takes it from the key map.
   ClusterNode nodeFromApiServer(dynamic server,
           {NodeKeySource keySource = const KeyFileSource()}) =>
       ClusterNode(server['name'], server['public_net']['ipv4']['ip'],
           server['id'], _sshKey!,
-          sshKeyPath: _sshKeyPath,
-          sshKeyPathFromEnv: _sshKeyPath != null,
-          keySource: keySource,
-          cloudProvider: 'hetzner');
+          keySource: keySource, cloudProvider: 'hetzner');
 
   @override
   Future<void> createServer(String name, String machineType, String location,
@@ -256,9 +243,7 @@ class HetznerCloud implements InfrastructureProvider {
   ///   of its `default` entry, which the agent lists for that fingerprint
   ///   (design §6.3). A key map without `default`, or whose `default` is
   ///   not available, throws a readable Exception.
-  /// - Otherwise `<workingDir>/ssh/<keyName>.pub` when it exists; else, with
-  ///   SSH_KEY_PATH, `<SSH_KEY_PATH>.pub` or the line derived from that
-  ///   private key. Without SSH_KEY_PATH a missing project file throws a
+  /// - Otherwise `<workingDir>/ssh/<keyName>.pub`. A missing file throws a
   ///   [FileSystemException], as before.
   Future<String> publicKeyForRegistration(
       Directory workingDir, String keyName) async {
@@ -266,15 +251,7 @@ class HetznerCloud implements InfrastructureProvider {
     if (keyMapPath != null) {
       return _publicKeyOfDefaultEntry(workingDir, keyMapPath, keyName);
     }
-    final projectPubFile = File('${workingDir.path}/ssh/$keyName.pub');
-    final keyPath = _sshKeyPath;
-    if (keyPath == null || await projectPubFile.exists()) {
-      return await projectPubFile.readAsString();
-    }
-    final absoluteKeyPath = path.isAbsolute(keyPath)
-        ? path.normalize(keyPath)
-        : path.normalize(path.join(workingDir.path, keyPath));
-    return await publicKeyOfKeyFile(absoluteKeyPath);
+    return await File('${workingDir.path}/ssh/$keyName.pub').readAsString();
   }
 
   /// The public key of the `default` entry of the key map at [keyMapPath].

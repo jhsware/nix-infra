@@ -73,8 +73,6 @@ Required environment variables (in `.env` or shell; a value set in the shell win
 | `SSH_KEY` | Name for the SSH key pair |
 | `SSH_EMAIL` | Email address for the SSH key |
 
-The later commands can use a private key that is kept outside the project instead: set `SSH_KEY_PATH=<private key file>` (absolute, relative to the project, or `~/...`). It is used for every machine of a command, and the public key is taken from `<file>.pub` or derived from the private key. `init` does not read it. See [Global Options](#global-options).
-
 ### Step 2: Provision Nodes
 
 ```bash
@@ -277,7 +275,6 @@ These options are available on all fleet subcommands:
 | `--debug` | Enable verbose debug logging (also accepted as a global option before the command group) |
 | `--batch` | Run non-interactively (skip confirmation prompts) |
 
-`SSH_KEY_PATH=<private key file>` (in `.env` or the environment) makes every fleet subcommand use that file as the private key for every machine, in place of `ssh_key` of `servers.yaml` and `ssh/<SSH_KEY>`. With it, `SSH_KEY` and `--ssh-key` are optional, except for `provision`, which gives the key name to the cloud provider. A machine that does not accept the key is not reached; no other key is tried. See [Architecture — SSH keys](./ARCHITECTURE.md#ssh-keys).
 `SSH_KEY_MAP_PATH=<key map>` (in `.env` or the environment) names a key map: the machines that it names are reached with a key of the `ssh-agent` at `SSH_AUTH_SOCK`, and `SSH_KEY` and `--ssh-key` are then optional, except for `provision`. See [SSH keys](./ARCHITECTURE.md#ssh-keys).
 
 

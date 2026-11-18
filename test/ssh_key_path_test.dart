@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/ssh.dart' show sshAuthenticationFailedMessage;
+import 'package:nix_infra/ssh_identity.dart' show publicKeyOf;
 import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:path/path.dart' as path;

@@ -6,7 +6,8 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:nix_infra/providers/providers.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
-import 'package:nix_infra/ssh_key_path.dart';
+import 'package:nix_infra/ssh_identity.dart';
+import 'package:nix_infra/ssh_key_errors.dart';
 import 'package:nix_infra/types.dart';
 import 'package:process_run/shell.dart';
 
@@ -270,11 +271,17 @@ $rebootCommand
       final shell = Shell(stdout: controller.sink, verbose: debug);
       // Probably better to do this outside for all commands
       // await shell.run('ssh-add "${workingDir.path}/ssh/$sshKeyName"');
-      await shell.run(
-          'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "bash -s " < /root/install.sh');
+      await withSshCommand(
+          workingDir,
+          node,
+          (sshCmd) =>
+              shell.run('$sshCmd "bash -s " < /root/install.sh'));
       // Running in two part to allow nix-env to be provided by the profile script
     } on ShellException catch (_) {
       // We will get a shell exception when connection terminates
+    } on NodeKeyException catch (err) {
+      // The key of the node is not available: say why.
+      echo('ERROR! $err');
     } catch (err) {
       if (debug) echoDebug(err.toString());
     }
@@ -306,8 +313,11 @@ $rebootCommand
     try {
       final controller = StreamController<List<int>>();
       final shell = Shell(stdout: controller.sink);
-      await shell.run(
-          'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "nixos-rebuild switch --fast 2>/dev/null"');
+      await withSshCommand(
+          workingDir,
+          node,
+          (sshCmd) => shell
+              .run('$sshCmd "nixos-rebuild switch --fast 2>/dev/null"'));
     } catch (_) {}
   });
 
@@ -318,9 +328,6 @@ Future<void> rebootToNixos(Directory workingDir,
     ClusterConfiguration clusterConf, Iterable<ClusterNode> nodes) async {
   final bootToNixos = nodes.map((node) async {
     // debug(node.name);
-    final script =
-        'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "reboot 2>/dev/null"';
-
     final controller = StreamController<List<int>>();
     controller.stream.listen((inp) {
       final str = utf8.decode(inp);
@@ -334,13 +341,16 @@ Future<void> rebootToNixos(Directory workingDir,
     });
 
     final shell = Shell(stdout: controller.sink);
-    try {
-      await shell.run("""
+    await withSshCommand(workingDir, node, (sshCmd) async {
+      final script = '$sshCmd "reboot 2>/dev/null"';
+      try {
+        await shell.run("""
           $script
         """);
-    } on ShellException catch (_) {
-      // We will get a shell exception
-    }
+      } on ShellException catch (_) {
+        // We will get a shell exception
+      }
+    });
   });
 
   await Future.wait(bootToNixos);
@@ -379,8 +389,6 @@ Future<void> rebuildNixos(Directory workingDir,
     ClusterConfiguration clusterConf, Iterable<ClusterNode> nodes) async {
   final rebuild = nodes.map((node) async {
     // debug(node.name);
-    final script =
-        'ssh -i "${node.getEffectiveSshKeyPath(workingDir.path)}" -o StrictHostKeyChecking=no root@${node.ipAddr} "nixos-rebuild switch --fast"'; // 2>/dev/null
     // For debugging: nixos-rebuild switch --fast  --show-trace --option eval-cache false
 
     final controller = StreamController<List<int>>();
@@ -396,13 +404,16 @@ Future<void> rebuildNixos(Directory workingDir,
     });
 
     final shell = Shell(stdout: controller.sink);
-    try {
-      await shell.run("""
+    await withSshCommand(workingDir, node, (sshCmd) async {
+      final script = '$sshCmd "nixos-rebuild switch --fast"'; // 2>/dev/null
+      try {
+        await shell.run("""
           $script
         """);
-    } on ShellException catch (_) {
-      // We will get a shell exception
-    }
+      } on ShellException catch (_) {
+        // We will get a shell exception
+      }
+    });
   });
 
   await Future.wait(rebuild);

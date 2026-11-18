@@ -6,6 +6,7 @@ import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/provision.dart';
 import 'package:nix_infra/secrets.dart';
 import 'package:nix_infra/ssh.dart';
+import 'package:nix_infra/ssh_identity.dart';
 import 'package:nix_infra/ssh_key_path.dart';
 import 'package:nix_infra/types.dart';
 import 'package:nix_infra/providers/providers.dart';

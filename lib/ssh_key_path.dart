@@ -6,8 +6,6 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:dotenv/dotenv.dart';
 import 'package:path/path.dart' as path;
 
-import 'package:nix_infra/types.dart';
-
 // SSH_KEY_PATH: one private key file for every machine of a CLI command, and
 // the public key of a private key file (docs/analysis/
 // 2026-11-17-ssh-key-resolution-external-identities.md §5.2).
@@ -77,6 +75,9 @@ String publicKeyLineFromPrivateKey(String pem) {
 /// The public key of the private key file [privateKeyPath]: the trimmed
 /// content of `<privateKeyPath>.pub` when that file exists, else the line
 /// derived from the private key ([publicKeyLineFromPrivateKey]).
+///
+/// The public key of a machine is `publicKeyOf` of lib/ssh_identity.dart,
+/// which uses this function for a machine with a key file.
 Future<String> publicKeyOfKeyFile(String privateKeyPath) async {
   final pubFile = File('$privateKeyPath.pub');
   if (await pubFile.exists()) {
@@ -91,18 +92,6 @@ Future<String> publicKeyOfKeyFile(String privateKeyPath) async {
         '$privateKeyPath.pub does not exist: the SSH key ${e.reason}');
   }
 }
-
-/// The public key of [node]: the one written as root's authorized key
-/// (`[%%sshKey%%]` of configuration.nix).
-///
-/// The private key file is [ClusterNode.getEffectiveSshKeyPath]; see
-/// [publicKeyOfKeyFile]. For a project with `ssh/<name>` and
-/// `ssh/<name>.pub` the result is the content of `ssh/<name>.pub`, as
-/// before SSH_KEY_PATH.
-Future<String> publicKeyOf(Directory workingDir, ClusterNode node) {
-  return publicKeyOfKeyFile(node.getEffectiveSshKeyPath(workingDir.path));
-}
-
 /// Why a key cannot be used, as the end of a sentence that starts with
 /// "The SSH key". Never holds key text.
 class _SshKeyError implements Exception {

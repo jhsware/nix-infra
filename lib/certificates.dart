@@ -6,6 +6,7 @@ import 'package:nix_infra/ssh.dart';
 import 'package:dartssh2/dartssh2.dart';
 
 import 'package:nix_infra/helpers.dart';
+import 'package:nix_infra/ssh_identity.dart';
 import 'package:nix_infra/types.dart';
 import 'package:process_run/shell.dart';
 
@@ -346,12 +347,11 @@ Future<void> deployEtcdCertsOnClusterNode(
     }
 
     echo('Deploying certs to ${node.name} (${node.ipAddr})');
+    final identities = await identitiesOf(workingDir, node);
     final sshClient = SSHClient(
       await SSHSocket.connect(node.ipAddr, 22),
       username: 'root',
-      identities: [
-        ...SSHKeyPair.fromPem(await getSshKeyAsPemFromNode(workingDir, node))
-      ],
+      identities: identities,
     );
     final sftp = await sshClient.sftp();
     final stat =

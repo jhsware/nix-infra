@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
-import 'package:nix_infra/ssh_key_path.dart';
+import 'package:nix_infra/ssh_identity.dart';
 import 'package:nix_infra/types.dart';
 import 'package:dartssh2/dartssh2.dart';
 

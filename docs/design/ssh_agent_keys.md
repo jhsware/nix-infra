@@ -235,11 +235,22 @@ At the end, a search for `SSH_KEY_PATH` finds the name only in the two analysis 
 
 ## 12. Not verified, and open
 
-- Nothing was compiled or run for this design.
-- The dartssh2 source was not read. Open: how `SSHIdentity.custom` names the RSA algorithm and wraps the signature of the agent (`SSHRawSignature`); whether the four clients compile unchanged.
-- `ssh -i <public key file>` with `IdentitiesOnly=yes` picks the matching key of the agent according to `ssh_config(5)`; not tried here.
-- What `mcp_dart` returns for an error that a tool does not catch.
-- Whether a rescue or installer system that `provision` meets needs an algorithm that dartssh2 4 no longer offers. `provision` reaches such a system with `ssh`, not with dartssh2, so probably not.
+The trial of §11 step 1 ran on 2026-11-18, on the branch `trial/ssh-agent-dartssh2-4` (not merged): dartssh2 4.1.0 (with pointycastle 4.0.0), Dart 3.9.4, macOS 15.7.4 on arm64, OpenSSH 9.9p2 with LibreSSL 3.3.6 (`ssh`, `ssh-agent`, `ssh-add`, `ssh-keygen`), and `/usr/sbin/sshd` (`SSH-2.0-OpenSSH_9.9`) as the current user on 127.0.0.1. The test is `test/ssh_agent_trial_test.dart` with the helper `test/support/ssh_test_env.dart`; the first agent client is `lib/ssh_agent.dart`. The dartssh2 source was read in the pub cache.
+
+| Point | Status | Result |
+|---|---|---|
+| Login through a real `ssh-agent`, RSA 2048 | answered | Works. dartssh2 4.1 logs in with a key that only the agent holds (its private key file was deleted) and runs `echo ok`. sshd: `Accepted publickey ... ssh2: RSA SHA256:...`. |
+| Login through a real `ssh-agent`, Ed25519 | answered | Works, in the same way. |
+| How `SSHIdentity.custom` names the RSA algorithm | answered | It does not choose one. The client sends `SSHIdentity.type` as the algorithm of the `publickey` request, as it is; it derives nothing from the key blob or from `server-sig-algs` (dartssh2 `lib/src/ssh_client.dart:1611-1661`). nix-infra sets `type: 'rsa-sha2-512'` and the flag `SSH_AGENT_RSA_SHA2_512` (4) in the sign request. The sshd log shows `public key rsa-sha2-512`. A key file of dartssh2 uses `rsa-sha2-256`. |
+| How the signature of the agent is wrapped | answered | `SSHRawSignature(<signature of SSH_AGENT_SIGN_RESPONSE>)`, unchanged: the agent returns the SSH signature blob (algorithm name and signature bytes), which is what `SSHSignature.encode()` must return. The public key is `SSHRawHostKey(<blob the agent listed>)`. dartssh2 does not compare the algorithm of the signature with `type`; the server does. `lib/ssh_agent.dart` checks it before it returns the signature. |
+| Do the four clients compile unchanged? | answered | Yes. With dartssh2 4.1 `dart analyze` finds no issue, and `lib/ssh.dart:49, 282, 313` and `lib/certificates.dart:349` are unchanged. The `close()` calls that now return a `Future` give no diagnostic, because `unawaited_futures` is not in `lints/recommended`; they are still awaited in the upgrade (§5). All 871 tests pass. |
+| `ssh -i <public key file>` with `IdentitiesOnly=yes` | answered | It uses the matching key of the agent. With an agent that holds an RSA and an Ed25519 key, `ssh -F /dev/null -o IdentityAgent=<socket> -o IdentitiesOnly=yes -i rsa.pub ...` offers only the RSA key (`Offering public key: .../rsa.pub RSA SHA256:... explicit agent`), and sshd accepts it with `rsa-sha2-512`. The Ed25519 key is not offered. |
+| Does dartssh2 have an agent client? | answered | No. dartssh2 4 exports the other side: `SSHAgentProtocol`, `SSHAgentHandler`, `SSHKeyPairAgent`, `SSHAgentChannel` and `SSHClient.agentHandler`, an agent that answers over an SSH channel (agent forwarding). `lib/ssh_agent.dart` uses the constants of `SSHAgentProtocol` and must not declare these names. |
+| A signature that fails | answered | dartssh2 ends the connection with an `SSHInternalError` that wraps the exception of the signer. It does not try another identity. The texts of §7 are made from it. |
+| An agent that never answers | still open | The first client has no timeout. `authTimeout` of dartssh2 (§5) bounds the login. |
+| Linux | still open | The trial ran on macOS only. The helper skips the test when a tool is missing, and also looks for `sshd` in the usual `sbin` folders. |
+| What `mcp_dart` returns for an error that a tool does not catch | still open | Not part of the trial. |
+| A rescue or installer system that `provision` meets | still open | Whether it needs an algorithm that dartssh2 4 no longer offers. `provision` reaches such a system with `ssh`, not with dartssh2, so probably not. A NixOS machine and a fresh Hetzner machine stay a test by hand (§10). |
 
 ## 13. Decisions of the operator
 

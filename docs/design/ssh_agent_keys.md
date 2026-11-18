@@ -1,7 +1,7 @@
 # SSH keys from an ssh-agent — design
 
 **Date:** 2026-11-17
-**Status:** Proposed. Updated on 2026-11-18 with the decisions of the operator (§13). Not implemented.
+**Status:** Accepted by the operator on 2026-11-18, with the decisions of §13. Not implemented.
 **Code reviewed:** nix-infra `188897b` (`main`, 0.18.0-beta), dartssh2 2.14.0 (locked). dartssh2 4.1.0 from its changelog and API pages only.
 **Companion design:** `sysops_server/docs/design/ssh_keys_through_agents.md` (how sysops fills the agents).
 **Replaces:** the `SSH_KEY_PATH` feature (`docs/analysis/2026-11-17-ssh-key-resolution-external-identities.md`) and the proposal of `docs/analysis/2026-11-17-mcp-ssh-key-config.md`.

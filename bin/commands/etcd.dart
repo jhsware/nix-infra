@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/helpers.dart';
 import 'package:nix_infra/ssh.dart';
 import 'package:nix_infra/types.dart';
@@ -24,17 +25,32 @@ Future<Iterable<String>> runEtcdCtlCommand(
   return outp;
 }
 
+/// The project folder, environment and SSH key name of an etcd subcommand.
+/// `-d`, `--env` and `--ssh-key` come from the `etcd` group or, for
+/// `nix-infra cluster etcd …`, from `cluster` ([ancestorArgsWithOption]):
+/// the one closest to the subcommand wins.
+Future<({Directory workingDir, DotEnv env, String sshKeyName})> _etcdContext(
+    Command command) async {
+  final workingDir = await getWorkingDirectory(
+      ancestorArgsWithOption(command, 'working-dir')?['working-dir']);
+  final env =
+      await loadEnv(ancestorArgsWithOption(command, 'env')?['env'], workingDir);
+  final sshKeyName =
+      resolveSshKeyName(ancestorArgsWithOption(command, 'ssh-key'), env);
+  return (workingDir: workingDir, env: env, sshKeyName: sshKeyName);
+}
+
 class EtcdCommand extends Command {
   @override
   final name = 'etcd';
   @override
-  final description = 'Manage SSH keys for infrastructure access';
+  final description = 'Inspect the etcd state of a cluster';
 
   EtcdCommand() {
     argParser
       ..addOption('working-dir',
-          abbr: 'd', defaultsTo: '.', help: 'Directory to store SSH keys')
-      ..addOption('ssh-key', mandatory: false)
+          abbr: 'd', defaultsTo: '.', help: 'Working directory')
+      ..addOption('ssh-key', mandatory: false, help: 'SSH key name')
       ..addOption('env', help: 'Path to environment file');
 
     addSubcommand(EtcdctlCommand());
@@ -59,12 +75,8 @@ class EtcdctlCommand extends Command {
 
   @override
   void run() async {
-    final workingDir =
-        await getWorkingDirectory(parent?.argResults!['working-dir']);
-    final env = await loadEnv(parent?.argResults!['env'], workingDir);
-
+    final (:workingDir, :env, :sshKeyName) = await _etcdContext(this);
     final String? cmd = argResults?.rest.join(' ');
-    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
     final List<String> targets = argResults!['target'].split(' ');
 
     if (cmd == null) {
@@ -97,11 +109,7 @@ class ListNodesCommand extends Command {
 
   @override
   void run() async {
-    final workingDir =
-        await getWorkingDirectory(parent?.argResults!['working-dir']);
-    final env = await loadEnv(parent?.argResults!['env'], workingDir);
-
-    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
+    final (:workingDir, :env, :sshKeyName) = await _etcdContext(this);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -130,11 +138,7 @@ class ListServicesCommand extends Command {
 
   @override
   void run() async {
-    final workingDir =
-        await getWorkingDirectory(parent?.argResults!['working-dir']);
-    final env = await loadEnv(parent?.argResults!['env'], workingDir);
-
-    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
+    final (:workingDir, :env, :sshKeyName) = await _etcdContext(this);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -163,11 +167,7 @@ class ListBackendsCommand extends Command {
 
   @override
   void run() async {
-    final workingDir =
-        await getWorkingDirectory(parent?.argResults!['working-dir']);
-    final env = await loadEnv(parent?.argResults!['env'], workingDir);
-
-    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
+    final (:workingDir, :env, :sshKeyName) = await _etcdContext(this);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -196,11 +196,7 @@ class ListFrontendsCommand extends Command {
 
   @override
   void run() async {
-    final workingDir =
-        await getWorkingDirectory(parent?.argResults!['working-dir']);
-    final env = await loadEnv(parent?.argResults!['env'], workingDir);
-
-    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
+    final (:workingDir, :env, :sshKeyName) = await _etcdContext(this);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);
@@ -221,7 +217,7 @@ class ShowNetworkCommand extends Command {
   @override
   final name = 'network';
   @override
-  final description = 'List frontends registered with etcd';
+  final description = 'Show the Flannel overlay network configuration in etcd';
 
   ShowNetworkCommand() {
     argParser.addOption('target', mandatory: true);
@@ -229,11 +225,7 @@ class ShowNetworkCommand extends Command {
 
   @override
   void run() async {
-    final workingDir =
-        await getWorkingDirectory(parent?.argResults!['working-dir']);
-    final env = await loadEnv(parent?.argResults!['env'], workingDir);
-
-    final sshKeyName = resolveSshKeyName(parent?.argResults, env);
+    final (:workingDir, :env, :sshKeyName) = await _etcdContext(this);
     final List<String> targets = argResults!['target'].split(' ');
 
     final provider = await getProvider(workingDir, env, sshKeyName);

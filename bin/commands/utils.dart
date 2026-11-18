@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:args/args.dart';
+import 'package:args/command_runner.dart';
 import 'package:dotenv/dotenv.dart';
 import 'package:nix_infra/helpers.dart';
 
@@ -112,6 +113,32 @@ String resolveSshKeyName(ArgResults? parentArgs, DotEnv env,
   throw Exception('No SSH key configured. Set SSH_KEY in .env or the '
       'environment, pass --ssh-key=<name>, or set '
       'SSH_KEY_PATH=<private key file>.');
+}
+
+/// The parsed arguments that hold the option [name] for the subcommand
+/// [command]: those of the nearest ancestor where [name] was given on the
+/// command line, else those of the nearest ancestor that declares [name]
+/// (its default applies). Null when no ancestor declares [name].
+///
+/// The `etcd` group is mounted twice, as `nix-infra etcd` and as
+/// `nix-infra cluster etcd`, and declares its own `-d`, `--ssh-key` and
+/// `--env`. Reading only `parent.argResults` (the etcd group) dropped the
+/// options of `cluster -d <dir> --ssh-key=<k> etcd nodes …`. With this
+/// helper they reach the subcommand, and an option given to `etcd` still
+/// wins; so does one written after the subcommand name, which the args
+/// parser stores on the nearest command that declares it (the etcd group).
+ArgResults? ancestorArgsWithOption(Command command, String name) {
+  ArgResults? declaredBy;
+  for (Command? c = command.parent; c != null; c = c.parent) {
+    final args = c.argResults;
+    // argParser, not args.options: ArgResults.options leaves out an option
+    // without a default that was not given, and wasParsed throws for a name
+    // that the parser does not declare.
+    if (args == null || !c.argParser.options.containsKey(name)) continue;
+    if (args.wasParsed(name)) return args;
+    declaredBy ??= args;
+  }
+  return declaredBy;
 }
 
 

@@ -295,6 +295,8 @@ Uploads files or directories to target nodes via SFTP.
 
 nix-infra provides convenience commands for inspecting the etcd cluster state. All etcd commands require `--target` pointing to a control node.
 
+`-d`, `--ssh-key` and `--env` can be given to `cluster` (before `etcd`), to `etcd`, or after the subcommand, for example `nix-infra cluster -d ./my-cluster etcd nodes --target "ctrl-1"`. When the same option is given more than once, the one closest to the subcommand wins.
+
 ### Direct etcdctl Access
 
 ```bash
